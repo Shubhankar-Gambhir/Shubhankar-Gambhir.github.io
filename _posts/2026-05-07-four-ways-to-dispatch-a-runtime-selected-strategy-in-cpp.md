@@ -165,6 +165,8 @@ The key insight: **the base class compiles without knowing any concrete GC type.
 
 The template machinery generates code for *all* derived types at compile time — `G1BarrierSet::AccessBarrier<>::store`, `SerialBarrierSet::AccessBarrier<>::store`, `EpsilonBarrierSet::AccessBarrier<>::store` all exist in the binary. Lazy resolution then picks the correct one at runtime based on the user's flag, caches a function pointer to it, and every subsequent call goes direct.
 
+The net effect: **we replace the vtable overhead on every call with a one-time initialization cost.** After that first resolution, the dispatch path is identical to a direct function pointer — no vptr load, no vtable lookup, just a single indirect call.
+
 This is what [OpenJDK](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/gc/shared/barrierSet.hpp) actually uses. Here's what it looks like with real barrier composition — each GC subclass provides its own `AccessBarrier` that layers one concern on top:
 
 ```cpp
