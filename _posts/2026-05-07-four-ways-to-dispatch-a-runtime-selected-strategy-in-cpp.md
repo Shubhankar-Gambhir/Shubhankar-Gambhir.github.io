@@ -9,7 +9,7 @@ description: >-
   and a decision framework.
 ---
 
-You're building a system with pluggable strategies. The user picks one at startup — a config flag, a command-line argument — and every call goes through that strategy. The call runs millions of times per second. How do you dispatch it?
+You're building a system with pluggable strategies. The user picks one at startup - a config flag, a command-line argument - and every call goes through that strategy. The call runs millions of times per second. How do you dispatch it?
 
 This post compares four approaches to this problem using the same domain, the same API, and the same three plugins. We'll look at the generated assembly, measure dispatch overhead, and build a decision framework for picking the right one.
 
@@ -141,7 +141,7 @@ class BarrierSet {
 class G1BarrierSet : public BarrierSet<G1BarrierSet> { ... };
 ```
 
-This gives you static dispatch — no vtable, but it has two fundamental problems. First, the base class must know the derived type at compile time. When the user picks the GC at runtime, you can't write `BarrierSet<???>`. Second, you can't have a static or global `BarrierSet*` singleton without baking the derived type into the base. The type parameter infects everything. Conventional CRTP is out.
+This gives you static dispatch - no vtable, but it has two fundamental problems. First, the base class must know the derived type at compile time. When the user picks the GC at runtime, you can't write `BarrierSet<???>`. Second, you can't have a static or global `BarrierSet*` singleton without baking the derived type into the base. The type parameter infects everything. Conventional CRTP is out.
 
 ### Decoupled CRTP: Flip the Relationship
 
@@ -151,7 +151,7 @@ Decoupled CRTP solves this by moving the template connection *inside* the base c
 class BarrierSet {
     static BarrierSet* _barrier_set;  // set once at startup, used forever
 
-    // Base compiles independently — no template parameter, no Derived type
+    // Base compiles independently - no template parameter, no Derived type
     template <typename BarrierSetT>
     class AccessBarrier {
         static void store(int* addr, int value) {
@@ -170,7 +170,7 @@ The net effect: **we replace the vtable overhead on every call with a one-time i
 This is what [OpenJDK](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/gc/shared/barrierSet.hpp) actually uses. Here's what it looks like with real barrier composition, where each GC subclass provides its own `AccessBarrier` that layers one concern on top:
 
 ```cpp
-// Layer 0: raw write — the base concern
+// Layer 0: raw write - the base concern
 class BarrierSet {
     template <typename BarrierSetT>
     class AccessBarrier {
@@ -221,7 +221,7 @@ struct RuntimeDispatch {
             case Serial:  func = &SerialBarrierSet::AccessBarrier<>::store;  break;
             case Epsilon: func = &EpsilonBarrierSet::AccessBarrier<>::store; break;
         }
-        _store_func = func;    // PATCH — future calls skip the switch
+        _store_func = func;    // PATCH - future calls skip the switch
         func(addr, value);     // first call goes through
     }
 
@@ -248,7 +248,7 @@ All measurements on an Intel Xeon Gold 6130 @ 2.10 GHz, 100M iterations with G1 
 
 | Approach | ns/call | Overhead vs direct |
 |---|---|---|
-| Direct call (baseline) | 1.48 ns | — |
+| Direct call (baseline) | 1.48 ns | - |
 | Decoupled CRTP | 2.42 ns | +0.94 ns |
 | Function pointer | 2.43 ns | +0.95 ns |
 | Virtual dispatch | 2.90 ns | +1.42 ns |
