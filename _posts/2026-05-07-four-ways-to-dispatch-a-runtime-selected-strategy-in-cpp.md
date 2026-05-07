@@ -128,7 +128,40 @@ The extensibility story is also worse: adding a new GC means modifying the `vari
 
 ## Approach 4: Decoupled CRTP + Lazy Resolution
 
-This is what OpenJDK actually uses. Three patterns work together:
+The first instinct for compile-time polymorphism is conventional CRTP:
+
+```cpp
+template <typename Derived>
+class BarrierSet {
+    void store(int* addr, int value) {
+        static_cast<Derived*>(this)->do_store(addr, value);
+    }
+};
+
+class G1BarrierSet : public BarrierSet<G1BarrierSet> { ... };
+```
+
+This gives you static dispatch — no vtable — but it has a fundamental problem: the base class must know the derived type at compile time. When the user picks the GC at runtime with a command-line flag, you can't write `BarrierSet<???>`. The derived type is a runtime decision, not a compile-time one. Conventional CRTP is out.
+
+### Decoupled CRTP: Flip the Relationship
+
+Decoupled CRTP solves this by moving the template connection *inside* the base class. Instead of `class BarrierSet<Derived>`, you nest a templated inner class:
+
+```cpp
+class BarrierSet {
+    // Base compiles independently — no template parameter, no Derived type
+    template <typename BarrierSetT>
+    class AccessBarrier {
+        static void store(int* addr, int value) {
+            static_cast<BarrierSetT*>(barrier_set())->do_store(addr, value);
+        }
+    };
+};
+```
+
+The key insight: **the base class compiles without knowing any concrete GC type.** The `AccessBarrier` inner class is what carries the CRTP connection — it implements the hot-path APIs and does the static cast. Each GC subclass provides its own `AccessBarrier` specialization that layers one concern on top of the parent's.
+
+This is what OpenJDK actually uses (JEP 304). Three patterns work together:
 
 ### The AccessBarrier Chain (Compile-Time Decoration)
 
