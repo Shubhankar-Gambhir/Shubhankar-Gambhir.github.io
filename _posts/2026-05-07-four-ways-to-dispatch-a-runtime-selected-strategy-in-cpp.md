@@ -159,7 +159,9 @@ class BarrierSet {
 };
 ```
 
-The key insight: **the base class compiles without knowing any concrete GC type.** The `AccessBarrier` inner class is what carries the CRTP connection — it implements the hot-path APIs and does the static cast. Each GC subclass provides its own `AccessBarrier` specialization that layers one concern on top of the parent's.
+The key insight: **the base class compiles without knowing any concrete GC type.** It can hold a static singleton member (`BarrierSet* _barrier_set`) that points to whichever GC the user selected at startup — without the base itself being templated. The `AccessBarrier` inner class is what carries the CRTP connection — it implements the hot-path APIs and does the static cast. Each GC subclass provides its own `AccessBarrier` specialization that layers one concern on top of the parent's.
+
+The template machinery generates code for *all* derived types at compile time — `G1BarrierSet::AccessBarrier<>::store`, `SerialBarrierSet::AccessBarrier<>::store`, `EpsilonBarrierSet::AccessBarrier<>::store` all exist in the binary. Lazy resolution then picks the correct one at runtime based on the user's flag, caches a function pointer to it, and every subsequent call goes direct.
 
 This is what OpenJDK actually uses (JEP 304). Three patterns work together:
 
