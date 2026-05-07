@@ -12,7 +12,7 @@ title: Speaking
 ## Past Talks
 
 ### Zero-Cost Abstractions
-**C++ Online 2026** — [Slides (PDF)](https://cpponline.uk/wp-content/uploads/2026/03/Zero-Cost-Abstractions.pdf)
+**C++ Online 2026** — [Session](https://cpponline.uk/session/2026/zero-cost-abstractions-in-large-systems/) &#124; [Slides (PDF)](https://cpponline.uk/wp-content/uploads/2026/03/Zero-Cost-Abstractions.pdf)
 
 A deep dive into OpenJDK's Access API and GC barrier system — how a 1M+ line C++ codebase uses decorator pipelines, compressed oops, SFINAE dispatch, decoupled CRTP, and lazy resolution to achieve zero-overhead abstractions on the JVM's hottest paths.
 
