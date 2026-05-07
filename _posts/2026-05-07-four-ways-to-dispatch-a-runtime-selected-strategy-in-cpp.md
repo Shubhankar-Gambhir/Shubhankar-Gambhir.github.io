@@ -15,11 +15,11 @@ This post compares four approaches to this problem using the same domain, the sa
 
 ## The Scenario
 
-Consider a garbage collector barrier system (borrowed from OpenJDK). A *barrier* is a small piece of bookkeeping that runs every time you write to managed memory — think of it as a hook that fires around every store, letting the GC track what changed. The user selects a GC algorithm at startup via a flag, and every memory write goes through the selected barrier — `store(addr, value)` — millions of times per second. There are three GC algorithms, each with different barrier logic:
+Consider a garbage collector barrier system (borrowed from OpenJDK). A *barrier* is a small piece of bookkeeping that runs every time you write to the heap — think of it as a hook that fires around every store, letting the GC track what changed. The user selects a GC algorithm at startup via a flag, and every memory write goes through the selected barrier — `store(addr, value)` — millions of times per second. There are three GC algorithms, each with different barrier logic:
 
 - **Epsilon** — does nothing (no-op barrier, used for testing)
 - **Serial** — adds a post-barrier after the store (records which memory regions were modified, so the GC knows where to look)
-- **G1** — adds a pre-barrier before the store (saves the old value for concurrent GC correctness) *and* a post-barrier after it
+- **G1** — adds a pre-barrier before the store (saves the old value so the GC can process references correctly) *and* a post-barrier after it
 
 We want three things:
 
@@ -167,8 +167,6 @@ The template machinery generates code for *all* derived types at compile time �
 
 The net effect: **we replace the vtable overhead on every call with a one-time initialization cost.** After that first resolution, the dispatch path is identical to a direct function pointer — no vptr load, no vtable lookup, just a single indirect call.
 
-One important caveat: conventional CRTP also uses `static_cast`, but it casts `this` — which is always the correct derived type by construction. In decoupled CRTP, the cast targets a global singleton (`_barrier_set`) whose concrete type is a runtime decision. If the lazy resolution switch pairs the wrong type with the wrong `AccessBarrier` instantiation — say, casting `_barrier_set` to `G1BarrierSet` when it actually points to a `SerialBarrierSet` — you get undefined behavior. The resolution logic must get this right. OpenJDK solves this with a lightweight type identity mechanism that avoids C++ RTTI entirely — a topic for a future post.
-
 This is what [OpenJDK](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/gc/shared/barrierSet.hpp) actually uses. Here's what it looks like with real barrier composition — each GC subclass provides its own `AccessBarrier` that layers one concern on top:
 
 ```cpp
@@ -241,6 +239,8 @@ call  *_store_func(%rip)     ; indirect call through global
 [See it on Compiler Explorer →](https://godbolt.org/z/Y7voz9Ynx)
 
 Same dispatch cost as a function pointer, but the **target function is composed** — each barrier concern is layered, not duplicated.
+
+One caveat worth noting: conventional CRTP also uses `static_cast`, but it casts `this` — which is always the correct derived type by construction. In decoupled CRTP, the cast targets a global singleton (`_barrier_set`) whose concrete type is a runtime decision. If the resolution switch pairs the wrong type with the wrong `AccessBarrier` instantiation, you get undefined behavior. The resolution logic must get this right. OpenJDK solves this with a lightweight type identity mechanism that avoids C++ RTTI entirely — a topic for a future post.
 
 ## Benchmarks
 
