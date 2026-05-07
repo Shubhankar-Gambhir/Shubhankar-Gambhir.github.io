@@ -325,7 +325,7 @@ The decoupled CRTP approach is 5x more code and has the steepest learning curve.
 
 It's **not** worth it when you have fewer than five plugins with no shared behavior, one team owns all the code, or simplicity and onboarding speed matter more than architecture.
 
-OpenJDK has six GCs, each with combinations of pre/post barriers, maintained by different teams, in a codebase with 1M+ lines. The complexity pays for itself.
+OpenJDK has many GCs, each with combinations of pre/post barriers, maintained by different teams, in a codebase with 1M+ lines. The complexity pays for itself.
 
 ## Key Takeaways
 
