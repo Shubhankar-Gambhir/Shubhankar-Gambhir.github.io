@@ -16,7 +16,7 @@ timezone: Asia/Kolkata
 
 title: Shubhankar Gambhir
 
-tagline: Systems performance, runtime engineering, and C++ at the metal
+tagline: JVM runtime engineering, systems performance, and low-level C++
 
 description: >-
   Technical blog on C++ performance, JVM internals, compile-time polymorphism,
