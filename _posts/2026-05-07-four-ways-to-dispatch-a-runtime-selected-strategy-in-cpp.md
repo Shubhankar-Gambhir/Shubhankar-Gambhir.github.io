@@ -295,4 +295,4 @@ OpenJDK has six GCs, each with combinations of pre/post barriers, maintained by 
 
 ---
 
-*The benchmark code, all four implementations, and Compiler Explorer links are available in the [companion repository](https://github.com/Shubhankar-Gambhir). Measured on Intel Xeon Gold 6130 @ 2.10 GHz, GCC 11, libstdc++, `-O2 -march=skylake-avx512`.*
+*Measured on Intel Xeon Gold 6130 @ 2.10 GHz, GCC 11, libstdc++, `-O2 -march=skylake-avx512`.*
