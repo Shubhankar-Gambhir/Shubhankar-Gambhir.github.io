@@ -246,6 +246,11 @@ One caveat worth noting: conventional CRTP also uses `static_cast`, but it casts
 
 All measurements on an Intel Xeon Gold 6130 @ 2.10 GHz, 100M iterations with G1 barriers, compiled with GCC 11 at `-O2 -march=skylake-avx512`.
 
+- **Extensibility**: can you add a new strategy without modifying existing code?
+- **Decoupling**: can the base class compile without seeing the concrete types?
+- **Composition**: can strategies share cross-cutting concerns (pre/post barriers) without duplicating logic?
+- **Learning curve**: how much does a new team member need to learn to work with this pattern?
+
 | | Virtual | FnPtr | variant | Decoupled CRTP |
 |---|---|---|---|---|
 | **Dispatch overhead** | +1.4 ns | +0.9 ns | +2.2 ns | +0.9 ns |
