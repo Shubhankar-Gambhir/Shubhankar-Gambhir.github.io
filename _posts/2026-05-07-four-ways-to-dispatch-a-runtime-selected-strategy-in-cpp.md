@@ -163,11 +163,7 @@ The key insight: **the base class compiles without knowing any concrete GC type.
 
 The template machinery generates code for *all* derived types at compile time — `G1BarrierSet::AccessBarrier<>::store`, `SerialBarrierSet::AccessBarrier<>::store`, `EpsilonBarrierSet::AccessBarrier<>::store` all exist in the binary. Lazy resolution then picks the correct one at runtime based on the user's flag, caches a function pointer to it, and every subsequent call goes direct.
 
-This is what OpenJDK actually uses (JEP 304). Three patterns work together:
-
-### The AccessBarrier Chain (Compile-Time Decoration)
-
-Each layer adds one barrier concern and delegates to its parent:
+This is what OpenJDK actually uses (JEP 304). Here's what it looks like with real barrier composition — each GC subclass provides its own `AccessBarrier` that layers one concern on top:
 
 ```cpp
 // Layer 0: raw write
@@ -201,7 +197,9 @@ class G1BarrierSet : public ModRefBarrierSet {
 };
 ```
 
-Each GC only adds **its own concern**. No duplication. The compiler flattens the template chain to straight-line code.
+Each GC only adds **its own concern**. No duplication. The compiler sees through the template chain and generates the same code as if you'd hand-written each barrier combination — the templates are the source-level abstraction; they don't exist at runtime.
+
+So now we have all the concrete implementations compiled and ready — `G1BarrierSet::AccessBarrier<>::store`, `SerialBarrierSet::AccessBarrier<>::store`, `EpsilonBarrierSet::AccessBarrier<>::store`. The last piece: how do we pick the right one when the user passes a flag at startup?
 
 ### Lazy Resolution (Resolve Once, Dispatch Forever)
 
