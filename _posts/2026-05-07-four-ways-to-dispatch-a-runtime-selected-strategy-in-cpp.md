@@ -141,7 +141,7 @@ class BarrierSet {
 class G1BarrierSet : public BarrierSet<G1BarrierSet> { ... };
 ```
 
-This gives you static dispatch — no vtable — but it has a fundamental problem: the base class must know the derived type at compile time. When the user picks the GC at runtime with a command-line flag, you can't write `BarrierSet<???>`. The derived type is a runtime decision, not a compile-time one. Conventional CRTP is out.
+This gives you static dispatch — no vtable — but it has two fundamental problems. First, the base class must know the derived type at compile time. When the user picks the GC at runtime, you can't write `BarrierSet<???>`. Second, you can't have a static or global `BarrierSet*` singleton without baking the derived type into the base — the type parameter infects everything. Conventional CRTP is out.
 
 ### Decoupled CRTP: Flip the Relationship
 
@@ -166,6 +166,8 @@ The key insight: **the base class compiles without knowing any concrete GC type.
 The template machinery generates code for *all* derived types at compile time — `G1BarrierSet::AccessBarrier<>::store`, `SerialBarrierSet::AccessBarrier<>::store`, `EpsilonBarrierSet::AccessBarrier<>::store` all exist in the binary. Lazy resolution then picks the correct one at runtime based on the user's flag, caches a function pointer to it, and every subsequent call goes direct.
 
 The net effect: **we replace the vtable overhead on every call with a one-time initialization cost.** After that first resolution, the dispatch path is identical to a direct function pointer — no vptr load, no vtable lookup, just a single indirect call.
+
+One important caveat: the `static_cast` inside `AccessBarrier` is unchecked. If the wrong type is passed as the template parameter — say, casting `_barrier_set` to `G1BarrierSet` when it actually points to a `SerialBarrierSet` — you get undefined behavior. The lazy resolution switch must match the correct type to the correct `AccessBarrier` instantiation. OpenJDK solves this with a lightweight type identity mechanism that avoids C++ RTTI entirely — a topic for a future post.
 
 This is what [OpenJDK](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/gc/shared/barrierSet.hpp) actually uses. Here's what it looks like with real barrier composition — each GC subclass provides its own `AccessBarrier` that layers one concern on top:
 
