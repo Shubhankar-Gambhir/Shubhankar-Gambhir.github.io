@@ -263,6 +263,7 @@ Text section sizes (dynamically linked, `-O2`):
 | Approach | Text section | Relative |
 |---|---|---|
 | Function pointer | 4,727 bytes | baseline |
+| std::variant | 5,231 bytes | +11% |
 | Virtual dispatch | 6,776 bytes | +43% |
 | Decoupled CRTP | 7,885 bytes | **+67%** |
 
@@ -275,7 +276,7 @@ The dispatch overhead differences are small — 0.9 to 2.2 ns. The **real** diff
 | | Virtual | FnPtr | variant | Decoupled CRTP |
 |---|---|---|---|---|
 | **Dispatch overhead** | +1.4 ns | +0.9 ns | +2.2 ns | +0.9 ns |
-| **Binary size (text)** | 6.8 KB | 4.7 KB | — | 7.9 KB |
+| **Binary size (text)** | 6.8 KB | 4.7 KB | 5.2 KB | 7.9 KB |
 | **Compile time** | 0.38s | 0.25s | 0.32s | 0.29s |
 | **Lines of code** | 90 | 65 | 76 | 346 |
 | **Extensibility** | Open | Open | Closed | Open |
