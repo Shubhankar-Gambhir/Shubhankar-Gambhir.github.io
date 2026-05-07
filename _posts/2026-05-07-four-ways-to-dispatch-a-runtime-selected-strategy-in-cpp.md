@@ -149,11 +149,13 @@ Decoupled CRTP solves this by moving the template connection *inside* the base c
 
 ```cpp
 class BarrierSet {
+    static BarrierSet* _barrier_set;  // set once at startup, used forever
+
     // Base compiles independently — no template parameter, no Derived type
     template <typename BarrierSetT>
     class AccessBarrier {
         static void store(int* addr, int value) {
-            static_cast<BarrierSetT*>(barrier_set())->do_store(addr, value);
+            static_cast<BarrierSetT*>(_barrier_set)->do_store(addr, value);
         }
     };
 };
