@@ -60,6 +60,7 @@ Clean and familiar. But what does the compiler generate?
 movq  (%rdi), %rax           ; LOAD 1: vptr from object
 call  *16(%rax)              ; LOAD 2: vtable entry → indirect call
 ```
+[See it on Compiler Explorer →](https://godbolt.org/z/eYqqGvrK1)
 
 Two dependent memory loads before the call. The `this` pointer occupies `%rdi`, and the compiler cannot inline across the virtual boundary. Each GC also duplicates the full barrier logic — G1 and Serial both contain the raw store and card marking code independently.
 
@@ -88,6 +89,7 @@ No class hierarchy. No `this` pointer. Just a function address. The assembly:
 ```nasm
 call  *%r12                  ; indirect call through register
 ```
+[See it on Compiler Explorer →](https://godbolt.org/z/bEWhMc7ra)
 
 One indirect call. The pointer lives in a callee-saved register, so there's no memory load at all — just the indirect branch. Arguments go directly in `%rdi` and `%rsi` without the `this` pointer overhead.
 
@@ -114,6 +116,7 @@ movq  %r13, 24(%rsp)        ; STORE 2: spill to lambda capture
 movzbl 7(%rsp), %eax        ; load variant index
 call  *(%r14,%rax,8)        ; indexed indirect call into _S_vtable
 ```
+[See it on Compiler Explorer →](https://godbolt.org/z/f1T14Pdbx)
 
 libstdc++ generates **its own function pointer table** (`_S_vtable`) — essentially a vtable. On top of that, there are two stack stores per call to build the lambda capture struct that the visited function reads back.
 
@@ -196,6 +199,7 @@ After the first call, the assembly is identical to the function pointer approach
 ```nasm
 call  *_store_func(%rip)     ; indirect call through global
 ```
+[See it on Compiler Explorer →](https://godbolt.org/z/Y7voz9Ynx)
 
 Same dispatch cost as a function pointer, but the **target function is composed** — each barrier concern is layered, not duplicated.
 
