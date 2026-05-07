@@ -247,9 +247,7 @@ One caveat worth noting: conventional CRTP also uses `static_cast`, but it casts
 All measurements on an Intel Xeon Gold 6130 @ 2.10 GHz, 100M iterations with G1 barriers, compiled with GCC 11 at `-O2 -march=skylake-avx512`.
 
 - **Extensibility**: can you add a new strategy without modifying existing code?
-- **Decoupling**: can the base class compile without seeing the concrete types?
 - **Composition**: can strategies share cross-cutting concerns (pre/post barriers) without duplicating logic?
-- **Learning curve**: how much does a new team member need to learn to work with this pattern?
 
 | | Virtual | FnPtr | variant | Decoupled CRTP |
 |---|---|---|---|---|
@@ -258,11 +256,9 @@ All measurements on an Intel Xeon Gold 6130 @ 2.10 GHz, 100M iterations with G1 
 | **Compile time** | 0.38s | 0.25s | 0.32s | 0.29s |
 | **Lines of code** | 90 | 65 | 76 | 346 |
 | **Extensibility** | Open | Open | Closed | Open |
-| **Decoupling** | Partial | Poor | Poor | Excellent |
 | **Composition** | Duplicated | Duplicated | Duplicated | Layered |
 | **Error messages** | Clear | Clear | Moderate | Poor |
 | **Debuggability** | Excellent | Good | Moderate | Moderate |
-| **Learning curve** | None | None | Low | Steep |
 
 A few things stand out. CRTP and function pointer have the same dispatch cost (+0.9 ns), but CRTP is the only approach where barrier concerns compose instead of being duplicated. That composability comes at a price: 5x more code, the largest binary (+67%), and the steepest learning curve.
 
