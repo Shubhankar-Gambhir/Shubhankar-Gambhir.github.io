@@ -62,7 +62,7 @@ call  *16(%rax)              ; LOAD 2: vtable entry → indirect call
 ```
 [See it on Compiler Explorer →](https://godbolt.org/z/eYqqGvrK1)
 
-Two dependent memory loads before the call. The `this` pointer occupies `%rdi`, and the compiler cannot inline across the virtual boundary. Each GC also duplicates the full barrier logic — G1 and Serial both contain the raw store and card marking code independently.
+Two dependent memory loads before the call. The `this` pointer occupies `%rdi`, and the compiler cannot inline across the virtual boundary. Each GC also duplicates the full barrier logic — G1 and Serial both implement the raw store and post-barrier independently.
 
 ## Approach 2: Function Pointer
 
@@ -266,16 +266,7 @@ Text section sizes (dynamically linked, `-O2`):
 
 CRTP is largest because each composed `AccessBarrier` chain is a separate template instantiation. That's the cost of composability: each unique barrier composition gets its own generated code.
 
-## The Honest Truth
-
-The dispatch overhead differences are **small** — 0.9 to 2.2 ns. At 100M calls/sec, the worst approach (variant) costs ~220 ms of overhead per second. The best (CRTP/fnptr) costs ~95 ms.
-
-The **real** differences are:
-
-- **Composability** — only CRTP lets you layer barrier aspects without duplication
-- **Extensibility** — variant requires modifying the type list; the others are open
-- **Code organization** — CRTP decouples the base from concrete implementations
-- **Familiarity** — virtual dispatch is universal knowledge
+The dispatch overhead differences are small — 0.9 to 2.2 ns. The **real** differences between these approaches are in composability, extensibility, and code organization. The comparison matrix below captures them all.
 
 ## Comparison Matrix
 
@@ -314,25 +305,11 @@ Need runtime plugin dispatch?
         (more code, but behaviors compose without duplication)
 ```
 
-## When Complexity Pays Off
-
-The decoupled CRTP approach is 5x more code and has the steepest learning curve. It's worth it when:
-
-- You have many plugins with shared cross-cutting concerns (pre/post barriers, logging, auth)
-- Plugins are added by different teams who shouldn't touch the base class
-- The base must compile independently (large codebase, separate build units)
-- You need to compose behaviors without duplicating logic across every plugin
-
-It's **not** worth it when you have fewer than five plugins with no shared behavior, one team owns all the code, or simplicity and onboarding speed matter more than architecture.
-
-OpenJDK has many GCs, each with combinations of pre/post barriers, maintained by different teams, in a codebase with 1M+ lines. The complexity pays for itself.
-
 ## Key Takeaways
 
 1. **All four work.** Pick based on constraints, not microbenchmark deltas.
 2. **`std::variant + std::visit` is NOT always faster than virtual** — check your stdlib implementation.
-3. **CRTP's value is composability**, not raw dispatch speed. Same overhead as a function pointer, but barriers compose via template inheritance.
-4. **The right question isn't "which is fastest?"** It's: do I need composition? decoupling? extensibility? Then pick the simplest approach that satisfies those.
+3. **The right question isn't "which is fastest?"** It's: do I need composition? decoupling? extensibility? Then pick the simplest approach that satisfies those.
 
 ---
 
