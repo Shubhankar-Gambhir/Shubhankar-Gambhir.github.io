@@ -167,7 +167,7 @@ The template machinery generates code for *all* derived types at compile time �
 
 The net effect: **we replace the vtable overhead on every call with a one-time initialization cost.** After that first resolution, the dispatch path is identical to a direct function pointer — no vptr load, no vtable lookup, just a single indirect call.
 
-One important caveat: the `static_cast` inside `AccessBarrier` is unchecked. If the wrong type is passed as the template parameter — say, casting `_barrier_set` to `G1BarrierSet` when it actually points to a `SerialBarrierSet` — you get undefined behavior. The lazy resolution switch must match the correct type to the correct `AccessBarrier` instantiation. OpenJDK solves this with a lightweight type identity mechanism that avoids C++ RTTI entirely — a topic for a future post.
+One important caveat: conventional CRTP also uses `static_cast`, but it casts `this` — which is always the correct derived type by construction. In decoupled CRTP, the cast targets a global singleton (`_barrier_set`) whose concrete type is a runtime decision. If the lazy resolution switch pairs the wrong type with the wrong `AccessBarrier` instantiation — say, casting `_barrier_set` to `G1BarrierSet` when it actually points to a `SerialBarrierSet` — you get undefined behavior. The resolution logic must get this right. OpenJDK solves this with a lightweight type identity mechanism that avoids C++ RTTI entirely — a topic for a future post.
 
 This is what [OpenJDK](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/gc/shared/barrierSet.hpp) actually uses. Here's what it looks like with real barrier composition — each GC subclass provides its own `AccessBarrier` that layers one concern on top:
 
