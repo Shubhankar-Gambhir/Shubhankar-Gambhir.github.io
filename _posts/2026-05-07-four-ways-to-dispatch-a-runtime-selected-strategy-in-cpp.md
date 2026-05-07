@@ -263,6 +263,10 @@ Variant is the slowest despite having no vtable. The overhead comes from libstdc
 
 Virtual dispatch sits in the middle on almost every dimension. It's the most debuggable, the easiest to understand, and the ~0.5 ns extra over a function pointer is often fine. For most codebases, this is the right default.
 
+Compile time is worth noting: CRTP (0.29s) is actually faster than virtual (0.38s) despite being 5x more code. Virtual dispatch needs full class definitions visible at every call site for the vtable layout. CRTP's templates instantiate more code, but each translation unit only sees what it needs. Function pointer is fastest (0.25s) since there's no class hierarchy and no templates at all.
+
+One thing the matrix doesn't capture: the decoupled CRTP approach relies on `static_cast` to a runtime-determined type, which is unchecked. Getting the type wrong is undefined behavior. OpenJDK handles this with a lightweight type identity system that works without C++ RTTI. That mechanism deserves its own post.
+
 ## Decision Framework
 
 ```
