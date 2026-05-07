@@ -54,7 +54,7 @@ auto bs = BarrierSet::create(argv[1]);  // "g1", "serial", "epsilon"
 bs->store(heap, 42);
 ```
 
-Clean and familiar. But what does the compiler generate?
+Every C++ developer has written this. But what does the compiler generate?
 
 ```nasm
 movq  (%rdi), %rax           ; LOAD 1: vptr from object
@@ -84,7 +84,7 @@ StoreFn store = resolve(argv[1]);  // returns the right function pointer
 store(heap, 42);
 ```
 
-No class hierarchy. No `this` pointer. Just a function address. The assembly:
+There's no class hierarchy here and no `this` pointer — just a raw function address. The assembly:
 
 ```nasm
 call  *%r12                  ; indirect call through register
@@ -106,7 +106,7 @@ auto bs = create(argv[1]);
 std::visit([&](auto& b) { b.store(addr, value); }, bs);
 ```
 
-No base class. No vtable. The compiler sees all types. This should be fast... right?
+There's no base class and no vtable — the compiler can see all the types. So what does it actually generate?
 
 Here's what libstdc++ (GCC 11) actually generates:
 
@@ -161,7 +161,7 @@ class BarrierSet {
 };
 ```
 
-The key insight: **the base class compiles without knowing any concrete GC type.** It can hold a static singleton member (`BarrierSet* _barrier_set`) that points to whichever GC the user selected at startup — without the base itself being templated. The `AccessBarrier` inner class is what carries the CRTP connection — it implements the hot-path APIs and does the static cast. Each GC subclass provides its own `AccessBarrier` specialization that layers one concern on top of the parent's.
+Notice that the base class compiles without knowing any concrete GC type. It can hold a static singleton member (`BarrierSet* _barrier_set`) that points to whichever GC the user selected at startup — without the base itself being templated. The `AccessBarrier` inner class is what carries the CRTP connection — it implements the hot-path APIs and does the static cast. Each GC subclass provides its own `AccessBarrier` specialization that layers one concern on top of the parent's.
 
 The template machinery generates code for *all* derived types at compile time — `G1BarrierSet::AccessBarrier<>::store`, `SerialBarrierSet::AccessBarrier<>::store`, `EpsilonBarrierSet::AccessBarrier<>::store` all exist in the binary. Lazy resolution then picks the correct one at runtime based on the user's flag, caches a function pointer to it, and every subsequent call goes direct.
 
@@ -201,7 +201,7 @@ class G1BarrierSet : public CardTableBarrierSet {
 };
 ```
 
-Each GC only adds **its own concern**. No duplication. The compiler sees through the template chain and generates the same code as if you'd hand-written each barrier combination — the templates are the source-level abstraction; they don't exist at runtime.
+Each GC only adds its own concern — no duplication. The compiler sees through the template chain and generates the same code as if you'd hand-written each barrier combination — the templates are the source-level abstraction; they don't exist at runtime.
 
 So now we have all the concrete implementations compiled and ready — `G1BarrierSet::AccessBarrier<>::store`, `SerialBarrierSet::AccessBarrier<>::store`, `EpsilonBarrierSet::AccessBarrier<>::store`. The last piece: how do we pick the right one when the user passes a flag at startup?
 
@@ -238,7 +238,7 @@ call  *_store_func(%rip)     ; indirect call through global
 ```
 [See it on Compiler Explorer →](https://godbolt.org/z/Y7voz9Ynx)
 
-Same dispatch cost as a function pointer, but the **target function is composed** — each barrier concern is layered, not duplicated.
+Same dispatch cost as a function pointer, but the target function is composed — each barrier concern is layered, not duplicated.
 
 One caveat worth noting: conventional CRTP also uses `static_cast`, but it casts `this` — which is always the correct derived type by construction. In decoupled CRTP, the cast targets a global singleton (`_barrier_set`) whose concrete type is a runtime decision. If the resolution switch pairs the wrong type with the wrong `AccessBarrier` instantiation, you get undefined behavior. The resolution logic must get this right. OpenJDK solves this with a lightweight type identity mechanism that avoids C++ RTTI entirely — a topic for a future post.
 
