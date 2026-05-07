@@ -15,11 +15,11 @@ This post compares four approaches to this problem using the same domain, the sa
 
 ## The Scenario
 
-Consider a garbage collector barrier system (borrowed from OpenJDK). The user types `-XX:+UseG1GC` at startup. Every heap write goes through a *barrier set* — `store(addr, value)` — that runs millions of times per second. There are three GC algorithms, each with different barrier logic:
+Consider a garbage collector barrier system (borrowed from OpenJDK). A *barrier* is a small piece of bookkeeping that runs every time you write to managed memory — think of it as a hook that fires around every store, letting the GC track what changed. The user selects a GC algorithm at startup via a flag, and every memory write goes through the selected barrier — `store(addr, value)` — millions of times per second. There are three GC algorithms, each with different barrier logic:
 
-- **Epsilon** — does nothing (no-op barrier)
-- **Serial** — adds a post-barrier (card marking)
-- **G1** — adds a pre-barrier (SATB snapshot) *and* a post-barrier (card marking)
+- **Epsilon** — does nothing (no-op barrier, used for testing)
+- **Serial** — adds a post-barrier after the store (records which memory regions were modified, so the GC knows where to look)
+- **G1** — adds a pre-barrier before the store (saves the old value for concurrent GC correctness) *and* a post-barrier after it
 
 We want three things:
 
@@ -41,12 +41,12 @@ public:
 class G1BarrierSet : public BarrierSet {
 public:
     void store(int* addr, int value) override {
-        // pre-barrier: SATB snapshot
-        printf("  [pre-barrier] SATB snapshot: old=%d\n", *addr);
+        // pre-barrier: save old value before overwriting
+        printf("  [pre-barrier] saving old value: %d\n", *addr);
         // raw store
         *addr = value;
-        // post-barrier: card mark
-        printf("  [post-barrier] card mark @ %p\n", addr);
+        // post-barrier: record which region was modified
+        printf("  [post-barrier] recording modified region @ %p\n", addr);
     }
 };
 
@@ -74,9 +74,9 @@ void epsilon_store(int* addr, int value) {
 }
 
 void g1_store(int* addr, int value) {
-    printf("  [pre-barrier] SATB snapshot: old=%d\n", *addr);
+    printf("  [pre-barrier] saving old value: %d\n", *addr);
     *addr = value;
-    printf("  [post-barrier] card mark @ %p\n", addr);
+    printf("  [post-barrier] recording modified region @ %p\n", addr);
 }
 
 using StoreFn = void(*)(int*, int);
@@ -170,7 +170,7 @@ The net effect: **we replace the vtable overhead on every call with a one-time i
 This is what [OpenJDK](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/gc/shared/barrierSet.hpp) actually uses. Here's what it looks like with real barrier composition — each GC subclass provides its own `AccessBarrier` that layers one concern on top:
 
 ```cpp
-// Layer 0: raw write
+// Layer 0: raw write — the base concern
 class BarrierSet {
     template <typename BarrierSetT>
     class AccessBarrier {
@@ -178,24 +178,24 @@ class BarrierSet {
     };
 };
 
-// Layer 1: adds post-barrier (card marking)
-class ModRefBarrierSet : public BarrierSet {
+// Layer 1: adds a post-barrier (records which region was modified)
+class CardTableBarrierSet : public BarrierSet {
     template <typename BarrierSetT>
     class AccessBarrier : public BarrierSet::AccessBarrier<BarrierSetT> {
         static void store(int* addr, int value) {
-            Raw::store(addr, value);           // delegate to parent
-            bs->write_ref_field_post(addr);    // card mark
+            BarrierSet::AccessBarrier<BarrierSetT>::store(addr, value);  // delegate to parent: raw write
+            record_modified_region(addr);                                // this layer's concern
         }
     };
 };
 
-// Layer 2: adds pre-barrier (SATB)
-class G1BarrierSet : public ModRefBarrierSet {
+// Layer 2: adds a pre-barrier (saves old value before overwriting)
+class G1BarrierSet : public CardTableBarrierSet {
     template <typename BarrierSetT>
-    class AccessBarrier : public ModRefBarrierSet::AccessBarrier<BarrierSetT> {
+    class AccessBarrier : public CardTableBarrierSet::AccessBarrier<BarrierSetT> {
         static void store(int* addr, int value) {
-            bs->write_ref_field_pre(addr);     // SATB snapshot
-            ModRef::store(addr, value);        // delegate (raw + post)
+            save_old_value(addr);                                              // this layer's concern
+            CardTableBarrierSet::AccessBarrier<BarrierSetT>::store(addr, value); // delegate: raw + post
         }
     };
 };
