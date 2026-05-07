@@ -106,9 +106,9 @@ auto bs = create(argv[1]);
 std::visit([&](auto& b) { b.store(addr, value); }, bs);
 ```
 
-There's no base class and no vtable, and the compiler can see all the types. So what does it actually generate?
+There's no base class and no vtable, and the compiler can see all the types. So what does it generate?
 
-Here's what libstdc++ (GCC 11) actually generates:
+Here's what libstdc++ (GCC 11) actually produces:
 
 ```nasm
 movq  %rbp, 16(%rsp)        ; STORE 1: spill to lambda capture
