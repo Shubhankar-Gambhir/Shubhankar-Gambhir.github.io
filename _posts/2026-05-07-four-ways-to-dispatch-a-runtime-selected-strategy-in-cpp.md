@@ -259,6 +259,12 @@ All measurements on an Intel Xeon Gold 6130 @ 2.10 GHz, 100M iterations with G1 
 | **Debuggability** | Excellent | Good | Moderate | Moderate |
 | **Learning curve** | None | None | Low | Steep |
 
+A few things stand out. CRTP and function pointer have the same dispatch cost (+0.9 ns), but CRTP is the only approach where barrier concerns compose instead of being duplicated. That composability comes at a price: 5x more code, the largest binary (+67%), and the steepest learning curve.
+
+Variant is the slowest despite having no vtable. The overhead comes from libstdc++'s `std::visit` implementation, which builds a lambda capture struct and indexes into its own function pointer table on every call. It also has the worst extensibility story since adding a new type means modifying the variant typedef everywhere.
+
+Virtual dispatch sits in the middle on almost every dimension. It's the most debuggable, the easiest to understand, and the ~0.5 ns extra over a function pointer is often fine. For most codebases, this is the right default.
+
 ## Decision Framework
 
 ```
