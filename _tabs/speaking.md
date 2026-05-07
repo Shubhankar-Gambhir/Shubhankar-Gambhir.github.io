@@ -11,10 +11,10 @@ title: Speaking
 
 ## Past Talks
 
-### Zero-Cost Abstractions in OpenJDK's Barrier System
-**C++ Online 2026**
+### Zero-Cost Abstractions
+**C++ Online 2026** — [Slides (PDF)](https://cpponline.uk/wp-content/uploads/2026/03/Zero-Cost-Abstractions.pdf)
 
-How OpenJDK uses compile-time polymorphism patterns — decoupled CRTP, decorator composition, and lazy resolution — to achieve runtime flexibility with zero dispatch overhead on the JVM's hottest paths. Includes assembly walkthroughs and benchmark comparisons of four dispatch mechanisms.
+A deep dive into OpenJDK's Access API and GC barrier system — how a 1M+ line C++ codebase uses decorator pipelines, compressed oops, SFINAE dispatch, decoupled CRTP, and lazy resolution to achieve zero-overhead abstractions on the JVM's hottest paths.
 
 ## Topics I Speak About
 
