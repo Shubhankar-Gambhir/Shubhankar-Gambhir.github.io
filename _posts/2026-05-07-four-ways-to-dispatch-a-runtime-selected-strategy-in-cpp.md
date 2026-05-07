@@ -5,7 +5,7 @@ categories: [C++, Performance]
 tags: [dispatch, virtual, crtp, variant, function-pointer, benchmarks, assembly, openjdk]
 description: >-
   Head-to-head comparison of virtual dispatch, function pointers, std::variant,
-  and decoupled CRTP for runtime plugin dispatch — with benchmarks, assembly,
+  and decoupled CRTP for runtime plugin dispatch, with benchmarks, assembly,
   and a decision framework.
 ---
 
@@ -15,21 +15,21 @@ This post compares four approaches to this problem using the same domain, the sa
 
 ## The Scenario
 
-Consider a garbage collector barrier system (borrowed from OpenJDK). A *barrier* is a small piece of bookkeeping that runs every time you write to the heap — think of it as a hook that fires around every store, letting the GC track what changed. The user selects a GC algorithm at startup via a flag, and every memory write goes through the selected barrier — `store(addr, value)` — millions of times per second. There are three GC algorithms, each with different barrier logic:
+Consider a garbage collector barrier system (borrowed from OpenJDK). A *barrier* is a small piece of bookkeeping that runs every time you write to the heap. Think of it as a hook that fires around every store, letting the GC track what changed. The user selects a GC algorithm at startup via a flag, and every memory write goes through the selected barrier (`store(addr, value)`), millions of times per second. There are three GC algorithms, each with different barrier logic:
 
-- **Epsilon** — does nothing (no-op barrier, used for testing)
-- **Serial** — adds a post-barrier after the store (records which memory regions were modified, so the GC knows where to look)
-- **G1** — adds a pre-barrier before the store (saves the old value so the GC can process references correctly) *and* a post-barrier after it
+- **Epsilon**: does nothing (no-op barrier, used for testing)
+- **Serial**: adds a post-barrier after the store (records which memory regions were modified, so the GC knows where to look)
+- **G1**: adds a pre-barrier before the store (saves the old value so the GC can process references correctly) *and* a post-barrier after it
 
 We want three things:
 
-1. **Runtime flexibility** — the user picks the strategy at startup
-2. **Minimal dispatch overhead** — every nanosecond counts at 100M calls/sec
-3. **Composability** — G1 needs pre + post barriers, Serial needs only post. Can we compose these instead of duplicating?
+1. **Runtime flexibility**: the user picks the strategy at startup
+2. **Minimal dispatch overhead**: every nanosecond counts at 100M calls/sec
+3. **Composability**: G1 needs pre + post barriers, Serial needs only post. Can we compose these instead of duplicating?
 
 ## Approach 1: Virtual Dispatch
 
-The most familiar approach — an abstract base class with virtual methods:
+The most familiar approach, an abstract base class with virtual methods:
 
 ```cpp
 class BarrierSet {
@@ -62,7 +62,7 @@ call  *16(%rax)              ; LOAD 2: vtable entry → indirect call
 ```
 [See it on Compiler Explorer →](https://godbolt.org/z/eYqqGvrK1)
 
-Two dependent memory loads before the call. The `this` pointer occupies `%rdi`, and the compiler cannot inline across the virtual boundary. Each GC also duplicates the full barrier logic — G1 and Serial both implement the raw store and post-barrier independently.
+Two dependent memory loads before the call. The `this` pointer occupies `%rdi`, and the compiler cannot inline across the virtual boundary. Each GC also duplicates the full barrier logic. G1 and Serial both implement the raw store and post-barrier independently.
 
 ## Approach 2: Function Pointer
 
@@ -84,20 +84,20 @@ StoreFn store = resolve(argv[1]);  // returns the right function pointer
 store(heap, 42);
 ```
 
-There's no class hierarchy here and no `this` pointer — just a raw function address. The assembly:
+There's no class hierarchy here and no `this` pointer, just a raw function address. The assembly:
 
 ```nasm
 call  *%r12                  ; indirect call through register
 ```
 [See it on Compiler Explorer →](https://godbolt.org/z/bEWhMc7ra)
 
-One indirect call. The pointer lives in a callee-saved register, so there's no memory load at all — just the indirect branch. Arguments go directly in `%rdi` and `%rsi` without the `this` pointer overhead.
+One indirect call. The pointer lives in a callee-saved register, so there's no memory load at all, just the indirect branch. Arguments go directly in `%rdi` and `%rsi` without the `this` pointer overhead.
 
 But like virtual dispatch, each function reimplements the full barrier logic. No composition.
 
 ## Approach 3: std::variant + std::visit
 
-The modern C++ approach — a closed type set with compiler-generated dispatch:
+The modern C++ approach, a closed type set with compiler-generated dispatch:
 
 ```cpp
 using AnyBarrierSet = std::variant<EpsilonBarrierSet, SerialBarrierSet, G1BarrierSet>;
@@ -106,7 +106,7 @@ auto bs = create(argv[1]);
 std::visit([&](auto& b) { b.store(addr, value); }, bs);
 ```
 
-There's no base class and no vtable — the compiler can see all the types. So what does it actually generate?
+There's no base class and no vtable, and the compiler can see all the types. So what does it actually generate?
 
 Here's what libstdc++ (GCC 11) actually generates:
 
@@ -118,7 +118,7 @@ call  *(%r14,%rax,8)        ; indexed indirect call into _S_vtable
 ```
 [See it on Compiler Explorer →](https://godbolt.org/z/f1T14Pdbx)
 
-libstdc++ generates **its own function pointer table** (`_S_vtable`) — essentially a vtable. On top of that, there are two stack stores per call to build the lambda capture struct that the visited function reads back.
+libstdc++ generates **its own function pointer table** (`_S_vtable`), essentially a vtable. On top of that, there are two stack stores per call to build the lambda capture struct that the visited function reads back.
 
 It's a vtable with extra steps. More overhead than virtual dispatch, not less.
 
@@ -141,7 +141,7 @@ class BarrierSet {
 class G1BarrierSet : public BarrierSet<G1BarrierSet> { ... };
 ```
 
-This gives you static dispatch — no vtable — but it has two fundamental problems. First, the base class must know the derived type at compile time. When the user picks the GC at runtime, you can't write `BarrierSet<???>`. Second, you can't have a static or global `BarrierSet*` singleton without baking the derived type into the base — the type parameter infects everything. Conventional CRTP is out.
+This gives you static dispatch — no vtable, but it has two fundamental problems. First, the base class must know the derived type at compile time. When the user picks the GC at runtime, you can't write `BarrierSet<???>`. Second, you can't have a static or global `BarrierSet*` singleton without baking the derived type into the base. The type parameter infects everything. Conventional CRTP is out.
 
 ### Decoupled CRTP: Flip the Relationship
 
@@ -161,13 +161,13 @@ class BarrierSet {
 };
 ```
 
-Notice that the base class compiles without knowing any concrete GC type. It can hold a static singleton member (`BarrierSet* _barrier_set`) that points to whichever GC the user selected at startup — without the base itself being templated. The `AccessBarrier` inner class is what carries the CRTP connection — it implements the hot-path APIs and does the static cast. Each GC subclass provides its own `AccessBarrier` specialization that layers one concern on top of the parent's.
+Notice that the base class compiles without knowing any concrete GC type. It can hold a static singleton member (`BarrierSet* _barrier_set`) that points to whichever GC the user selected at startup, without the base itself being templated. The `AccessBarrier` inner class carries the CRTP connection: it implements the hot-path APIs and does the static cast. Each GC subclass provides its own `AccessBarrier` specialization that layers one concern on top of the parent's.
 
-The template machinery generates code for *all* derived types at compile time — `G1BarrierSet::AccessBarrier<>::store`, `SerialBarrierSet::AccessBarrier<>::store`, `EpsilonBarrierSet::AccessBarrier<>::store` all exist in the binary. Lazy resolution then picks the correct one at runtime based on the user's flag, caches a function pointer to it, and every subsequent call goes direct.
+The template machinery generates code for *all* derived types at compile time: `G1BarrierSet::AccessBarrier<>::store`, `SerialBarrierSet::AccessBarrier<>::store`, `EpsilonBarrierSet::AccessBarrier<>::store` all exist in the binary. Lazy resolution then picks the correct one at runtime based on the user's flag, caches a function pointer to it, and every subsequent call goes direct.
 
-The net effect: **we replace the vtable overhead on every call with a one-time initialization cost.** After that first resolution, the dispatch path is identical to a direct function pointer — no vptr load, no vtable lookup, just a single indirect call.
+The net effect: **we replace the vtable overhead on every call with a one-time initialization cost.** After that first resolution, the dispatch path is identical to a direct function pointer: no vptr load, no vtable lookup, just a single indirect call.
 
-This is what [OpenJDK](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/gc/shared/barrierSet.hpp) actually uses. Here's what it looks like with real barrier composition — each GC subclass provides its own `AccessBarrier` that layers one concern on top:
+This is what [OpenJDK](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/gc/shared/barrierSet.hpp) actually uses. Here's what it looks like with real barrier composition, where each GC subclass provides its own `AccessBarrier` that layers one concern on top:
 
 ```cpp
 // Layer 0: raw write — the base concern
@@ -201,9 +201,9 @@ class G1BarrierSet : public CardTableBarrierSet {
 };
 ```
 
-Each GC only adds its own concern — no duplication. The compiler sees through the template chain and generates the same code as if you'd hand-written each barrier combination — the templates are the source-level abstraction; they don't exist at runtime.
+Each GC only adds its own concern, no duplication. The compiler sees through the template chain and generates the same code as if you'd hand-written each barrier combination. The templates are the source-level abstraction; they don't exist at runtime.
 
-So now we have all the concrete implementations compiled and ready — `G1BarrierSet::AccessBarrier<>::store`, `SerialBarrierSet::AccessBarrier<>::store`, `EpsilonBarrierSet::AccessBarrier<>::store`. The last piece: how do we pick the right one when the user passes a flag at startup?
+So now we have all the concrete implementations compiled and ready: `G1BarrierSet::AccessBarrier<>::store`, `SerialBarrierSet::AccessBarrier<>::store`, `EpsilonBarrierSet::AccessBarrier<>::store`. The last piece: how do we pick the right one when the user passes a flag at startup?
 
 ### Lazy Resolution (Resolve Once, Dispatch Forever)
 
@@ -238,9 +238,9 @@ call  *_store_func(%rip)     ; indirect call through global
 ```
 [See it on Compiler Explorer →](https://godbolt.org/z/Y7voz9Ynx)
 
-Same dispatch cost as a function pointer, but the target function is composed — each barrier concern is layered, not duplicated.
+Same dispatch cost as a function pointer, but the target function is composed. Each barrier concern is layered, not duplicated.
 
-One caveat worth noting: conventional CRTP also uses `static_cast`, but it casts `this` — which is always the correct derived type by construction. In decoupled CRTP, the cast targets a global singleton (`_barrier_set`) whose concrete type is a runtime decision. If the resolution switch pairs the wrong type with the wrong `AccessBarrier` instantiation, you get undefined behavior. The resolution logic must get this right. OpenJDK solves this with a lightweight type identity mechanism that avoids C++ RTTI entirely — a topic for a future post.
+One caveat worth noting: conventional CRTP also uses `static_cast`, but it casts `this`, which is always the correct derived type by construction. In decoupled CRTP, the cast targets a global singleton (`_barrier_set`) whose concrete type is a runtime decision. If the resolution switch pairs the wrong type with the wrong `AccessBarrier` instantiation, you get undefined behavior. The resolution logic must get this right. OpenJDK solves this with a lightweight type identity mechanism that avoids C++ RTTI entirely. More on that in a future post.
 
 ## Benchmarks
 
@@ -269,7 +269,7 @@ Text section sizes (dynamically linked, `-O2`):
 
 CRTP is largest because each composed `AccessBarrier` chain is a separate template instantiation. That's the cost of composability: each unique barrier composition gets its own generated code.
 
-The dispatch overhead differences are small — 0.9 to 2.2 ns. The **real** differences between these approaches are in composability, extensibility, and code organization. The comparison matrix below captures them all.
+The dispatch overhead differences are small, 0.9 to 2.2 ns. The **real** differences between these approaches are in composability, extensibility, and code organization. The comparison matrix below captures them all.
 
 ## Comparison Matrix
 
@@ -311,7 +311,7 @@ Need runtime plugin dispatch?
 ## Key Takeaways
 
 1. **All four work.** Pick based on constraints, not microbenchmark deltas.
-2. **`std::variant + std::visit` is NOT always faster than virtual** — check your stdlib implementation.
+2. **`std::variant + std::visit` is NOT always faster than virtual**. Check your stdlib implementation.
 3. **The right question isn't "which is fastest?"** It's: do I need composition? decoupling? extensibility? Then pick the simplest approach that satisfies those.
 
 ---
