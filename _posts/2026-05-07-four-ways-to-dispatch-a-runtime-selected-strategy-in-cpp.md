@@ -242,36 +242,9 @@ Same dispatch cost as a function pointer, but the target function is composed. E
 
 One caveat worth noting: conventional CRTP also uses `static_cast`, but it casts `this`, which is always the correct derived type by construction. In decoupled CRTP, the cast targets a global singleton (`_barrier_set`) whose concrete type is a runtime decision. If the resolution switch pairs the wrong type with the wrong `AccessBarrier` instantiation, you get undefined behavior. The resolution logic must get this right. OpenJDK solves this with a lightweight type identity mechanism that avoids C++ RTTI entirely. More on that in a future post.
 
-## Benchmarks
+## Comparison
 
 All measurements on an Intel Xeon Gold 6130 @ 2.10 GHz, 100M iterations with G1 barriers, compiled with GCC 11 at `-O2 -march=skylake-avx512`.
-
-| Approach | ns/call | Overhead vs direct |
-|---|---|---|
-| Direct call (baseline) | 1.48 ns | - |
-| Decoupled CRTP | 2.42 ns | +0.94 ns |
-| Function pointer | 2.43 ns | +0.95 ns |
-| Virtual dispatch | 2.90 ns | +1.42 ns |
-| std::variant + std::visit | 3.71 ns | +2.23 ns |
-
-CRTP and function pointer are tied. Virtual dispatch costs about 0.5 ns more (the vptr→vtable dependency chain). Variant is slowest due to the lambda capture spilling and `_S_vtable` indirection.
-
-### Binary Size
-
-Text section sizes (dynamically linked, `-O2`):
-
-| Approach | Text section | Relative |
-|---|---|---|
-| Function pointer | 4,727 bytes | baseline |
-| std::variant | 5,231 bytes | +11% |
-| Virtual dispatch | 6,776 bytes | +43% |
-| Decoupled CRTP | 7,885 bytes | **+67%** |
-
-CRTP is largest because each composed `AccessBarrier` chain is a separate template instantiation. That's the cost of composability: each unique barrier composition gets its own generated code.
-
-The dispatch overhead differences are small, 0.9 to 2.2 ns. The **real** differences between these approaches are in composability, extensibility, and code organization. The comparison matrix below captures them all.
-
-## Comparison Matrix
 
 | | Virtual | FnPtr | variant | Decoupled CRTP |
 |---|---|---|---|---|
