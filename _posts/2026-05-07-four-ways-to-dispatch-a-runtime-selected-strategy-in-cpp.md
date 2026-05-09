@@ -266,32 +266,29 @@ Virtual dispatch sits in the middle on almost every dimension. Most debuggable, 
 
 CRTP (0.29s) actually compiles faster than virtual (0.38s) despite 5x more code -- virtual needs full class definitions visible at every call site for vtable layout, while CRTP templates only instantiate what each translation unit needs. Function pointer is fastest (0.25s) with no class hierarchy and no templates.
 
-## Decision Framework (Option A)
-
-**Function pointer** when you need the lightest-weight dispatch with zero ceremony -- no class hierarchy, no templates, just a pointer.
-
-**Virtual dispatch** when you want familiar OOP patterns and debuggability. The ~0.5 ns extra over a function pointer is rarely the bottleneck.
-
-**std::variant** when your type set is closed and small. Simplest API, but measure `std::visit` overhead with your stdlib -- it's not free.
-
-**Decoupled CRTP + Lazy Resolution** when behaviors need to compose without duplication and you still want open extensibility. More code, but the only approach where adding a concern doesn't mean editing every implementation.
-
-## Decision Framework (Option B)
+## Decision Framework
 
 ```mermaid
 flowchart TD
-    A[Need runtime plugin dispatch?] --> B{Type set closed & small?}
-    B -- Yes --> C[std::variant]
-    B -- No --> D{Need composable behaviors?}
-    D -- No --> E{Need OOP inheritance?}
-    D -- Yes --> F[Decoupled CRTP + Lazy Resolution]
-    E -- Yes --> G[Virtual dispatch]
-    E -- No --> H[Function pointer]
+    A(["Need runtime plugin dispatch?"]):::decision --> B{"Type set closed\n& small?"}:::decision
+    B -- Yes --> C["std::variant"]:::variant
+    B -- No --> D{"Need composable\nbehaviors?"}:::decision
+    D -- No --> E{"Need OOP\ninheritance?"}:::decision
+    D -- Yes --> F["Decoupled CRTP\n+ Lazy Resolution"]:::crtp
+    E -- Yes --> G["Virtual dispatch"]:::virtual
+    E -- No --> H["Function pointer"]:::fnptr
 
-    C -.- C1["Simplest API, but measure std::visit"]
-    F -.- F1["More code, behaviors compose without duplication"]
-    G -.- G1["Everyone knows it, ~0.5 ns extra is often fine"]
-    H -.- H1["Lightest weight, zero ceremony"]
+    C -.- C1["Simplest API, but measure std::visit"]:::note
+    F -.- F1["More code, behaviors compose without duplication"]:::note
+    G -.- G1["Everyone knows it, ~0.5 ns extra is often fine"]:::note
+    H -.- H1["Lightest weight, zero ceremony"]:::note
+
+    classDef decision fill:#f5f5f5,stroke:#999,color:#333
+    classDef fnptr fill:#d4edda,stroke:#28a745,color:#155724,font-weight:bold
+    classDef virtual fill:#cce5ff,stroke:#007bff,color:#004085,font-weight:bold
+    classDef variant fill:#fff3cd,stroke:#ffc107,color:#856404,font-weight:bold
+    classDef crtp fill:#e8d5f5,stroke:#7b2d8e,color:#4a1a5e,font-weight:bold
+    classDef note fill:none,stroke:none,color:#666,font-size:12px
 ```
 
 ## Key Takeaways
