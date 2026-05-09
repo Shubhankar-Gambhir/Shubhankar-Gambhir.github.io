@@ -1,0 +1,13 @@
+/* prettier-ignore */
+@use 'main
+{%- if jekyll.environment == 'production' -%}
+  .bundle
+{%- endif -%}
+';
+
+/* Mermaid edge label background: match diagram canvas */
+.mermaid .edgeLabel rect { fill: white !important; stroke: none !important; }
+.mermaid .edgeLabel span { background: white !important; }
+
+[data-mode="dark"] .mermaid .edgeLabel rect { fill: #282828 !important; }
+[data-mode="dark"] .mermaid .edgeLabel span { background: #282828 !important; }
