@@ -269,26 +269,19 @@ CRTP (0.29s) actually compiles faster than virtual (0.38s) despite 5x more code 
 ## Decision Framework
 
 ```mermaid
-flowchart TD
-    A(["Need runtime plugin dispatch?"]):::decision --> B{"Type set closed\n& small?"}:::decision
-    B -- Yes --> C["std::variant"]:::variant
-    B -- No --> D{"Need composable\nbehaviors?"}:::decision
-    D -- No --> E{"Need OOP\ninheritance?"}:::decision
-    D -- Yes --> F["Decoupled CRTP\n+ Lazy Resolution"]:::crtp
-    E -- Yes --> G["Virtual dispatch"]:::virtual
-    E -- No --> H["Function pointer"]:::fnptr
+flowchart LR
+    A[Need runtime plugin dispatch?] --> B{Type set closed & small?}
+    B -- Yes --> C[std::variant]
+    B -- No --> D{Need composable behaviors?}
+    D -- Yes --> F[Decoupled CRTP + Lazy Resolution]
+    D -- No --> E{Need OOP inheritance?}
+    E -- Yes --> G[Virtual dispatch]
+    E -- No --> H[Function pointer]
 
-    C -.- C1["Simplest API, but measure std::visit"]:::note
-    F -.- F1["More code, behaviors compose without duplication"]:::note
-    G -.- G1["Everyone knows it, ~0.5 ns extra is often fine"]:::note
-    H -.- H1["Lightest weight, zero ceremony"]:::note
-
-    classDef decision fill:#f5f5f5,stroke:#999,color:#333
-    classDef fnptr fill:#d4edda,stroke:#28a745,color:#155724,font-weight:bold
-    classDef virtual fill:#cce5ff,stroke:#007bff,color:#004085,font-weight:bold
-    classDef variant fill:#fff3cd,stroke:#ffc107,color:#856404,font-weight:bold
-    classDef crtp fill:#e8d5f5,stroke:#7b2d8e,color:#4a1a5e,font-weight:bold
-    classDef note fill:none,stroke:none,color:#666,font-size:12px
+    C -.- C1["Simplest API, but measure std::visit"]
+    F -.- F1["More code, behaviors compose without duplication"]
+    G -.- G1["Everyone knows it, ~0.5 ns extra is often fine"]
+    H -.- H1["Lightest weight, zero ceremony"]
 ```
 
 ## Key Takeaways
