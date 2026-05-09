@@ -272,7 +272,7 @@ CRTP (0.29s) actually compiles faster than virtual (0.38s) despite 5x more code 
 ---
 config:
   flowchart:
-    curve: linear
+    curve: stepBefore
 ---
 flowchart TD
     A[Need runtime plugin dispatch?] --> B{Need inheritance?}
