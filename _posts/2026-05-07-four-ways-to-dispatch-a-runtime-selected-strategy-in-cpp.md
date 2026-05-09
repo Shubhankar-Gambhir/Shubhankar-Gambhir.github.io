@@ -268,13 +268,15 @@ CRTP (0.29s) actually compiles faster than virtual (0.38s) despite 5x more code 
 
 ## Decision Framework
 
+<style>
+.mermaid .edgeLabel { background: var(--card-bg, #fff) !important; }
+</style>
+
 ```mermaid
 ---
 config:
   flowchart:
     curve: stepAfter
-  themeVariables:
-    edgeLabelBackground: transparent
 ---
 flowchart TD
     A[Need runtime plugin dispatch?] --> B{Need inheritance?}
