@@ -269,6 +269,11 @@ CRTP (0.29s) actually compiles faster than virtual (0.38s) despite 5x more code 
 ## Decision Framework
 
 ```mermaid
+---
+config:
+  flowchart:
+    curve: linear
+---
 flowchart TD
     A[Need runtime plugin dispatch?] --> B{Need inheritance?}
     B -- No --> C{Want compile-time exhaustiveness checking?}
