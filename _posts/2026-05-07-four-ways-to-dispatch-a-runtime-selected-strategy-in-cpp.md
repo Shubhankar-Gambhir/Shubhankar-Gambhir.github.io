@@ -270,18 +270,13 @@ CRTP (0.29s) actually compiles faster than virtual (0.38s) despite 5x more code 
 
 ```mermaid
 flowchart LR
-    A[Need runtime plugin dispatch?] --> B{Type set closed & small?}
-    B -- Yes --> C[std::variant]
-    B -- No --> D{Need composable behaviors?}
-    D -- Yes --> F[Decoupled CRTP + Lazy Resolution]
-    D -- No --> E{Need OOP inheritance?}
-    E -- Yes --> G[Virtual dispatch]
-    E -- No --> H[Function pointer]
-
-    C -.- C1["Simplest API, but measure std::visit"]
-    F -.- F1["More code, behaviors compose without duplication"]
-    G -.- G1["Everyone knows it, ~0.5 ns extra is often fine"]
-    H -.- H1["Lightest weight, zero ceremony"]
+    A[Need runtime plugin dispatch?] --> B{Need inheritance?}
+    B -- No --> C{Want compile-time exhaustiveness checking?}
+    C -- Yes --> D[std::variant]
+    C -- No --> E[Function pointer]
+    B -- Yes --> F{Zero-overhead dispatch on hot path?}
+    F -- Yes --> G[Decoupled CRTP + Lazy Resolution]
+    F -- No --> H[Virtual dispatch]
 ```
 
 ## Key Takeaways
