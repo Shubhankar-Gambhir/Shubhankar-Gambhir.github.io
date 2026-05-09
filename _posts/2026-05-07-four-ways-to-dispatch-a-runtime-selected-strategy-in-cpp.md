@@ -269,7 +269,8 @@ CRTP (0.29s) actually compiles faster than virtual (0.38s) despite 5x more code 
 ## Decision Framework
 
 <style>
-.mermaid .edgeLabel { background: var(--card-bg, #fff) !important; }
+.mermaid .edgeLabel rect { fill: none !important; stroke: none !important; }
+.mermaid .edgeLabel span { background: none !important; }
 </style>
 
 ```mermaid
