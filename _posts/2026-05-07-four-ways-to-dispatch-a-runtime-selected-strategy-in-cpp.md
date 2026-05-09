@@ -272,7 +272,7 @@ CRTP (0.29s) actually compiles faster than virtual (0.38s) despite 5x more code 
 flowchart LR
     A[Need runtime plugin dispatch?] --> B{Need inheritance?}
     B -- No --> C{Want compile-time exhaustiveness checking?}
-    C -- Yes --> D[std::variant]
+    C -- Yes --> D["std::variant + std::visit"]
     C -- No --> E[Function pointer]
     B -- Yes --> F{Zero-overhead dispatch on hot path?}
     F -- Yes --> G[Decoupled CRTP + Lazy Resolution]
