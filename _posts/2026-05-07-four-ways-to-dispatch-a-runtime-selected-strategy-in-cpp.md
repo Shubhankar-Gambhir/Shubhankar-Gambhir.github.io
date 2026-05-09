@@ -257,34 +257,40 @@ All measurements on an Intel Xeon Gold 6130 @ 2.10 GHz, 100M iterations with G1 
 | **Error messages** | Clear | Clear | Moderate | Poor |
 | **Debuggability** | Excellent | Good | Moderate | Moderate |
 
-A few things stand out. CRTP and function pointer have the same dispatch cost (+0.9 ns), but CRTP is the only approach where barrier concerns compose instead of being duplicated. That composability comes at a price: 5x more code, the largest binary (+67%), and the steepest learning curve.
+CRTP and function pointer tie at +0.9 ns, but CRTP is the only approach where barrier concerns compose instead of being duplicated. That composability comes at a price: 5x more code, the largest binary (+67%), and the steepest learning curve.
 
-Variant is the slowest despite having no vtable. The overhead comes from libstdc++'s `std::visit` implementation, which builds a lambda capture struct and indexes into its own function pointer table on every call. It also has the worst extensibility story since adding a new type means modifying the variant typedef everywhere.
+Variant is the slowest despite having no vtable. The overhead comes from libstdc++'s `std::visit`, which builds a lambda capture struct and indexes into its own function pointer table on every call. Adding a new type means modifying the variant typedef everywhere.
 
-Virtual dispatch sits in the middle on almost every dimension. It's the most debuggable, the easiest to understand, and the ~0.5 ns extra over a function pointer is often fine. For most codebases, this is the right default.
+Virtual dispatch sits in the middle on almost every dimension. Most debuggable, easiest to understand, and the ~0.5 ns extra over a function pointer is rarely the bottleneck. For most codebases, this is the right default.
 
-Compile time is worth noting: CRTP (0.29s) is actually faster than virtual (0.38s) despite being 5x more code. Virtual dispatch needs full class definitions visible at every call site for the vtable layout. CRTP's templates instantiate more code, but each translation unit only sees what it needs. Function pointer is fastest (0.25s) since there's no class hierarchy and no templates at all.
+CRTP (0.29s) actually compiles faster than virtual (0.38s) despite 5x more code -- virtual needs full class definitions visible at every call site for vtable layout, while CRTP templates only instantiate what each translation unit needs. Function pointer is fastest (0.25s) with no class hierarchy and no templates.
 
-## Decision Framework
+## Decision Framework (Option A)
 
-```
-Need runtime plugin dispatch?
-│
-├── Type set closed & small?
-│   └── std::variant
-│       (simplest API, but measure std::visit with YOUR stdlib)
-│
-├── Simple dispatch, no composition needed?
-│   └── Function pointer
-│       (lightest weight, zero ceremony)
-│
-├── Need OOP inheritance & familiar patterns?
-│   └── Virtual dispatch
-│       (everyone knows it, ~0.5 ns extra is often fine)
-│
-└── Need composable behaviors + open extensibility?
-    └── Decoupled CRTP + Lazy Resolution
-        (more code, but behaviors compose without duplication)
+**Function pointer** when you need the lightest-weight dispatch with zero ceremony -- no class hierarchy, no templates, just a pointer.
+
+**Virtual dispatch** when you want familiar OOP patterns and debuggability. The ~0.5 ns extra over a function pointer is rarely the bottleneck.
+
+**std::variant** when your type set is closed and small. Simplest API, but measure `std::visit` overhead with your stdlib -- it's not free.
+
+**Decoupled CRTP + Lazy Resolution** when behaviors need to compose without duplication and you still want open extensibility. More code, but the only approach where adding a concern doesn't mean editing every implementation.
+
+## Decision Framework (Option B)
+
+```mermaid
+flowchart TD
+    A[Need runtime plugin dispatch?] --> B{Type set closed & small?}
+    B -- Yes --> C[std::variant]
+    B -- No --> D{Need composable behaviors?}
+    D -- No --> E{Need OOP inheritance?}
+    D -- Yes --> F[Decoupled CRTP + Lazy Resolution]
+    E -- Yes --> G[Virtual dispatch]
+    E -- No --> H[Function pointer]
+
+    C -.- C1["Simplest API, but measure std::visit"]
+    F -.- F1["More code, behaviors compose without duplication"]
+    G -.- G1["Everyone knows it, ~0.5 ns extra is often fine"]
+    H -.- H1["Lightest weight, zero ceremony"]
 ```
 
 ## Key Takeaways
