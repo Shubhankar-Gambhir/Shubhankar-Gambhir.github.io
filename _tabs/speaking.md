@@ -25,4 +25,4 @@ How large-scale C++ systems balance performance with design flexibility. Using O
 
 ## Get In Touch
 
-Interested in having me speak at your conference or meetup? Reach out via [LinkedIn](https://www.linkedin.com/in/shubhankargambhir) or [GitHub](https://github.com/Shubhankar-Gambhir).
+Interested in having me speak at your conference or meetup? Reach out via [LinkedIn](https://www.linkedin.com/in/shubhankar-gambhir-a5b89a1b5/) or [GitHub](https://github.com/Shubhankar-Gambhir).

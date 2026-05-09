@@ -24,4 +24,4 @@ I build focused C++ prototypes to explore design trade-offs: compile-time polymo
 ## Elsewhere
 
 - [GitHub](https://github.com/Shubhankar-Gambhir)
-- [LinkedIn](https://www.linkedin.com/in/shubhankargambhir)
+- [LinkedIn](https://www.linkedin.com/in/shubhankar-gambhir-a5b89a1b5/)
