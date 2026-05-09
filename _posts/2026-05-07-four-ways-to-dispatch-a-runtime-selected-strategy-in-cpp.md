@@ -7,6 +7,7 @@ description: >-
   Head-to-head comparison of virtual dispatch, function pointers, std::variant,
   and decoupled CRTP for runtime plugin dispatch, with benchmarks, assembly,
   and a decision framework.
+mermaid: true
 ---
 
 You're building a system with pluggable strategies. The user picks one at startup - a config flag, a command-line argument - and every call goes through that strategy. The call runs millions of times per second. How do you dispatch it?
