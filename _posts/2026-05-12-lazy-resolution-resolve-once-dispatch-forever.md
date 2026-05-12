@@ -246,7 +246,7 @@ flowchart LR
 
 The caller (`HeapAccess::store`) never changes. It always calls through `RuntimeDispatch::store`, which always calls through `_store_func`. The only thing that changes is what `_store_func` points to, and that changes exactly once.
 
-The production implementation adds a few things we skipped: a lightweight type identity system (`FakeRtti`) that replaces C++ RTTI for type-safe downcasts without the overhead of `dynamic_cast`, and a decorator-based template metaprogramming layer for composing barrier concerns. Those are interesting in their own right, but orthogonal to the lazy resolution pattern itself.
+The production implementation adds a few things we skipped. One is `FakeRtti`, a lightweight type identity system that replaces C++ RTTI. Each `BarrierSet` carries a bitset of type tags instead of relying on `dynamic_cast`. A downcast becomes a bitwise AND plus a `static_cast`, which is cheaper than walking the type hierarchy and works in codebases compiled with `-fno-rtti`. The other is a decorator-based template metaprogramming layer for composing barrier concerns. Both are interesting in their own right, but orthogonal to the lazy resolution pattern itself.
 
 ---
 
