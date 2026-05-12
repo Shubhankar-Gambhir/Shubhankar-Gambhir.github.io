@@ -229,6 +229,18 @@ The tag set builds up as each constructor delegates to its parent:
 | CardTableBarrierSet | CardTableBarrierSet | {G1BarrierSet, CardTableBarrierSet} |
 | ModRefBarrierSet | ModRef | {G1BarrierSet, CardTableBarrierSet, ModRef} |
 
+```mermaid
+---
+config:
+  flowchart:
+    curve: stepBefore
+---
+flowchart LR
+    A["G1BarrierSet()\ntag_set: 001"] -->|add_tag| B["CardTableBarrierSet()\ntag_set: 011"]
+    B -->|add_tag| C["ModRefBarrierSet()\ntag_set: 111"]
+    C -->|add_tag| D["BarrierSet()\ntag_set: 111"]
+```
+
 By the time construction finishes, a `G1BarrierSet` has `concrete_tag = G1BarrierSet` and a tag set that includes every class in its inheritance chain. A checked downcast is then a bitwise AND:
 
 ```cpp
@@ -306,10 +318,10 @@ config:
 flowchart LR
     A["HeapAccess::store()"] --> B["RuntimeDispatch::store()"]
     B --> C{"_store_func"}
-    C -->|first call| D["store_init()"]
+    C -->|first call| D["store_init():\nresolve + patch"]
     D --> E["BarrierResolver::\nresolve_barrier_gc()"]
-    E --> F["patches _store_func"]
-    F --> G["G1::AccessBarrier::\nstore()"]
+    E -->|returns func ptr| D
+    D -->|patches + tail-calls| G["G1::AccessBarrier::\nstore()"]
     C -->|subsequent calls| G
 ```
 
