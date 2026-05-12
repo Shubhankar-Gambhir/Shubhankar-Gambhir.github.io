@@ -174,6 +174,60 @@ void store_init(int* addr, int value) {
 
 This only works when the resolver is **idempotent**: the same inputs must always produce the same output, with no observable side effects. If your resolution logic allocates resources, registers callbacks, or modifies shared state, a double-resolve becomes a bug. In that case, use `std::call_once` or an equivalent single-initialization guard instead of relaxed atomics.
 
+## Type Safety Without RTTI
+
+In the [previous post](https://shubhankar-gambhir.github.io/posts/four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp/), I flagged a correctness concern with decoupled CRTP: the `static_cast` targets a global singleton whose concrete type is a runtime decision. If the resolver pairs the wrong type with the wrong `AccessBarrier` specialization, you get undefined behavior. How does the resolver know the type?
+
+C++ RTTI (`dynamic_cast`) would work, but OpenJDK avoids it entirely. Instead, each `BarrierSet` carries a lightweight type identity based on a bitset:
+
+```cpp
+// OpenJDK: utilities/fakeRttiSupport.hpp (simplified)
+template <typename T, typename TagType>
+class FakeRttiSupport {
+    uintx     _tag_set;       // bitset: which types this instance "is-a"
+    TagType   _concrete_tag;  // the leaf type
+
+    bool has_tag(TagType tag) const {
+        return (_tag_set & (1u << tag)) != 0;
+    }
+
+    FakeRttiSupport add_tag(TagType tag) const {
+        return FakeRttiSupport(_concrete_tag, _tag_set | (1u << tag));
+    }
+};
+```
+
+Each class in the hierarchy adds its own tag during construction. When `G1BarrierSet` is created, the tag set accumulates through the constructor chain:
+
+```cpp
+// G1BarrierSet starts with its own tag
+G1BarrierSet::G1BarrierSet(...)
+    : CardTableBarrierSet(..., FakeRtti(BarrierSet::G1BarrierSet))
+    // tag_set = {G1BarrierSet}
+
+// CardTableBarrierSet adds its tag
+CardTableBarrierSet::CardTableBarrierSet(..., const FakeRtti& fake_rtti)
+    : ModRefBarrierSet(..., fake_rtti.add_tag(BarrierSet::CardTableBarrierSet))
+    // tag_set = {G1BarrierSet, CardTableBarrierSet}
+
+// ModRefBarrierSet adds its tag
+ModRefBarrierSet::ModRefBarrierSet(..., const FakeRtti& fake_rtti)
+    : BarrierSet(..., fake_rtti.add_tag(BarrierSet::ModRef))
+    // tag_set = {G1BarrierSet, CardTableBarrierSet, ModRef}
+```
+
+By the time construction finishes, a `G1BarrierSet` has `concrete_tag = G1BarrierSet` and `tag_set = {G1BarrierSet, CardTableBarrierSet, ModRef}`. A checked downcast is then a bitwise AND:
+
+```cpp
+template <typename T>
+T* barrier_set_cast(BarrierSet* bs) {
+    assert(bs->is_a(BarrierSet::GetName<T>::value));  // bitwise AND check
+    return static_cast<T*>(bs);
+}
+```
+
+This is cheaper than `dynamic_cast` (one AND vs. walking the type hierarchy) and works in codebases compiled with `-fno-rtti`. The tag set is bounded by the number of bits in `uintx` (typically 64), which is more than enough for a GC hierarchy.
+
 ## When to Use This
 
 Lazy resolution works well when:
@@ -194,7 +248,7 @@ If you think about it, this is the same idea behind PLT (Procedure Linkage Table
 1. **Lazy resolution trades a one-time startup cost for zero per-call overhead.** After resolution, it's indistinguishable from a direct function pointer.
 2. **The pattern has three moving parts**: a function pointer, a resolver stub, and a patch. The resolver runs once and then gets out of the way.
 3. **Combined with decoupled CRTP**, lazy resolution gives you both composition (template inheritance chains) and zero-overhead dispatch. That's the combination that makes it compelling over raw function pointers.
-4. **OpenJDK has used this pattern since JDK 10** for GC barrier dispatch. The production implementation adds FakeRtti for type safety without C++ RTTI overhead.
+4. **OpenJDK has used this pattern since JDK 10** for GC barrier dispatch, with `FakeRtti` providing type-safe downcasts at the cost of a single bitwise AND, no C++ RTTI required.
 
 ---
 
@@ -246,7 +300,7 @@ flowchart LR
 
 The caller (`HeapAccess::store`) never changes. It always calls through `RuntimeDispatch::store`, which always calls through `_store_func`. The only thing that changes is what `_store_func` points to, and that changes exactly once.
 
-The production implementation adds a few things we skipped. One is `FakeRtti`, a lightweight type identity system that replaces C++ RTTI. Each `BarrierSet` carries a bitset of type tags instead of relying on `dynamic_cast`. A downcast becomes a bitwise AND plus a `static_cast`, which is cheaper than walking the type hierarchy and works in codebases compiled with `-fno-rtti`. The other is a decorator-based template metaprogramming layer for composing barrier concerns. Both are interesting in their own right, but orthogonal to the lazy resolution pattern itself.
+The production implementation also includes a decorator-based template metaprogramming layer for composing barrier concerns, but that's orthogonal to the lazy resolution pattern itself.
 
 ---
 
