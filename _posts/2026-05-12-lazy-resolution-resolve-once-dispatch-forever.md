@@ -32,6 +32,8 @@ What if you could decide once and never pay again?
 
 The idea is simple. You have a function pointer that starts pointing at a resolver stub. The first call runs the resolver, which figures out the right implementation, patches the pointer to point directly at it, and forwards the call. Every subsequent call goes through the patched pointer, which is now a direct function call. No vtable, no branch, no switch.
 
+A note on terminology: "GC barriers" are bookkeeping hooks a runtime inserts around heap stores (e.g. marking a card dirty), unrelated to CPU memory barriers or `std::atomic_thread_fence`. Different GC algorithms need different hooks -- some none, some post-store only, some pre-and-post. The exact semantics don't matter here; what matters is that the choice is fixed at startup.
+
 Here's the minimal version. The [previous post](https://shubhankar-gambhir.github.io/posts/four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp/) used `printf` for barrier side effects; here we use a `volatile int sink` instead, which gives the compiler a visible side effect without the I/O overhead that would dominate the benchmark.
 
 ```cpp
@@ -73,14 +75,11 @@ The function pointer goes through three states during the program's lifetime:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Unresolved: program start
-    Unresolved --> Resolving: first call
-    Resolving --> Resolved: pointer patched
-    Resolved --> Resolved: every subsequent call
-
-    Unresolved: _store_func = &store_init
-    Resolving: switch on runtime config\npatch _store_func
-    Resolved: _store_func = &g1_store\n(direct call, no indirection)
+    direction LR
+    [*] --> Unresolved : program start
+    Unresolved --> Resolving : first call
+    Resolving --> Resolved : pointer patched
+    Resolved --> Resolved : every subsequent call
 ```
 
 **State 1: Unresolved.** The pointer holds the address of `store_init`. No runtime choice has been made yet.
@@ -310,19 +309,14 @@ The pieces map directly to our simplified version:
 Here's how it all connects:
 
 ```mermaid
----
-config:
-  flowchart:
-    curve: stepBefore
----
 flowchart LR
     A["HeapAccess::store()"] --> B["RuntimeDispatch::store()"]
     B --> C{"_store_func"}
-    C -->|first call| D["store_init():\nresolve + patch"]
-    D --> E["BarrierResolver::\nresolve_barrier_gc()"]
-    E -->|returns func ptr| D
-    D -->|patches + tail-calls| G["G1::AccessBarrier::\nstore()"]
-    C -->|subsequent calls| G
+    C -.->|first call| D["store_init()"]
+    D -.-> E["resolve_barrier_gc()"]
+    E -.->|func ptr| D
+    D -.->|patch + tail-call| G["G1::AccessBarrier::store()"]
+    C -->|subsequent| G
 ```
 
 The caller (`HeapAccess::store`) never changes. It always calls through `RuntimeDispatch::store`, which always calls through `_store_func`. The only thing that changes is what `_store_func` points to, and that changes exactly once.
