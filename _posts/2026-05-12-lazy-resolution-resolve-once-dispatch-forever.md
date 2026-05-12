@@ -232,7 +232,7 @@ Here's how it all connects:
 ---
 config:
   flowchart:
-    curve: stepAfter
+    curve: stepBefore
 ---
 flowchart LR
     A["HeapAccess::store()"] --> B["RuntimeDispatch::store()"]
