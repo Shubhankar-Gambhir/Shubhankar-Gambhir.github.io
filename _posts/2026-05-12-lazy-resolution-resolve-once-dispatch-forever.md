@@ -5,14 +5,17 @@ categories: [C++, Performance]
 tags: [dispatch, lazy-resolution, crtp, function-pointer, assembly, openjdk, benchmarks]
 description: >-
   Deep dive into lazy resolution for C++ runtime dispatch. How a self-patching
-  function pointer eliminates per-call overhead, with assembly, benchmarks,
-  and a side-by-side with the actual OpenJDK implementation.
+  function pointer eliminates per-call overhead after a one-time ~38 ns
+  resolution cost, with assembly analysis, benchmarks, and thread safety
+  considerations.
 mermaid: true
 ---
 
-In the [previous post](https://shubhankar-gambhir.github.io/posts/four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp/), decoupled CRTP with lazy resolution matched raw function pointers at +0.9 ns dispatch overhead. But I glossed over the interesting part: how lazy resolution actually works.
+What if a function pointer could resolve itself on first use, then dispatch at zero cost forever after?
 
-This post takes it apart. We'll walk through the three states of a self-patching function pointer, look at the assembly, measure the resolution cost, and map each piece to the actual OpenJDK source where this pattern originated.
+In a [previous post](https://shubhankar-gambhir.github.io/posts/four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp/), I compared four approaches to runtime dispatch in C++: virtual functions, function pointers, `std::variant`, and a template-based technique called decoupled CRTP. The template approach matched raw function pointers in steady-state performance, but I glossed over the interesting part: how it resolves the right implementation at runtime without paying for it on every call.
+
+This post takes that mechanism apart. We'll walk through the three states of a self-patching function pointer, look at the assembly, measure the resolution cost, and see where this pattern shows up in production (OpenJDK's GC barrier dispatch).
 
 ## The Problem
 
@@ -22,7 +25,7 @@ The obvious solutions each have a cost on every call:
 
 - **Virtual dispatch**: two dependent memory loads (vptr, then vtable entry)
 - **Switch/if-else**: a branch on every invocation
-- **`std::variant`**: libstdc++ builds a lambda capture struct and indexes into its own function pointer table
+- **`std::variant` + `std::visit`**: depending on your stdlib, this can compile down to its own function pointer table with per-call overhead for the lambda capture
 
 What if you could decide once and never pay again?
 
@@ -124,104 +127,27 @@ After `store_init` patches `_store_func`, it's never called again. The `jmp *%ra
 
 All measurements on the same hardware as the previous post. 100M iterations, G1 barriers, GCC 11 at `-O2 -march=native`. The new measurement here is the resolution cost (how long the first call takes when it triggers the resolver).
 
-| | Resolution (first call) | Steady-state | Direct fnptr | Lazy overhead |
+| | Resolution (first call) | Lazy steady-state | Direct function pointer | Difference |
 |---|---|---|---|---|
 | **G1** | ~38 ns | 1.97 ns/call | 1.97 ns/call | ~0.00 ns |
 | **Serial** | ~38 ns | 1.65 ns/call | 1.65 ns/call | ~0.00 ns |
 | **Epsilon** | ~37 ns | 1.64 ns/call | 1.64 ns/call | ~0.00 ns |
 
-The resolution cost is about 37-38 ns, and it happens exactly once. After that, lazy resolution is indistinguishable from a direct function pointer. The "lazy overhead" column is noise-level: at 100M iterations, the one-time 38 ns cost amortizes to 0.00038 ns per call.
+The "Direct function pointer" column is a plain function pointer assigned once at startup (no lazy resolution machinery). The "Difference" column is the steady-state cost of lazy resolution minus the direct function pointer: effectively zero.
 
-For context, here's how it stacks up against all four approaches from the previous post (G1 barriers, same machine):
+The resolution cost is about 37-38 ns and it happens exactly once. That cost is dominated by the indirect branch through the unresolved pointer (a cold branch target the predictor hasn't seen) plus the switch. After patching, the branch predictor learns the target and subsequent calls are indistinguishable from a direct function pointer. At 100M iterations, the one-time 38 ns cost amortizes to 0.00038 ns per call.
 
-| Approach | Dispatch overhead |
-|---|---|
-| Direct call (baseline) | 0.68 ns |
-| Function pointer | 1.68 ns |
-| **Decoupled CRTP (lazy)** | **1.65 ns** |
-| Virtual dispatch | 2.30 ns |
-| `std::variant` + `std::visit` | 2.30 ns |
+For context, here's how it stacks up against all four approaches from the [previous post](https://shubhankar-gambhir.github.io/posts/four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp/) (G1 barriers, same machine):
+
+| Approach | Dispatch overhead | Notes |
+|---|---|---|
+| Direct call (baseline) | 0.68 ns | Non-polymorphic, compile-time known target |
+| Function pointer | 1.68 ns | One indirect call, no composition |
+| **Decoupled CRTP (lazy)** | **1.65 ns** | **One indirect call, composable barriers** |
+| Virtual dispatch | 2.30 ns | Two dependent loads (vptr + vtable entry) |
+| `std::variant` + `std::visit` | 2.30 ns | Closed type set, stdlib-dependent overhead |
 
 Lazy resolution matches function pointers in steady state, but it also gives you the composition that function pointers lack.
-
-## How OpenJDK Does It
-
-The pattern above is a simplified version of what [OpenJDK](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/oops/accessBackend.hpp) uses for its GC barrier dispatch. Let's map the pieces side by side.
-
-### The Resolver: `RuntimeDispatch`
-
-In OpenJDK, the equivalent of our `_store_func` lives in the `RuntimeDispatch` template. It holds one function pointer per access type (load, store, CAS, etc.) and each starts pointing at a `xxx_init` method:
-
-| Simplified version | OpenJDK |
-|---|---|
-| `StoreFn _store_func` | `RuntimeDispatch::_store_func` |
-| `store_init()` | `RuntimeDispatch::store_init()` |
-| `switch (kind)` | `BarrierResolver::resolve_barrier_gc()` |
-| `_store_func = func` | patching in `xxx_init` |
-
-The resolution switch in OpenJDK lives in `access.inline.hpp`, in a method called `resolve_barrier_gc`. It maps the runtime `BarrierSet::Name` enum to the correct `AccessBarrier` specialization, exactly like our switch:
-
-```cpp
-// OpenJDK: access.inline.hpp (simplified)
-template <DecoratorSet decorators, typename BarrierSetT>
-typename AccessFunction<decorators, T>::type
-BarrierResolver::resolve_barrier_gc() {
-    BarrierSet* bs = BarrierSet::barrier_set();
-    switch (bs->kind()) {
-        case BarrierSet::G1:
-            return G1BarrierSet::AccessBarrier<decorators>::oop_store;
-        case BarrierSet::CardTable:
-            return CardTableBarrierSet::AccessBarrier<decorators>::oop_store;
-        // ...
-    }
-}
-```
-
-### Type Identity: FakeRtti
-
-One subtlety our simplified version skips: how does `resolve_barrier_gc` know what type the global singleton is? C++ RTTI (`dynamic_cast`) would work, but OpenJDK avoids it entirely. Instead, each `BarrierSet` carries a lightweight type identity based on a bitset:
-
-```cpp
-// OpenJDK: utilities/fakeRttiSupport.hpp (simplified)
-template <typename T, typename TagType>
-class FakeRttiSupport {
-    uint32_t  tag_set_;       // bitset: which types this instance "is-a"
-    TagType   concrete_tag_;  // the specific concrete type
-
-    bool has_tag(TagType tag) const {
-        return (tag_set_ & (1u << tag)) != 0;
-    }
-};
-```
-
-When a `G1BarrierSet` is created, it sets its concrete tag to `G1BS` and also adds `ModRefBS` and `BarrierSet` to its tag set. The `barrier_set_cast<T>()` helper asserts that the tag is present before doing a `static_cast`, catching mismatches at runtime without RTTI overhead:
-
-```cpp
-template <typename T>
-T* barrier_set_cast(BarrierSet* bs) {
-    assert(bs->is_a(BarrierSet::GetName<T>::value));
-    return static_cast<T*>(bs);
-}
-```
-
-This is cheaper than `dynamic_cast` (a bitwise AND vs. walking the type hierarchy) and works in codebases compiled with `-fno-rtti`.
-
-### The Full Picture
-
-Here's how all the pieces connect in OpenJDK:
-
-```mermaid
-flowchart LR
-    A["HeapAccess::store()"] --> B["RuntimeDispatch::store()"]
-    B --> C{"_store_func"}
-    C -->|first call| D["store_init()"]
-    D --> E["BarrierResolver::\nresolve_barrier_gc()"]
-    E --> F["patches _store_func"]
-    F --> G["G1::AccessBarrier::\nstore()"]
-    C -->|subsequent calls| G
-```
-
-The caller (`HeapAccess::store`) never changes. It always calls through `RuntimeDispatch::store`, which always calls through `_store_func`. The only thing that changes is what `_store_func` points to, and that changes exactly once.
 
 ## Thread Safety
 
@@ -247,6 +173,8 @@ void store_init(int* addr, int value) {
 
 `memory_order_relaxed` is enough here because we don't need ordering guarantees between threads. If two threads race to resolve, they'll both compute the same answer (the GC choice is immutable after startup) and both write the same pointer. The worst case is that the resolver runs twice, which is harmless.
 
+This only works when the resolver is **idempotent**: the same inputs must always produce the same output, with no observable side effects. If your resolution logic allocates resources, registers callbacks, or modifies shared state, a double-resolve becomes a bug. In that case, use `std::call_once` or an equivalent single-initialization guard instead of relaxed atomics.
+
 ## When to Use This
 
 Lazy resolution works well when:
@@ -268,6 +196,53 @@ If you think about it, this is the same idea behind PLT (Procedure Linkage Table
 2. **The pattern has three moving parts**: a function pointer, a resolver stub, and a patch. The resolver runs once and then gets out of the way.
 3. **Combined with decoupled CRTP**, lazy resolution gives you both composition (template inheritance chains) and zero-overhead dispatch. That's the combination that makes it compelling over raw function pointers.
 4. **OpenJDK has used this pattern since JDK 10** for GC barrier dispatch. The production implementation adds FakeRtti for type safety without C++ RTTI overhead.
+
+---
+
+## Appendix: How OpenJDK Does It
+
+The pattern above is a simplified version of what [OpenJDK](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/oops/accessBackend.hpp) has used since JDK 10 for GC barrier dispatch. If you're curious how this looks in a production codebase, here's the mapping.
+
+In OpenJDK, the equivalent of our `_store_func` lives in a `RuntimeDispatch` template. It holds one function pointer per access type (load, store, CAS, etc.), each starting at a resolver stub. The resolution switch lives in `access.inline.hpp`:
+
+```cpp
+// OpenJDK: access.inline.hpp (simplified)
+BarrierResolver::resolve_barrier_gc() {
+    switch (BarrierSet::barrier_set()->kind()) {
+        case BarrierSet::G1:
+            return G1BarrierSet::AccessBarrier<decorators>::oop_store;
+        case BarrierSet::CardTable:
+            return CardTableBarrierSet::AccessBarrier<decorators>::oop_store;
+        // ...
+    }
+}
+```
+
+The pieces map directly to our simplified version:
+
+| Simplified version | OpenJDK |
+|---|---|
+| `StoreFn _store_func` | `RuntimeDispatch::_store_func` |
+| `store_init()` | `RuntimeDispatch::store_init()` |
+| `switch (kind)` | `BarrierResolver::resolve_barrier_gc()` |
+| `_store_func = func` | patching in `xxx_init` |
+
+Here's how it all connects:
+
+```mermaid
+flowchart LR
+    A["HeapAccess::store()"] --> B["RuntimeDispatch::store()"]
+    B --> C{"_store_func"}
+    C -->|first call| D["store_init()"]
+    D --> E["BarrierResolver::\nresolve_barrier_gc()"]
+    E --> F["patches _store_func"]
+    F --> G["G1::AccessBarrier::\nstore()"]
+    C -->|subsequent calls| G
+```
+
+The caller (`HeapAccess::store`) never changes. It always calls through `RuntimeDispatch::store`, which always calls through `_store_func`. The only thing that changes is what `_store_func` points to, and that changes exactly once.
+
+The production implementation adds a few things we skipped: a lightweight type identity system (`FakeRtti`) that replaces C++ RTTI for type-safe downcasts without the overhead of `dynamic_cast`, and a decorator-based template metaprogramming layer for composing barrier concerns. Those are interesting in their own right, but orthogonal to the lazy resolution pattern itself.
 
 ---
 
