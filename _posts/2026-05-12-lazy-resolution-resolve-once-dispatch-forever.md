@@ -32,10 +32,11 @@ What if you could decide once and never pay again?
 
 The idea is simple. You have a function pointer that starts pointing at a resolver stub. The first call runs the resolver, which figures out the right implementation, patches the pointer to point directly at it, and forwards the call. Every subsequent call goes through the patched pointer, which is now a direct function call. No vtable, no branch, no switch.
 
-Here's the minimal version:
+Here's the minimal version. The [previous post](https://shubhankar-gambhir.github.io/posts/four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp/) used `printf` for barrier side effects; here we use a `volatile int sink` instead, which gives the compiler a visible side effect without the I/O overhead that would dominate the benchmark.
 
 ```cpp
 using StoreFn = void(*)(int*, int);
+static volatile int sink;
 
 // Three concrete implementations
 void epsilon_store(int* addr, int value) { *addr = value; }
@@ -87,6 +88,8 @@ stateDiagram-v2
 **State 2: Resolving.** The first call to `store()` invokes `store_init`. It reads the runtime configuration, picks the right implementation, writes the function address into `_store_func`, and then tail-calls the resolved function so the first invocation still gets the right answer.
 
 **State 3: Resolved.** The pointer now holds the address of the concrete implementation (e.g., `&g1_store`). Every subsequent call is a single indirect call through a global. The resolver is never called again.
+
+In concrete terms, the global `_store_func` changes from holding the address of `store_init` (say, `0x401234`) to holding the address of `g1_store` (say, `0x401180`). That single pointer write is the entire cost of resolution.
 
 ## What the Compiler Generates
 
@@ -148,11 +151,13 @@ For context, here's how it stacks up against all four approaches from the [previ
 
 Lazy resolution matches function pointers in steady state, but it also gives you the composition that function pointers lack.
 
+The benchmarks show the pattern works. But correctness matters more than speed. Two things can go wrong: concurrent resolution and type mismatches. The next two sections address each.
+
 ## Thread Safety
 
 In OpenJDK, this resolution happens during VM initialization, before any application threads start. The JVM is single-threaded at that point, so no synchronization is needed.
 
-If you use this pattern in a general-purpose C++ codebase where multiple threads might hit the first call concurrently, you need to think about it. On x86, aligned pointer-sized writes are atomic at the hardware level, so you won't get a torn pointer. But the C++ memory model doesn't guarantee this.
+But what if your application isn't single-threaded at initialization time? Two threads could call `store()` simultaneously, both seeing the unresolved pointer, both entering `store_init`. On x86, aligned pointer-sized writes are atomic at the hardware level, so you won't get a torn pointer. But the C++ memory model doesn't guarantee this.
 
 The safe portable approach is `std::atomic<StoreFn>` with `memory_order_relaxed`:
 
@@ -216,7 +221,15 @@ ModRefBarrierSet::ModRefBarrierSet(..., const FakeRtti& fake_rtti)
     // tag_set = {G1BarrierSet, CardTableBarrierSet, ModRef}
 ```
 
-By the time construction finishes, a `G1BarrierSet` has `concrete_tag = G1BarrierSet` and `tag_set = {G1BarrierSet, CardTableBarrierSet, ModRef}`. A checked downcast is then a bitwise AND:
+The tag set builds up as each constructor delegates to its parent:
+
+| Constructor | Adds tag | Cumulative tag_set |
+|---|---|---|
+| G1BarrierSet | G1BarrierSet | {G1BarrierSet} |
+| CardTableBarrierSet | CardTableBarrierSet | {G1BarrierSet, CardTableBarrierSet} |
+| ModRefBarrierSet | ModRef | {G1BarrierSet, CardTableBarrierSet, ModRef} |
+
+By the time construction finishes, a `G1BarrierSet` has `concrete_tag = G1BarrierSet` and a tag set that includes every class in its inheritance chain. A checked downcast is then a bitwise AND:
 
 ```cpp
 template <typename T>
@@ -241,7 +254,9 @@ It's overkill when:
 - **You need per-object dispatch.** Lazy resolution works on globals/singletons. If different objects need different strategies, virtual dispatch is the right tool.
 - **The strategy set changes at runtime.** Plugin systems where users can load new strategies dynamically need a different pattern.
 
-If you think about it, this is the same idea behind PLT (Procedure Linkage Table) stubs in ELF dynamic linking. The first call to a dynamically linked function goes through a stub that resolves the symbol and patches the GOT entry. Every subsequent call goes direct. Lazy resolution applies the same principle at the application level.
+## If This Looks Familiar
+
+If you've worked with ELF binaries, you've already used this pattern. PLT (Procedure Linkage Table) stubs in ELF dynamic linking work the same way: the first call to a dynamically linked function goes through a stub that resolves the symbol and patches the GOT (Global Offset Table) entry. Every subsequent call goes through the patched GOT entry directly. Lazy resolution applies the same principle at the application level, with the resolver under your control instead of the dynamic linker's.
 
 ## Key Takeaways
 
