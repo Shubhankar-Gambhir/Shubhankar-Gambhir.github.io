@@ -78,7 +78,7 @@ flowchart LR
     S(( )) -->|program start| A[Unresolved]
     A -->|first call| B[Resolving]
     B -->|pointer patched| C[Resolved]
-    C -->|every subsequent call| C
+    C -->|all subsequent calls| D(( ))
 ```
 
 **State 1: Unresolved.** The pointer holds the address of `store_init`. No runtime choice has been made yet.
