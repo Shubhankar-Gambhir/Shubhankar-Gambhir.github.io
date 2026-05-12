@@ -74,11 +74,16 @@ void store(int* addr, int value) {
 The function pointer goes through three states during the program's lifetime:
 
 ```mermaid
+---
+config:
+  flowchart:
+    curve: step
+---
 flowchart LR
     S(( )) -->|program start| A[Unresolved]
     A -->|first call| B[Resolving]
     B -->|pointer patched| C[Resolved]
-    C -->|all subsequent calls| D(( ))
+    C -->|all subsequent calls| C
 ```
 
 **State 1: Unresolved.** The pointer holds the address of `store_init`. No runtime choice has been made yet.
