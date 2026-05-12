@@ -5,9 +5,8 @@ categories: [C++, Performance]
 tags: [dispatch, lazy-resolution, crtp, function-pointer, assembly, openjdk, benchmarks]
 description: >-
   Deep dive into lazy resolution for C++ runtime dispatch. How a self-patching
-  function pointer eliminates per-call overhead after a one-time ~38 ns
-  resolution cost, with assembly analysis, benchmarks, and thread safety
-  considerations.
+  function pointer eliminates per-call overhead after a one-time resolution
+  cost, with assembly analysis, benchmarks, and thread safety considerations.
 mermaid: true
 ---
 
@@ -125,27 +124,27 @@ After `store_init` patches `_store_func`, it's never called again. The `jmp *%ra
 
 ## Benchmarks
 
-All measurements on the same hardware as the previous post. 100M iterations, G1 barriers, GCC 11 at `-O2 -march=native`. The new measurement here is the resolution cost (how long the first call takes when it triggers the resolver).
+All measurements on the same hardware as the previous post (Intel Xeon Gold 6130). 100M iterations, GCC 11 at `-O2 -march=skylake-avx512`, pinned to a single core with `taskset`. The new measurement here is the resolution cost (how long the first call takes when it triggers the resolver).
 
 | | Resolution (first call) | Lazy steady-state | Direct function pointer | Difference |
 |---|---|---|---|---|
-| **G1** | ~38 ns | 1.97 ns/call | 1.97 ns/call | ~0.00 ns |
-| **Serial** | ~38 ns | 1.65 ns/call | 1.65 ns/call | ~0.00 ns |
-| **Epsilon** | ~37 ns | 1.64 ns/call | 1.64 ns/call | ~0.00 ns |
+| **G1** | ~47 ns | 2.87 ns/call | 2.87 ns/call | ~0.00 ns |
+| **Serial** | ~69 ns | 3.35 ns/call | 3.35 ns/call | ~0.00 ns |
+| **Epsilon** | ~43 ns | 2.87 ns/call | 2.87 ns/call | ~0.00 ns |
 
-The "Direct function pointer" column is a plain function pointer assigned once at startup (no lazy resolution machinery). The "Difference" column is the steady-state cost of lazy resolution minus the direct function pointer: effectively zero.
+The "Direct function pointer" column is a plain function pointer assigned once at startup (no lazy resolution machinery), called from the same global-pointer path. The "Difference" column is the steady-state cost of lazy resolution minus the direct function pointer: effectively zero.
 
-The resolution cost is about 37-38 ns and it happens exactly once. That cost is dominated by the indirect branch through the unresolved pointer (a cold branch target the predictor hasn't seen) plus the switch. After patching, the branch predictor learns the target and subsequent calls are indistinguishable from a direct function pointer. At 100M iterations, the one-time 38 ns cost amortizes to 0.00038 ns per call.
+The resolution cost is about 43-69 ns and it happens exactly once. That cost is dominated by the indirect branch through the unresolved pointer (a cold branch target the predictor hasn't seen) plus the switch. The variance comes from CPU frequency scaling on the first call. After patching, the branch predictor learns the target and subsequent calls are indistinguishable from a direct function pointer. At 100M iterations, the one-time cost amortizes to well under 0.001 ns per call.
 
 For context, here's how it stacks up against all four approaches from the [previous post](https://shubhankar-gambhir.github.io/posts/four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp/) (G1 barriers, same machine):
 
-| Approach | Dispatch overhead | Notes |
-|---|---|---|
-| Direct call (baseline) | 0.68 ns | Non-polymorphic, compile-time known target |
-| Function pointer | 1.68 ns | One indirect call, no composition |
-| **Decoupled CRTP (lazy)** | **1.65 ns** | **One indirect call, composable barriers** |
-| Virtual dispatch | 2.30 ns | Two dependent loads (vptr + vtable entry) |
-| `std::variant` + `std::visit` | 2.30 ns | Closed type set, stdlib-dependent overhead |
+| Approach | ns/call | Dispatch overhead | Notes |
+|---|---|---|---|
+| Direct call (baseline) | 1.44 ns | -- | Non-polymorphic, compile-time known target |
+| Function pointer | 2.39 ns | +0.95 ns | One indirect call via register, no composition |
+| **Decoupled CRTP (lazy)** | **2.39 ns** | **+0.95 ns** | **One indirect call via global, composable barriers** |
+| Virtual dispatch | 2.87 ns | +1.43 ns | Two dependent loads (vptr + vtable entry) |
+| `std::variant` + `std::visit` | 3.72 ns | +2.28 ns | Closed type set, stdlib-dependent overhead |
 
 Lazy resolution matches function pointers in steady state, but it also gives you the composition that function pointers lack.
 
@@ -192,7 +191,7 @@ If you think about it, this is the same idea behind PLT (Procedure Linkage Table
 
 ## Key Takeaways
 
-1. **Lazy resolution trades one-time startup cost (~38 ns) for zero per-call overhead.** After resolution, it's indistinguishable from a direct function pointer.
+1. **Lazy resolution trades a one-time startup cost for zero per-call overhead.** After resolution, it's indistinguishable from a direct function pointer.
 2. **The pattern has three moving parts**: a function pointer, a resolver stub, and a patch. The resolver runs once and then gets out of the way.
 3. **Combined with decoupled CRTP**, lazy resolution gives you both composition (template inheritance chains) and zero-overhead dispatch. That's the combination that makes it compelling over raw function pointers.
 4. **OpenJDK has used this pattern since JDK 10** for GC barrier dispatch. The production implementation adds FakeRtti for type safety without C++ RTTI overhead.
@@ -230,6 +229,11 @@ The pieces map directly to our simplified version:
 Here's how it all connects:
 
 ```mermaid
+---
+config:
+  flowchart:
+    curve: stepAfter
+---
 flowchart LR
     A["HeapAccess::store()"] --> B["RuntimeDispatch::store()"]
     B --> C{"_store_func"}
@@ -246,4 +250,4 @@ The production implementation adds a few things we skipped: a lightweight type i
 
 ---
 
-*The benchmark code and all examples are in the [companion repository](https://github.com/Shubhankar-Gambhir/cpp-dispatch-benchmark). Measured on Intel Xeon Gold 6130 @ 2.10 GHz, GCC 11, libstdc++, `-O2 -march=native`.*
+*The benchmark code and all examples are in the [companion repository](https://github.com/Shubhankar-Gambhir/cpp-dispatch-benchmark). Measured on Intel Xeon Gold 6130, GCC 11.4, libstdc++, `-O2 -march=skylake-avx512`, pinned to a single core with `taskset -c 0`. Best of 3 runs reported.*

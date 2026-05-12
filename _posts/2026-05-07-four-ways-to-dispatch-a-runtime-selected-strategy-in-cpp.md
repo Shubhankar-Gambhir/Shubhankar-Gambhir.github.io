@@ -245,7 +245,7 @@ One caveat worth noting: conventional CRTP also uses `static_cast`, but it casts
 
 ## Comparison
 
-All measurements on an Intel Xeon Gold 6130 @ 2.10 GHz, 100M iterations with G1 barriers, compiled with GCC 11 at `-O2 -march=skylake-avx512`.
+All measurements on an Intel Xeon Gold 6130, 100M iterations with G1 barriers, compiled with GCC 11 at `-O2 -march=skylake-avx512`.
 
 | | Virtual | FnPtr | variant | Decoupled CRTP |
 |---|---|---|---|---|
@@ -292,4 +292,4 @@ flowchart TD
 
 ---
 
-*All four implementations, benchmarks, and build instructions are in the [companion repository](https://github.com/Shubhankar-Gambhir/cpp-dispatch-benchmark). Measured on Intel Xeon Gold 6130 @ 2.10 GHz, GCC 11, libstdc++, `-O2 -march=skylake-avx512`.*
+*All four implementations, benchmarks, and build instructions are in the [companion repository](https://github.com/Shubhankar-Gambhir/cpp-dispatch-benchmark). Measured on Intel Xeon Gold 6130, GCC 11, libstdc++, `-O2 -march=skylake-avx512`.*
