@@ -7,7 +7,7 @@ title: Speaking
 
 ## Upcoming
 
-*Watch this space — conference submissions in progress.*
+*Stay tuned for new talks coming later this year.*
 
 ## Past Talks
 
