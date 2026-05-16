@@ -4,9 +4,9 @@ date: 2026-05-07
 categories: [C++, Performance]
 tags: [dispatch, virtual, crtp, variant, function-pointer, benchmarks, assembly, openjdk]
 description: >-
-  Head-to-head comparison of virtual dispatch, function pointers, std::variant,
-  and decoupled CRTP for runtime plugin dispatch, with benchmarks, assembly,
-  and a decision framework.
+  Virtual vs CRTP vs std::variant vs function pointer: which C++ dispatch
+  mechanism is fastest? Benchmarks, generated assembly, compile times, and a
+  decision framework for the strategy pattern in performance-critical code.
 mermaid: true
 ---
 

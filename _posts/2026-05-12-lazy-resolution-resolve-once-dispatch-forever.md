@@ -4,9 +4,9 @@ date: 2026-05-12
 categories: [C++, Performance]
 tags: [dispatch, lazy-resolution, crtp, function-pointer, assembly, openjdk, benchmarks]
 description: >-
-  Deep dive into lazy resolution for C++ runtime dispatch. How a self-patching
-  function pointer eliminates per-call overhead after a one-time resolution
-  cost, with assembly analysis, benchmarks, and thread safety considerations.
+  Self-patching function pointers for zero-cost C++ dispatch after first call.
+  Assembly analysis, 38ns/100M-call benchmarks, thread safety, and how OpenJDK
+  uses this pattern for GC barrier resolution.
 mermaid: true
 ---
 
