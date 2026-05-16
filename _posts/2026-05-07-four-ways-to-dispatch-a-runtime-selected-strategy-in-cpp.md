@@ -293,3 +293,7 @@ flowchart TD
 ---
 
 *All four implementations, benchmarks, and build instructions are in the [companion repository](https://github.com/Shubhankar-Gambhir/cpp-dispatch-benchmark). Measured on Intel Xeon Gold 6130, GCC 11, libstdc++, `-O2 -march=skylake-avx512`.*
+
+---
+
+**Part 2:** [Lazy Resolution: Resolve Once, Dispatch Forever]({% post_url 2026-05-12-lazy-resolution-resolve-once-dispatch-forever %}) -- what happens when you take the function-pointer approach, add self-patching, and eliminate even the branch? 38ns for 100M dispatches, and the assembly is beautiful.
