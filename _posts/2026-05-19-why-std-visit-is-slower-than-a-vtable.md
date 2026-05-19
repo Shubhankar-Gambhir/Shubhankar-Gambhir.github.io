@@ -219,14 +219,15 @@ Putting it all together:
 
 | Aspect | Virtual dispatch | `std::visit` |
 |--------|-----------------|------------|
-| **Indirection** | 1 vptr load + 1 vtable entry (2 dependent loads) | discriminant load + table index + function pointer call |
-| **Argument passing** | Registers (`%rdi` = this, `%rsi`/`%rdx` = args) | Stack (lambda capture struct built per call) |
+| **Dispatch loads** | 2 dependent loads (vptr, then vtable entry -- serial) | 1 discriminant load + 1 table lookup (independent -- parallel) |
+| **Extra per-call work** | None | 2 stores to build lambda capture (caller) + 2 loads to read it back (callee) |
+| **Argument passing** | Registers (`%rdi` = this, `%rsi`/`%rdx` = args) | Stack (lambda capture struct round-trip) |
 | **Branch prediction** | Monomorphic sites predict perfectly | Same after warmup -- single target from same call site |
 | **Inlinability** | Compiler can devirtualize known types | Function pointer calls are opaque to optimizer |
 | **Valueless check** | None -- vtable pointer is always valid | Elided for trivially copyable types (libstdc++); always present (libc++) |
 | **Storage** | Heap-allocated, pointer indirection | Stack-allocated, cache-local |
 
-Notice that branch prediction is effectively the same for both in this benchmark -- both dispatch to a single target after the first iteration. The 28% overhead comes almost entirely from the **argument passing difference**: virtual dispatch passes arguments in registers, while `std::visit` builds a lambda capture struct on the stack every iteration and the callee reads it back. That's two extra stores and two extra loads per call, on a function body that's only about 10 instructions long.
+Counterintuitively, `std::visit` actually has *fewer* dependent dispatch loads than virtual -- its discriminant and table base are independent, while virtual's vtable lookup must wait for the vptr load. The 28% overhead doesn't come from the dispatch itself. It comes from the **lambda capture round-trip**: two stores to build the capture struct before the call, two loads to read it back inside the callee, on a function body that's only about 10 instructions long. Virtual dispatch avoids this entirely by passing arguments in registers.
 
 The last row is the one that makes `std::variant` attractive: no heap allocation, no pointer indirection for the data itself. For access patterns that read the stored value frequently but dispatch infrequently, variant wins. But for dispatch-heavy hot paths where every call goes through `std::visit`, the dispatch mechanism's overhead outweighs the storage advantage.
 
