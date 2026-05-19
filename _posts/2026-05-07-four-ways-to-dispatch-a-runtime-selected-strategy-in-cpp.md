@@ -253,8 +253,9 @@ All measurements on an Intel Xeon Gold 6130, 100M iterations with G1 barriers, c
 | **Binary size (text)** | 6.8 KB | 4.7 KB | 5.2 KB | 7.9 KB |
 | **Compile time** | 0.38s | 0.25s | 0.32s | 0.29s |
 | **Lines of code** | 90 | 65 | 76 | 346 |
-| **Extensibility** | Open | Open | Closed | Open |
-| **Composition** | Duplicated | Duplicated | Duplicated | Layered |
+| **New types** | Open | Open | Closed | Open |
+| **New operations** | Closed | Closed | Open | Closed |
+| **Composition** | Layered (runtime) | Duplicated | Duplicated | Layered (compile-time) |
 | **Error messages** | Clear | Clear | Moderate | Poor |
 | **Debuggability** | Excellent | Good | Moderate | Moderate |
 
@@ -275,20 +276,20 @@ config:
     curve: stepAfter
 ---
 flowchart TD
-    A[Need runtime plugin dispatch?] --> B{Need inheritance?}
-    B -- No --> C{Want compile-time exhaustiveness checking?}
-    C -- Yes --> D["std::variant + std::visit"]
-    C -- No --> E[Function pointer]
-    B -- Yes --> F{Zero-overhead dispatch on hot path?}
-    F -- Yes --> G[Decoupled CRTP + Lazy Resolution]
-    F -- No --> H[Virtual dispatch]
+    A[Need runtime plugin dispatch?] --> B{Extensibility with new types or new operations?}
+    B -- New operations --> D["std::variant + std::visit"]
+    B -- New types --> F{Need composable layers?}
+    F -- No --> E[Function pointer]
+    F -- Yes --> G{Zero-overhead dispatch on hot path?}
+    G -- No --> I[Virtual dispatch]
+    G -- Yes --> H[Decoupled CRTP + Lazy Resolution]
 ```
 
 ## Key Takeaways
 
 1. **All four work.** Pick based on constraints, not microbenchmark deltas.
 2. **`std::variant + std::visit` is NOT always faster than virtual**. Check your stdlib implementation.
-3. **The right question isn't "which is fastest?"** It's: do I need composition? decoupling? extensibility? Then pick the simplest approach that satisfies those.
+3. **The right question isn't "which is fastest?"** It's: do I need to extend with new types or new operations? Do I need composable layers? Then pick the simplest approach that satisfies those.
 
 ---
 
