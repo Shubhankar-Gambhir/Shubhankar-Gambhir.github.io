@@ -35,7 +35,7 @@ Two dependent memory loads, then a call. The second load (`call *16(%rax)`) cann
 
 But there's a reason this works well in practice. The vptr doesn't change between calls. The branch predictor learns the target quickly and predicts it correctly on every subsequent iteration. For a monomorphic call site (one concrete type at runtime), virtual dispatch is essentially free after warmup -- the CPU speculatively executes through the indirect call without stalling.
 
-## What `std::visit` Actually Generates
+## What std::visit Actually Generates
 
 Now here's the hot loop for `std::visit` on the same benchmark ([bench_variant.cpp](https://github.com/Shubhankar-Gambhir/cpp-dispatch-benchmark), same compiler, same flags):
 
@@ -67,7 +67,7 @@ The irony: libstdc++ builds **its own vtable** to dispatch through `std::visit`.
 
 But what does the called function look like, and where does `_S_vtable` come from? To answer that, we need to look inside the standard library.
 
-## Inside the Stdlib: How `std::visit` Dispatches
+## Inside the Stdlib: How std::visit Dispatches
 
 The assembly above is a consequence of specific implementation choices in libstdc++. Let's look at what's happening inside the standard library.
 
@@ -173,7 +173,7 @@ If you compile the same benchmark with Clang 19 and libc++ on [Compiler Explorer
 
 This distinction is significant enough that Michael Park (who [wrote libc++'s variant implementation](https://github.com/llvm/llvm-project/commit/6169a59c51) in 2016) later demonstrated in his standalone [mpark::variant](https://github.com/mpark/variant) library that a switch-based approach is 2-4x faster than the table approach for small variants. libstdc++ added a switch optimization in GCC 12. libc++ never did.
 
-## The `valueless_by_exception` Tax
+## The valueless_by_exception Tax
 
 There's one more cost hidden in every `std::visit` call. Before dispatching, `std::visit` checks whether the variant is in a `valueless_by_exception` state:
 
