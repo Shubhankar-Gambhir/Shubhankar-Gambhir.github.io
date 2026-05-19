@@ -331,3 +331,5 @@ The production implementation also includes a decorator-based template metaprogr
 ---
 
 **Previously:** [Four Ways to Dispatch a Runtime-Selected Strategy in C++]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) -- the head-to-head comparison of virtual, function pointers, `std::variant`, and decoupled CRTP that motivated this deep dive.
+
+**Next:** [Why std::visit Is Slower Than a Vtable]({% post_url 2026-05-19-why-std-visit-is-slower-than-a-vtable %}) -- cracking open the assembly and stdlib source to explain why `std::variant` was the slowest approach in Part 1.
