@@ -276,13 +276,13 @@ config:
     curve: stepAfter
 ---
 flowchart TD
-    A[Need runtime plugin dispatch?] --> B{Extensibility with new types or new operations?}
-    B -- New operations --> D["std::variant + std::visit"]
+    A[Need runtime plugin dispatch?] --> B{Extensibility with new types\nor new operations?}
     B -- New types --> F{Need composable layers?}
+    B -- New operations --> D["std::variant + std::visit"]
+    F -- Yes --> G{Zero-overhead dispatch\non hot path?}
     F -- No --> E[Function pointer]
-    F -- Yes --> G{Zero-overhead dispatch on hot path?}
-    G -- No --> I[Virtual dispatch]
     G -- Yes --> H[Decoupled CRTP + Lazy Resolution]
+    G -- No --> I[Virtual dispatch]
 ```
 
 ## Key Takeaways
