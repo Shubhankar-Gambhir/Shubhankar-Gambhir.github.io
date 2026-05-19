@@ -151,7 +151,31 @@ __visit_invoke<..., index_sequence<2>>:       ; G1BS visitor (read + store + sid
     ret
 ```
 
-The two lines marked with arrows are the cost. They read captured references back from the struct that the caller just built on the stack. The virtual dispatch version passes these in registers directly -- no stack round-trip. That store-then-load pattern, repeated 100M times, is where most of the 28% overhead lives.
+The two lines marked with arrows are the cost. They read captured references back from the struct that the caller just built on the stack. Compare that to the virtual dispatch version of the same G1 strategy:
+
+```nasm
+G1BS::store(int*, int):                          ; virtual dispatch callee
+    endbr64
+    movl  (%rsi), %eax           ; read old value (addr passed in %rsi)
+    movl  %edx, (%rsi)           ; store new value (value passed in %edx)
+    movl  %eax, sink(%rip)       ; write old value to volatile
+    movl  $1, sink(%rip)         ; write flag to volatile
+    ret
+```
+
+Five instructions. Arguments arrive in registers, the function does its work and returns. No capture struct to unpack, no address arithmetic to reconstruct. The variant version does the same logical work in 15 instructions because it has to recover `addr` and `value` from the lambda capture on the stack.
+
+`perf stat` confirms this. Running both benchmarks on the same hardware (Xeon Gold 6130, pinned to core 0, 100M iterations with G1 barriers):
+
+| | `std::variant` | Virtual | Function pointer |
+|---|---|---|---|
+| **Instructions** | 2,729M | 1,618M | 1,416M |
+| **Cycles** | 793M | 608M | 508M |
+| **IPC** | 3.44 | 2.66 | 2.79 |
+| **Branch misses** | ~0.00% | ~0.00% | ~0.00% |
+| **ns/call** | 3.74 | 2.88 | 2.42 |
+
+Branch misses are essentially zero across all three. The CPU predicts the indirect call target perfectly in every case. The variant version actually has the *highest* IPC (3.44) -- the CPU is executing those extra instructions efficiently, with no pipeline stalls. It's simply doing more work per call. The 69% instruction overhead maps directly to the 30% cycle overhead, which maps to the 28% wall-time difference.
 
 ### libc++ (Clang/LLVM): Pure Function Pointer Table
 
@@ -227,7 +251,7 @@ Putting it all together:
 | **Valueless check** | None -- vtable pointer is always valid | Elided for trivially copyable types (libstdc++); always present (libc++) |
 | **Storage** | Heap-allocated, pointer indirection | Stack-allocated, cache-local |
 
-Counterintuitively, `std::visit` actually has *fewer* dependent dispatch loads than virtual -- its discriminant and table base are independent, while virtual's vtable lookup must wait for the vptr load. The 28% overhead doesn't come from the dispatch itself. It comes from the **lambda capture round-trip**: two stores to build the capture struct before the call, two loads to read it back inside the callee, on a function body that's only about 10 instructions long. Virtual dispatch avoids this entirely by passing arguments in registers.
+Counterintuitively, `std::visit` actually has *fewer* dependent dispatch loads than virtual -- its discriminant and table base are independent, while virtual's vtable lookup must wait for the vptr load. The 28% overhead doesn't come from the dispatch itself. It comes from the **lambda capture indirection**: the visitor lambda captures local variables by reference, so `std::visit` materializes a capture struct on the stack before the call, and the callee has to load those references back and reconstruct the arguments. Virtual dispatch passes arguments directly in registers -- 5 instructions in the callee versus 15. That instruction overhead (69% more instructions, confirmed by `perf stat`) is the root cause, not branch misprediction or cache misses.
 
 The last row is the one that makes `std::variant` attractive: no heap allocation, no pointer indirection for the data itself. For access patterns that read the stored value frequently but dispatch infrequently, variant wins. But for dispatch-heavy hot paths where every call goes through `std::visit`, the dispatch mechanism's overhead outweighs the storage advantage.
 
