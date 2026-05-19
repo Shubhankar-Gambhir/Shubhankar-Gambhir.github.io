@@ -63,25 +63,9 @@ There's more happening here. Before the actual dispatch:
 
 3. **An indexed indirect call** (`call *(%r14,%rax,8)`) uses the discriminant to index into a function pointer table at `%r14`. This is `_S_vtable`, a compile-time generated array of function pointers, one per alternative.
 
-The irony: libstdc++ builds **its own vtable** to dispatch through `std::visit`. The variant was supposed to avoid vtables, but the dispatch mechanism creates one anyway. Worse, it's a vtable with extra overhead from the lambda capture, where the virtual dispatch version passes arguments in registers.
+The irony: libstdc++ builds **its own vtable** to dispatch through `std::visit`. The variant was supposed to avoid vtables, but the dispatch mechanism creates one anyway. Worse, the two stack stores before the call build a lambda capture struct that the callee has to read back -- overhead that virtual dispatch avoids by passing arguments in registers.
 
-Here's what each called function (`__visit_invoke`) looks like for the G1 barrier (index 2):
-
-```nasm
-__visit_invoke<..., index_sequence<2>>:       ; G1BS visitor
-    movq  8(%rdi), %rax          ; ← read loop counter ptr from lambda capture
-    movq  (%rax), %rcx           ;   load its value
-    ; ... 5 instructions computing heap[i % 64] (signed modulo via shift-and-mask) ...
-    movq  (%rdi), %rdx           ; ← read heap pointer from lambda capture
-    leaq  (%rdx,%rax,4), %rax    ;   compute &heap[i % 64]
-    movl  (%rax), %edx           ;   pre-barrier: read old value
-    movl  %ecx, (%rax)           ;   raw store
-    movl  %edx, sink(%rip)       ;   post-barrier: record old value
-    movl  $1, sink(%rip)         ;   post-barrier: mark card
-    ret
-```
-
-The two lines marked with arrows are the key overhead. They read captured references back from the struct that the caller just built on the stack two instructions earlier. The virtual dispatch version passes these in registers directly -- no stack round-trip.
+But what does the called function look like, and where does `_S_vtable` come from? To answer that, we need to look inside the standard library.
 
 ## Inside the Stdlib: How `std::visit` Dispatches
 
@@ -151,7 +135,23 @@ std::__detail::__variant::__gen_vtable_impl<
   _Multi_array<...>, index_sequence<2>>::__visit_invoke(...)  // G1BS
 ```
 
-At runtime, `_M_access(index...)` is just an array subscript: `_M_arr[index]`. Simple enough. But the function it calls receives the visitor and variant as arguments, which means the lambda capture must be materialized on the stack before the call, and the callee must read it back. That's the two stores + two loads we saw in the assembly.
+At runtime, `_M_access(index...)` is just an array subscript: `_M_arr[index]`. Simple enough. But each `__visit_invoke` receives the visitor and variant as arguments, which means the lambda capture must be materialized on the stack before the call. Here's what `__visit_invoke` generates for the G1 barrier (index 2):
+
+```nasm
+__visit_invoke<..., index_sequence<2>>:       ; G1BS visitor
+    movq  8(%rdi), %rax          ; ← read loop counter ptr from lambda capture
+    movq  (%rax), %rcx           ;   load its value
+    ; ... 5 instructions computing heap[i % 64] (signed modulo via shift-and-mask) ...
+    movq  (%rdi), %rdx           ; ← read heap pointer from lambda capture
+    leaq  (%rdx,%rax,4), %rax    ;   compute &heap[i % 64]
+    movl  (%rax), %edx           ;   pre-barrier: read old value
+    movl  %ecx, (%rax)           ;   raw store
+    movl  %edx, sink(%rip)       ;   post-barrier: record old value
+    movl  $1, sink(%rip)         ;   post-barrier: mark card
+    ret
+```
+
+The two lines marked with arrows are the cost. They read captured references back from the struct that the caller just built on the stack. The virtual dispatch version passes these in registers directly -- no stack round-trip. That store-then-load pattern, repeated 100M times, is where most of the 28% overhead lives.
 
 ### libc++ (Clang/LLVM): Pure Function Pointer Table
 
