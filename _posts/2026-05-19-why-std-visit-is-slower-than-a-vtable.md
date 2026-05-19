@@ -9,7 +9,7 @@ description: >-
   source to find out.
 ---
 
-If you benchmark dispatching 100M GC barrier calls through three concrete implementations -- a no-op, a post-barrier, and a pre+post barrier -- you'd expect `std::variant + std::visit` to be faster than virtual dispatch. The variant is stack-allocated, there's no heap indirection, no vtable pointer, and the compiler can see the entire closed type set. In a [previous post]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) comparing four dispatch approaches, `std::variant` was actually the *slowest*: 3.72 ns/call versus 2.87 ns for virtual dispatch. That's 28% slower.
+If you benchmark dispatching 100M calls through three small strategy objects -- a no-op, one that does a write after the call, and one that does a read before and a write after -- you'd expect `std::variant + std::visit` to be faster than virtual dispatch. The variant is stack-allocated, there's no heap indirection, no vtable pointer, and the compiler can see the entire closed type set. In a [previous post]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) comparing four dispatch approaches, `std::variant` was actually the *slowest*: 3.72 ns/call versus 2.87 ns for virtual dispatch. That's 28% slower.
 
 Something is wrong with that picture. So where does the overhead come from?
 
@@ -135,19 +135,19 @@ std::__detail::__variant::__gen_vtable_impl<
   _Multi_array<...>, index_sequence<2>>::__visit_invoke(...)  // G1BS
 ```
 
-At runtime, `_M_access(index...)` is just an array subscript: `_M_arr[index]`. Simple enough. But each `__visit_invoke` receives the visitor and variant as arguments, which means the lambda capture must be materialized on the stack before the call. Here's what `__visit_invoke` generates for the G1 barrier (index 2):
+At runtime, `_M_access(index...)` is just an array subscript: `_M_arr[index]`. Simple enough. But each `__visit_invoke` receives the visitor and variant as arguments, which means the lambda capture must be materialized on the stack before the call. Here's what `__visit_invoke` generates for the most complex strategy (index 2, which reads the old value, stores the new one, and writes two side-effect flags):
 
 ```nasm
-__visit_invoke<..., index_sequence<2>>:       ; G1BS visitor
+__visit_invoke<..., index_sequence<2>>:       ; G1BS visitor (read + store + side effects)
     movq  8(%rdi), %rax          ; ← read loop counter ptr from lambda capture
     movq  (%rax), %rcx           ;   load its value
     ; ... 5 instructions computing heap[i % 64] (signed modulo via shift-and-mask) ...
     movq  (%rdi), %rdx           ; ← read heap pointer from lambda capture
     leaq  (%rdx,%rax,4), %rax    ;   compute &heap[i % 64]
-    movl  (%rax), %edx           ;   pre-barrier: read old value
-    movl  %ecx, (%rax)           ;   raw store
-    movl  %edx, sink(%rip)       ;   post-barrier: record old value
-    movl  $1, sink(%rip)         ;   post-barrier: mark card
+    movl  (%rax), %edx           ;   read old value
+    movl  %ecx, (%rax)           ;   store new value
+    movl  %edx, sink(%rip)       ;   write old value to volatile (side effect)
+    movl  $1, sink(%rip)         ;   write flag to volatile (side effect)
     ret
 ```
 
@@ -230,7 +230,7 @@ Notice that branch prediction is effectively the same for both in this benchmark
 
 The last row is the one that makes `std::variant` attractive: no heap allocation, no pointer indirection for the data itself. For access patterns that read the stored value frequently but dispatch infrequently, variant wins. But for dispatch-heavy hot paths where every call goes through `std::visit`, the dispatch mechanism's overhead outweighs the storage advantage.
 
-For example, if you're pattern-matching a variant of message types once per network packet, the dispatch cost is negligible and variant's exhaustive type checking is the clear win. If you're dispatching through a GC barrier 100 million times per second, every unnecessary stack spill shows up in the profile.
+For example, if you're pattern-matching a variant of message types once per network packet, the dispatch cost is negligible and variant's exhaustive type checking is the clear win. If you're dispatching a strategy 100 million times per second in a tight loop, every unnecessary stack spill shows up in the profile.
 
 The core irony: `std::variant` is a zero-cost type-safe union. `std::visit` is the dispatch mechanism layered on top. Combining them introduces costs that a plain vtable doesn't have. "Zero-cost abstraction" does not mean "zero-cost composition."
 
