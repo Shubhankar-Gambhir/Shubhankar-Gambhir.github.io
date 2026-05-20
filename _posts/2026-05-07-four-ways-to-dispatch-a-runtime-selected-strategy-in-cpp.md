@@ -299,4 +299,4 @@ flowchart TD
 
 **Part 2:** [Lazy Resolution: Resolve Once, Dispatch Forever]({% post_url 2026-05-12-lazy-resolution-resolve-once-dispatch-forever %}) -- what happens when you take the function-pointer approach, add self-patching, and eliminate even the branch? 38ns for 100M dispatches, and the assembly is beautiful.
 
-**Part 3:** [Why std::visit Is Slower Than a Vtable]({% post_url 2026-05-19-why-std-visit-is-slower-than-a-vtable %}) -- cracking open the assembly and stdlib source to explain why `std::variant` was the slowest approach above.
+**Part 3:** [Why std::visit May Be Slower Than a Vtable]({% post_url 2026-05-19-why-std-visit-is-slower-than-a-vtable %}) -- cracking open the assembly and stdlib source to explain why `std::variant` was the slowest approach above.

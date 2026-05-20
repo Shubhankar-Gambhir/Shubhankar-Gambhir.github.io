@@ -1,5 +1,5 @@
 ---
-title: "Why std::visit Is Slower Than a Vtable"
+title: "Why std::visit May Be Slower Than a Vtable"
 date: 2026-05-19
 categories: [C++, Performance]
 tags: [dispatch, variant, virtual, assembly, stdlib, libstdc++, libc++, benchmarks]
