@@ -328,6 +328,8 @@ The production implementation also includes a decorator-based template metaprogr
 
 *The benchmark code and all examples are in the [companion repository](https://github.com/Shubhankar-Gambhir/cpp-dispatch-benchmark). Measured on Intel Xeon Gold 6130, GCC 11.4, libstdc++, `-O2 -march=skylake-avx512`, pinned to a single core with `taskset -c 0`. Best of 3 runs reported.*
 
+*The lazy resolution pattern is covered in depth in my [C++ Online 2026 talk](https://www.youtube.com/watch?v=4aMaSaFW5Qo), where I walk through how OpenJDK's `RuntimeDispatch` evolved from a runtime switch to the self-patching approach shown here.*
+
 ---
 
 **Previously:** [Four Ways to Dispatch a Runtime-Selected Strategy in C++]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) -- the head-to-head comparison of virtual, function pointers, `std::variant`, and decoupled CRTP that motivated this deep dive.
