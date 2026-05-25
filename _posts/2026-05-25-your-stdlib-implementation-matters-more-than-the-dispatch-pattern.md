@@ -23,12 +23,14 @@ Same source code. Same hardware (Intel Xeon Gold 6130). Same `-O2 -march=skylake
 |----------|-------------------|--------------------|--------------------|
 | GCC 9.5 | 3.96 | 2.39 | virtual (66% faster) |
 | GCC 10.4 | 3.79 | 2.87 | virtual (32% faster) |
-| GCC 11.4 | 3.72 | 2.87 | virtual (28% faster) |
+| GCC 11.4 | 3.74 | 2.39 | virtual (56% faster) |
 | **GCC 12.4** | **1.44** | **2.87** | **variant (50% faster)** |
 | GCC 13.4 | 1.44 | 2.87 | variant (50% faster) |
 | GCC 14.3 | 1.44 | 2.87 | variant (50% faster) |
 
-From GCC 11 to GCC 12, `std::visit` went from the slowest dispatch mechanism to the fastest. The virtual dispatch numbers didn't change at all. The variant numbers dropped by 61%.
+All six versions compiled with the same flags and measured on the same hardware in the same session. The virtual dispatch numbers vary between compiler versions (2.39 vs 2.87 ns) due to differences in codegen for the loop counter and address computation, not the dispatch itself -- the vtable lookup sequence is identical across all versions.
+
+From GCC 11 to GCC 12, `std::visit` went from the slowest dispatch mechanism to the fastest. The variant numbers dropped from 3.74 ns to 1.44 ns -- a 61% reduction.
 
 You didn't change your code. You didn't change your algorithm. You changed your standard library.
 
@@ -165,7 +167,7 @@ The dispatch problem doesn't disappear. It moves from library to language. But t
 
 ---
 
-*All benchmarks and source code are in the [companion repository](https://github.com/Shubhankar-Gambhir/cpp-dispatch-benchmark). Measured on Intel Xeon Gold 6130, `-O2 -march=skylake-avx512`, pinned to a single core with `taskset -c 0`. GCC versions: 9.5.0, 10.4.0, 12.4.0, 13.4.0, 14.3.0 (via conda-forge); GCC 11.4 data from [Part 3]({% post_url 2026-05-19-why-std-visit-may-be-slower-than-a-vtable %}). Best of 3 runs reported. Stdlib source: [libstdc++ 12.4 `<variant>`](https://gcc.gnu.org/git/?p=gcc.git;a=blob;f=libstdc%2B%2B-v3/include/std/variant;hb=releases/gcc-12.4.0).*
+*All benchmarks and source code are in the [companion repository](https://github.com/Shubhankar-Gambhir/cpp-dispatch-benchmark). Measured on Intel Xeon Gold 6130, `-O2 -march=skylake-avx512`, pinned to a single core with `taskset -c 0`. GCC versions: 9.5.0, 10.4.0, 11.4.0, 12.4.0, 13.4.0, 14.3.0 (all via conda-forge). Best of 3 runs reported. Stdlib source: [libstdc++ 12.4 `<variant>`](https://gcc.gnu.org/git/?p=gcc.git;a=blob;f=libstdc%2B%2B-v3/include/std/variant;hb=releases/gcc-12.4.0).*
 
 ---
 
