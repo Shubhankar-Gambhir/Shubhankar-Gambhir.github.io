@@ -267,10 +267,4 @@ The core irony: `std::variant` is a zero-cost type-safe union. `std::visit` is t
 
 **Previously:** [Lazy Resolution: Resolve Once, Dispatch Forever]({% post_url 2026-05-12-lazy-resolution-resolve-once-dispatch-forever %}) -- self-patching function pointers that resolve on first call and dispatch at zero cost forever after.
 
-## What's Next
-
-These results are from GCC 11 and libstdc++. They don't have to be this way.
-
-GCC 12 added a switch-based optimization for `std::visit` that eliminates the function pointer table entirely for variants with 11 or fewer alternatives. The threshold has a name in the source: `constexpr size_t __max = 11; // "These go to eleven."` MSVC's standard library has had graduated switch dispatch since before the STL was open-sourced in 2019. libc++ still hasn't added a switch path after nine years.
-
-In the next post, we'll trace the full optimization history of `std::visit` across three standard libraries from 2017 to today, rerun the benchmarks across compiler versions, and show you exactly how much the numbers change when the stdlib catches up.
+**Next:** [Your Stdlib Implementation Matters More Than the Dispatch Pattern]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %}) -- GCC 12 added a switch optimization that inverted the result. Variant went from 28% slower to 50% faster than virtual dispatch. Same source code, same hardware.
