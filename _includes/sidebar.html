@@ -41,13 +41,17 @@
   </nav>
 
   <!-- Newsletter subscription -->
-  <div class="sidebar-newsletter w-100 px-3 mb-3">
+  <div class="w-100 ps-0 mt-1 mb-1">
+    <hr class="sidebar-divider" style="border-color: var(--nav-border-color, rgba(255,255,255,0.15)); margin: 0.5rem 1rem;">
+    <p class="nav-link text-uppercase fst-normal mb-1" style="font-size: 0.7rem; opacity: 0.6; cursor: default; letter-spacing: 0.08em;">
+      <i class="fa-fw fas fa-envelope me-1"></i>Newsletter
+    </p>
     <form
       action="https://buttondown.com/api/emails/embed-subscribe/sgambhir"
       method="post"
       target="popupwindow"
       onsubmit="window.open('https://buttondown.com/sgambhir', 'popupwindow')"
-      class="d-flex flex-column gap-2"
+      class="px-3 d-flex flex-column gap-2 mb-2"
     >
       <input
         type="email"
@@ -55,16 +59,19 @@
         placeholder="your@email.com"
         required
         class="form-control form-control-sm"
-        style="background: var(--sidebar-btn-bg); border: 1px solid var(--sidebar-btn-color, rgba(255,255,255,0.2)); color: var(--sidebar-btn-color, #fff); font-size: 0.8rem;"
+        style="background: transparent; border: 1px solid var(--nav-border-color, rgba(255,255,255,0.2)); color: inherit; font-size: 0.82rem; border-radius: 4px;"
       >
       <button
         type="submit"
         class="btn btn-sm w-100"
-        style="background: var(--sidebar-btn-color, rgba(255,255,255,0.15)); color: var(--sidebar-btn-color, #fff); border: 1px solid var(--sidebar-btn-color, rgba(255,255,255,0.2)); font-size: 0.8rem;"
+        style="background: transparent; color: inherit; border: 1px solid var(--nav-border-color, rgba(255,255,255,0.2)); font-size: 0.82rem; border-radius: 4px;"
+        onmouseover="this.style.background='var(--nav-hover-color, rgba(255,255,255,0.1))'"
+        onmouseout="this.style.background='transparent'"
       >
-        <i class="fas fa-envelope fa-fw me-1"></i>Subscribe
+        Subscribe
       </button>
     </form>
+    <hr class="sidebar-divider" style="border-color: var(--nav-border-color, rgba(255,255,255,0.15)); margin: 0.5rem 1rem 0;">
   </div>
 
   <div class="sidebar-bottom d-flex flex-wrap  align-items-center w-100">
