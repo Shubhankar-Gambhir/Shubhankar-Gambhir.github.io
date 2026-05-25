@@ -21,16 +21,16 @@ Same source code. Same hardware (Intel Xeon Gold 6130). Same `-O2 -march=skylake
 
 | Compiler | variant (ns/call) | virtual (ns/call) | Faster approach |
 |----------|-------------------|--------------------|--------------------|
-| GCC 9.5 | 3.96 | 2.39 | virtual (66% faster) |
-| GCC 10.4 | 3.79 | 2.87 | virtual (32% faster) |
-| GCC 11.4 | 3.74 | 2.39 | virtual (56% faster) |
+| GCC 9.5 | 3.89 | 2.87 | virtual (36% faster) |
+| GCC 10.4 | 3.73 | 2.87 | virtual (30% faster) |
+| GCC 11.4 | 3.74 | 2.87 | virtual (30% faster) |
 | **GCC 12.4** | **1.44** | **2.87** | **variant (50% faster)** |
-| GCC 13.4 | 1.44 | 2.87 | variant (50% faster) |
-| GCC 14.3 | 1.44 | 2.87 | variant (50% faster) |
+| GCC 13.4 | 1.44 | 2.39 | variant (40% faster) |
+| GCC 14.3 | 1.44 | 2.39 | variant (40% faster) |
 
-All six versions compiled with the same flags and measured on the same hardware in the same session.
+All six versions compiled with the same flags (`-O2 -march=skylake-avx512 -fcf-protection`) and measured on the same hardware in the same session.
 
-From GCC 11 to GCC 12, `std::visit` went from the slowest dispatch mechanism to the fastest. The variant numbers dropped from 3.74 ns to 1.44 ns -- a 61% reduction.
+From GCC 11 to GCC 12, `std::visit` went from the slowest dispatch mechanism to the fastest. The variant numbers dropped from 3.74 ns to 1.44 ns -- a 61% reduction. Virtual dispatch stayed at 2.87 ns across those versions (GCC 13 later improved it to 2.39 ns, but that's a separate optimization).
 
 You didn't change your code. You didn't change your algorithm. You changed your standard library.
 
