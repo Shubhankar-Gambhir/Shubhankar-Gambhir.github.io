@@ -38,10 +38,12 @@
         <!-- .nav-item -->
       {% endfor %}
     </ul>
+  </nav>
 
-    <!-- Newsletter subscription -->
-    <div class="w-100 mt-2">
-      <p class="nav-link text-uppercase fst-normal mb-1" style="font-size: 0.65rem; opacity: 0.6; cursor: default; letter-spacing: 0.12em;">
+  <!-- Newsletter subscription -->
+  <div class="w-100 px-3 mb-3">
+    <div style="border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 12px; background: rgba(255,255,255,0.04);">
+      <p class="text-uppercase mb-2" style="font-size: 0.65rem; opacity: 0.9; letter-spacing: 0.12em; margin: 0 0 8px 0; color: inherit;">
         <i class="fa-fw fas fa-envelope me-1"></i>Newsletter
       </p>
       <form
@@ -49,26 +51,26 @@
         method="post"
         target="popupwindow"
         onsubmit="window.open('https://buttondown.com/sgambhir', 'popupwindow')"
-        class="px-3 d-flex flex-column gap-1 mb-2"
+        class="d-flex flex-column gap-2"
       >
         <input
           type="email"
           name="email"
           placeholder="your@email.com"
           required
-          style="background: transparent; border: 1px solid rgba(255,255,255,0.2); color: inherit; font-size: 0.78rem; border-radius: 3px; padding: 4px 8px; width: 100%; outline: none;"
+          style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.25); color: inherit; font-size: 0.8rem; border-radius: 4px; padding: 5px 8px; width: 100%; outline: none;"
         >
         <button
           type="submit"
-          style="background: transparent; color: inherit; border: 1px solid rgba(255,255,255,0.2); font-size: 0.78rem; border-radius: 3px; padding: 4px 0; width: 100%; cursor: pointer;"
-          onmouseover="this.style.background='rgba(255,255,255,0.08)'"
-          onmouseout="this.style.background='transparent'"
+          style="background: rgba(255,255,255,0.1); color: inherit; border: 1px solid rgba(255,255,255,0.3); font-size: 0.8rem; border-radius: 4px; padding: 5px 0; width: 100%; cursor: pointer; font-weight: 500;"
+          onmouseover="this.style.background='rgba(255,255,255,0.18)'"
+          onmouseout="this.style.background='rgba(255,255,255,0.1)'"
         >
           Subscribe
         </button>
       </form>
     </div>
-  </nav>
+  </div>
 
   <div class="sidebar-bottom d-flex flex-wrap  align-items-center w-100">
     {% unless site.theme_mode %}
