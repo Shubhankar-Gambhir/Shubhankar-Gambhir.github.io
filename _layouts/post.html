@@ -125,10 +125,6 @@ script_includes:
     {{ content }}
   </div>
 
-  {% unless page.newsletter == false %}
-    {% include newsletter.html %}
-  {% endunless %}
-
   <div class="post-tail-wrapper text-muted">
     <!-- categories -->
     {% if page.categories.size > 0 %}
