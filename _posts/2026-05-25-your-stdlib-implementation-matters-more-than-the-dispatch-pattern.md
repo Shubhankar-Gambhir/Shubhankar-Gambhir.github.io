@@ -99,9 +99,33 @@ Compare that to the virtual dispatch loop, which is **unchanged** across all fiv
     jne    .L36
 ```
 
-Virtual dispatch can't be optimized away the same way. The compiler can't hoist the vtable lookup out of the loop because the object pointer could, in principle, change between iterations (even though it doesn't in this benchmark). The indirect call through the vtable prevents inlining. The two dependent loads are the structural cost of the mechanism -- they're the same on every GCC version because there's nothing for the compiler to improve.
+Virtual dispatch can't be optimized away the same way. The compiler can't hoist the vtable lookup out of the loop because the object pointer could, in principle, change between iterations (even though it doesn't in this benchmark). The indirect call through the vtable prevents inlining. The two dependent loads are the structural cost of the mechanism.
 
-This is why the GCC 12 switch optimization inverted the result. It didn't make the indirect call faster. It eliminated the indirect call entirely, replacing library-level dispatch with compiler-level control flow that the optimizer can see through.
+But the compiler can still improve *how* it schedules those loads. GCC 13 shaved 0.48 ns (17%) off virtual dispatch by reordering instructions in the hot loop:
+
+```nasm
+; GCC 12 -- address computation blocks the vptr load
+    movq   %rbx, %rax
+    andl   $63, %eax              ; ┐ address computation
+    leaq   0(%r13,%rax,4), %rsi   ; ┘ (uses %rax)
+    movq   (%r12), %rax           ; vptr load -- can't start until leaq frees %rax
+    movl   %ebx, %edx             ; (independent, but too late to help)
+    movq   %r12, %rdi             ; (independent, but too late to help)
+    call   *16(%rax)
+
+; GCC 13 -- independent work moved before the dependent chain
+    movq   %rbx, %rax
+    movl   %ebx, %edx             ; ← moved up (independent of %rax)
+    movq   %r12, %rdi             ; ← moved up (independent of %rax)
+    andl   $63, %eax              ; ┐ address computation
+    leaq   0(%r13,%rax,4), %rsi   ; ┘
+    movq   (%r12), %rax           ; vptr load -- now issues while leaq is in flight
+    call   *16(%rax)
+```
+
+Same seven instructions, different order. GCC 13 moves two independent instructions (`movl %ebx, %edx` and `movq %r12, %rdi`) before the address computation chain, so the out-of-order engine can issue the vptr load earlier relative to the `call` that depends on it. On a 7-instruction loop running 100M times, that scheduling change is worth 0.48 ns per iteration.
+
+This is why the GCC 12 switch optimization inverted the variant-vs-virtual result. It didn't make the indirect call faster. It eliminated the indirect call entirely, replacing library-level dispatch with compiler-level control flow that the optimizer can see through. GCC 13 then improved virtual dispatch too, narrowing the gap -- but variant still wins.
 
 ## The Timeline: How Three Stdlibs Diverged
 
