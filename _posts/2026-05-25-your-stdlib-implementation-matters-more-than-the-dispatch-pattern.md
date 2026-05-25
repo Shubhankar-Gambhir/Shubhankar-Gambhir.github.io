@@ -9,7 +9,7 @@ description: >-
   changed the answer.
 ---
 
-In a [previous post]({% post_url 2026-05-19-why-std-visit-is-slower-than-a-vtable %}), I showed that `std::variant + std::visit` was 28% slower than virtual dispatch on GCC 11, and traced the overhead to libstdc++'s implementation: a compile-time-generated function pointer table, a lambda capture round-trip through the stack, and an unconditional valueless check.
+In a [previous post]({% post_url 2026-05-19-why-std-visit-may-be-slower-than-a-vtable %}), I showed that `std::variant + std::visit` was 28% slower than virtual dispatch on GCC 11, and traced the overhead to libstdc++'s implementation: a compile-time-generated function pointer table, a lambda capture round-trip through the stack, and an unconditional valueless check.
 
 That analysis was correct. It was also specific to one version of one standard library. The conclusion -- "variant is slower than virtual" -- was a property of the implementation, not the abstraction.
 
@@ -164,10 +164,10 @@ The dispatch problem doesn't disappear. It moves from library to language. But t
 
 ---
 
-*All benchmarks and source code are in the [companion repository](https://github.com/Shubhankar-Gambhir/cpp-dispatch-benchmark). Measured on Intel Xeon Gold 6130, `-O2 -march=skylake-avx512`, pinned to a single core with `taskset -c 0`. GCC versions: 9.5.0, 10.4.0, 12.4.0, 14.3.0 (via conda-forge); GCC 11.4 data from [Part 3]({% post_url 2026-05-19-why-std-visit-is-slower-than-a-vtable %}). Best of 3 runs reported. Stdlib source: [libstdc++ 12.4 `<variant>`](https://gcc.gnu.org/git/?p=gcc.git;a=blob;f=libstdc%2B%2B-v3/include/std/variant;hb=releases/gcc-12.4.0).*
+*All benchmarks and source code are in the [companion repository](https://github.com/Shubhankar-Gambhir/cpp-dispatch-benchmark). Measured on Intel Xeon Gold 6130, `-O2 -march=skylake-avx512`, pinned to a single core with `taskset -c 0`. GCC versions: 9.5.0, 10.4.0, 12.4.0, 14.3.0 (via conda-forge); GCC 11.4 data from [Part 3]({% post_url 2026-05-19-why-std-visit-may-be-slower-than-a-vtable %}). Best of 3 runs reported. Stdlib source: [libstdc++ 12.4 `<variant>`](https://gcc.gnu.org/git/?p=gcc.git;a=blob;f=libstdc%2B%2B-v3/include/std/variant;hb=releases/gcc-12.4.0).*
 
 ---
 
-**Previously:** [Why std::visit May Be Slower Than a Vtable]({% post_url 2026-05-19-why-std-visit-is-slower-than-a-vtable %}) -- the assembly-level explanation of where the overhead comes from on GCC 11.
+**Previously:** [Why std::visit May Be Slower Than a Vtable]({% post_url 2026-05-19-why-std-visit-may-be-slower-than-a-vtable %}) -- the assembly-level explanation of where the overhead comes from on GCC 11.
 
 **Series start:** [Four Ways to Dispatch a Runtime-Selected Strategy in C++]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) -- the head-to-head comparison that started this investigation.
