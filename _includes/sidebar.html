@@ -38,39 +38,37 @@
         <!-- .nav-item -->
       {% endfor %}
     </ul>
-  </nav>
 
-  <!-- Newsletter subscription -->
-  <div class="w-100 ps-0 mt-1 mb-1">
-    <hr class="sidebar-divider" style="border-color: var(--nav-border-color, rgba(255,255,255,0.15)); margin: 0.5rem 1rem;">
-    <p class="nav-link text-uppercase fst-normal mb-1" style="font-size: 0.65rem; opacity: 0.6; cursor: default; letter-spacing: 0.12em;">
-      <i class="fa-fw fas fa-envelope me-1"></i>Newsletter
-    </p>
-    <form
-      action="https://buttondown.com/api/emails/embed-subscribe/sgambhir"
-      method="post"
-      target="popupwindow"
-      onsubmit="window.open('https://buttondown.com/sgambhir', 'popupwindow')"
-      class="px-3 d-flex flex-column gap-1 mb-2"
-    >
-      <input
-        type="email"
-        name="email"
-        placeholder="your@email.com"
-        required
-        style="background: transparent; border: 1px solid rgba(255,255,255,0.2); color: inherit; font-size: 0.78rem; border-radius: 3px; padding: 4px 8px; width: 100%; outline: none;"
+    <!-- Newsletter subscription -->
+    <div class="w-100 mt-2">
+      <p class="nav-link text-uppercase fst-normal mb-1" style="font-size: 0.65rem; opacity: 0.6; cursor: default; letter-spacing: 0.12em;">
+        <i class="fa-fw fas fa-envelope me-1"></i>Newsletter
+      </p>
+      <form
+        action="https://buttondown.com/api/emails/embed-subscribe/sgambhir"
+        method="post"
+        target="popupwindow"
+        onsubmit="window.open('https://buttondown.com/sgambhir', 'popupwindow')"
+        class="px-3 d-flex flex-column gap-1 mb-2"
       >
-      <button
-        type="submit"
-        style="background: transparent; color: inherit; border: 1px solid rgba(255,255,255,0.2); font-size: 0.78rem; border-radius: 3px; padding: 4px 0; width: 100%; cursor: pointer;"
-        onmouseover="this.style.background='rgba(255,255,255,0.08)'"
-        onmouseout="this.style.background='transparent'"
-      >
-        Subscribe
-      </button>
-    </form>
-    <hr class="sidebar-divider" style="border-color: var(--nav-border-color, rgba(255,255,255,0.15)); margin: 0.5rem 1rem 0;">
-  </div>
+        <input
+          type="email"
+          name="email"
+          placeholder="your@email.com"
+          required
+          style="background: transparent; border: 1px solid rgba(255,255,255,0.2); color: inherit; font-size: 0.78rem; border-radius: 3px; padding: 4px 8px; width: 100%; outline: none;"
+        >
+        <button
+          type="submit"
+          style="background: transparent; color: inherit; border: 1px solid rgba(255,255,255,0.2); font-size: 0.78rem; border-radius: 3px; padding: 4px 0; width: 100%; cursor: pointer;"
+          onmouseover="this.style.background='rgba(255,255,255,0.08)'"
+          onmouseout="this.style.background='transparent'"
+        >
+          Subscribe
+        </button>
+      </form>
+    </div>
+  </nav>
 
   <div class="sidebar-bottom d-flex flex-wrap  align-items-center w-100">
     {% unless site.theme_mode %}
