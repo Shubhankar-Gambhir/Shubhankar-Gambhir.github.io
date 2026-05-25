@@ -28,7 +28,7 @@ Same source code. Same hardware (Intel Xeon Gold 6130). Same `-O2 -march=skylake
 | GCC 13.4 | 1.44 | 2.87 | variant (50% faster) |
 | GCC 14.3 | 1.44 | 2.87 | variant (50% faster) |
 
-All six versions compiled with the same flags and measured on the same hardware in the same session using conda-forge toolchains. The virtual dispatch numbers vary slightly between compiler versions (2.39 vs 2.87 ns) despite identical hot-loop assembly -- this is a microarchitectural effect (the `endbr64` CET instruction present in some builds, branch predictor training differences), not a dispatch mechanism change. The variant numbers in [Part 1]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) (3.72/2.87 ns) used system GCC 11.4 rather than conda-forge, which explains the minor differences.
+All six versions compiled with the same flags and measured on the same hardware in the same session.
 
 From GCC 11 to GCC 12, `std::visit` went from the slowest dispatch mechanism to the fastest. The variant numbers dropped from 3.74 ns to 1.44 ns -- a 61% reduction.
 
