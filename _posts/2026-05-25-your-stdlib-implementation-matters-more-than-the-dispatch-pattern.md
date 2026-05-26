@@ -21,16 +21,16 @@ Same source code. Same hardware (Intel Xeon Gold 6130). Same `-O2 -march=skylake
 
 | Compiler | variant (ns/call) | virtual (ns/call) | Faster approach |
 |----------|-------------------|--------------------|--------------------|
-| GCC 9.5 | 3.89 | 2.87 | virtual (36% faster) |
-| GCC 10.4 | 3.73 | 2.87 | virtual (30% faster) |
-| GCC 11.4 | 3.74 | 2.87 | virtual (30% faster) |
-| **GCC 12.4** | **1.44** | **2.87** | **variant (50% faster)** |
+| GCC 9.5 | 3.95 | 2.39 | virtual (65% faster) |
+| GCC 10.4 | 3.59 | 2.39 | virtual (50% faster) |
+| GCC 11.4 | 3.72 | 2.39 | virtual (56% faster) |
+| **GCC 12.4** | **1.44** | **2.39** | **variant (40% faster)** |
 | GCC 13.4 | 1.44 | 2.39 | variant (40% faster) |
 | GCC 14.3 | 1.44 | 2.39 | variant (40% faster) |
 
-All six versions compiled with the same flags (`-O2 -march=skylake-avx512 -fcf-protection`) and measured on the same hardware in the same session.
+All six versions compiled with the same flags (`-O2 -march=skylake-avx512 -fcf-protection -falign-functions=64 -falign-loops=64`) and measured on the same hardware in the same session. The alignment flags eliminate code placement artifacts that can add up to 0.48 ns of noise to indirect call benchmarks.
 
-From GCC 11 to GCC 12, `std::visit` went from the slowest dispatch mechanism to the fastest. The variant numbers dropped from 3.74 ns to 1.44 ns -- a 61% reduction. Virtual dispatch stayed at 2.87 ns across those versions (GCC 13 later improved it to 2.39 ns, but that's a separate optimization).
+From GCC 11 to GCC 12, `std::visit` went from the slowest dispatch mechanism to the fastest. The variant numbers dropped from 3.72 ns to 1.44 ns -- a 61% reduction. Virtual dispatch stayed at 2.39 ns across all versions -- no change.
 
 You didn't change your code. You didn't change your algorithm. You changed your standard library.
 
@@ -85,7 +85,7 @@ The compiler checked the variant index **once** before entering the loop (`cmpb 
 
 The function pointer table (`_S_vtable`, `__gen_vtable`, `__visit_invoke`) doesn't just get optimized. In GCC 12's output, those symbols don't exist at all. GCC 9 generates 32 symbols related to the visit dispatch machinery. GCC 12 generates zero.
 
-Compare that to the virtual dispatch loop, which is **unchanged** across all five compiler versions:
+Compare that to the virtual dispatch loop, which is **unchanged** across all six compiler versions:
 
 ```nasm
 ; Virtual dispatch -- same on GCC 9 through GCC 14
@@ -99,33 +99,9 @@ Compare that to the virtual dispatch loop, which is **unchanged** across all fiv
     jne    .L36
 ```
 
-Virtual dispatch can't be optimized away the same way. The compiler can't hoist the vtable lookup out of the loop because the object pointer could, in principle, change between iterations (even though it doesn't in this benchmark). The indirect call through the vtable prevents inlining. The two dependent loads are the structural cost of the mechanism.
+Virtual dispatch can't be optimized away the same way. The compiler can't hoist the vtable lookup out of the loop because the object pointer could, in principle, change between iterations (even though it doesn't in this benchmark). The indirect call through the vtable prevents inlining. The two dependent loads are the structural cost of the mechanism -- they're the same on every GCC version because there's nothing for the compiler to improve.
 
-But the compiler can still improve *how* it schedules those loads. GCC 13 shaved 0.48 ns (17%) off virtual dispatch by reordering instructions in the hot loop:
-
-```nasm
-; GCC 12 -- address computation blocks the vptr load
-    movq   %rbx, %rax
-    andl   $63, %eax              ; ┐ address computation
-    leaq   0(%r13,%rax,4), %rsi   ; ┘ (uses %rax)
-    movq   (%r12), %rax           ; vptr load -- can't start until leaq frees %rax
-    movl   %ebx, %edx             ; (independent, but too late to help)
-    movq   %r12, %rdi             ; (independent, but too late to help)
-    call   *16(%rax)
-
-; GCC 13 -- independent work moved before the dependent chain
-    movq   %rbx, %rax
-    movl   %ebx, %edx             ; ← moved up (independent of %rax)
-    movq   %r12, %rdi             ; ← moved up (independent of %rax)
-    andl   $63, %eax              ; ┐ address computation
-    leaq   0(%r13,%rax,4), %rsi   ; ┘
-    movq   (%r12), %rax           ; vptr load -- now issues while leaq is in flight
-    call   *16(%rax)
-```
-
-Same seven instructions, different order. GCC 13 moves two independent instructions (`movl %ebx, %edx` and `movq %r12, %rdi`) before the address computation chain, so the out-of-order engine can issue the vptr load earlier relative to the `call` that depends on it. On a 7-instruction loop running 100M times, that scheduling change is worth 0.48 ns per iteration.
-
-This is why the GCC 12 switch optimization inverted the variant-vs-virtual result. It didn't make the indirect call faster. It eliminated the indirect call entirely, replacing library-level dispatch with compiler-level control flow that the optimizer can see through. GCC 13 then improved virtual dispatch too, narrowing the gap -- but variant still wins.
+This is why the GCC 12 switch optimization inverted the result. It didn't make the indirect call faster. It eliminated the indirect call entirely, replacing library-level dispatch with compiler-level control flow that the optimizer can see through.
 
 ## The Timeline: How Three Stdlibs Diverged
 
@@ -191,7 +167,7 @@ The dispatch problem doesn't disappear. It moves from library to language. But t
 
 ---
 
-*All benchmarks and source code are in the [companion repository](https://github.com/Shubhankar-Gambhir/cpp-dispatch-benchmark). Measured on Intel Xeon Gold 6130, `-O2 -march=skylake-avx512`, pinned to a single core with `taskset -c 0`. GCC versions: 9.5.0, 10.4.0, 11.4.0, 12.4.0, 13.4.0, 14.3.0 (all via conda-forge). Best of 3 runs reported. Stdlib source: [libstdc++ 12.4 `<variant>`](https://gcc.gnu.org/git/?p=gcc.git;a=blob;f=libstdc%2B%2B-v3/include/std/variant;hb=releases/gcc-12.4.0).*
+*All benchmarks and source code are in the [companion repository](https://github.com/Shubhankar-Gambhir/cpp-dispatch-benchmark). Measured on Intel Xeon Gold 6130, `-O2 -march=skylake-avx512 -fcf-protection -falign-functions=64 -falign-loops=64`, pinned to a single core with `taskset -c 0`. GCC versions: 9.5.0, 10.4.0, 11.4.0, 12.4.0, 13.4.0, 14.3.0 (all via conda-forge). Best of 3 runs reported. Stdlib source: [libstdc++ 12.4 `<variant>`](https://gcc.gnu.org/git/?p=gcc.git;a=blob;f=libstdc%2B%2B-v3/include/std/variant;hb=releases/gcc-12.4.0).*
 
 ---
 
