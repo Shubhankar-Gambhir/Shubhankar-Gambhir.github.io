@@ -174,3 +174,7 @@ The dispatch problem doesn't disappear. It moves from library to language. But t
 **Previously:** [Why std::visit May Be Slower Than a Vtable]({% post_url 2026-05-19-why-std-visit-may-be-slower-than-a-vtable %}) -- the assembly-level explanation of where the overhead comes from on GCC 11.
 
 **Series start:** [Four Ways to Dispatch a Runtime-Selected Strategy in C++]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) -- the head-to-head comparison that started this investigation.
+
+## Why the Alignment Flags?
+
+You might have noticed `-falign-functions=64 -falign-loops=64` in the benchmark methodology. Without those flags, virtual dispatch measured anywhere from 2.39 ns to 2.87 ns depending on the GCC version -- not because the compiler generated better code, but because the linker happened to place the called function across a cache line boundary in some builds. A 0.48 ns ghost that looked like a compiler improvement but was pure binary layout noise. In the next post, we'll trace how we found it, why it matters, and what it means for every C++ microbenchmark you've ever read.
