@@ -1,6 +1,6 @@
 ---
 title: "When Dispatch Mechanism Choice Stops Mattering"
-date: 2026-06-04
+date: 2026-06-02
 categories: [C++, Performance]
 tags: [dispatch, virtual, crtp, variant, function-pointer, benchmarks, branch-prediction]
 description: >-
