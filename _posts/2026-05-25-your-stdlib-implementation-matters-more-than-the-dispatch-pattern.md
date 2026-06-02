@@ -27,6 +27,7 @@ Same source code. Same hardware (Intel Xeon Gold 6130). Same `-O2 -march=skylake
 | **GCC 12.4** | **1.44** | **2.39** | **variant (40% faster)** |
 | GCC 13.4 | 1.44 | 2.39 | variant (40% faster) |
 | GCC 14.3 | 1.44 | 2.39 | variant (40% faster) |
+| GCC 15.2 | 1.47 | 2.42 | variant (39% faster) |
 
 All six versions compiled with the same flags (`-O2 -march=skylake-avx512 -fcf-protection -falign-functions=64 -falign-loops=64`) and measured on the same hardware in the same session. The alignment flags eliminate code placement artifacts that can add up to 0.48 ns of noise to indirect call benchmarks.
 
@@ -88,7 +89,7 @@ The function pointer table (`_S_vtable`, `__gen_vtable`, `__visit_invoke`) doesn
 Compare that to the virtual dispatch loop, which is **unchanged** across all six compiler versions:
 
 ```nasm
-; Virtual dispatch -- same on GCC 9 through GCC 14
+; Virtual dispatch -- same on GCC 9 through GCC 15
 .L36:
     movq   8(%rsp), %rdi          ; load object pointer
     movq   (%rdi), %rax           ; load vptr (dependent load 1)
@@ -167,7 +168,7 @@ The dispatch problem doesn't disappear. It moves from library to language. But t
 
 ---
 
-*All benchmarks and source code are in the [companion repository](https://github.com/Shubhankar-Gambhir/cpp-dispatch-benchmark). Measured on Intel Xeon Gold 6130, `-O2 -march=skylake-avx512 -fcf-protection -falign-functions=64 -falign-loops=64`, pinned to a single core with `taskset -c 0`. GCC versions: 9.5.0, 10.4.0, 11.4.0, 12.4.0, 13.4.0, 14.3.0 (all via conda-forge). Best of 3 runs reported. Stdlib source: [libstdc++ 12.4 `<variant>`](https://gcc.gnu.org/git/?p=gcc.git;a=blob;f=libstdc%2B%2B-v3/include/std/variant;hb=releases/gcc-12.4.0).*
+*All benchmarks and source code are in the [companion repository](https://github.com/Shubhankar-Gambhir/cpp-dispatch-benchmark). Measured on Intel Xeon Gold 6130, `-O2 -march=skylake-avx512 -fcf-protection -falign-functions=64 -falign-loops=64`, pinned to a single core with `taskset -c 0`. GCC versions: 9.5.0, 10.4.0, 11.4.0, 12.4.0, 13.4.0, 14.3.0 (all via conda-forge); 15.2 built from source, run as static binary due to glibc version mismatch on the Xeon host. Best of 3 runs reported. Stdlib source: [libstdc++ 12.4 `<variant>`](https://gcc.gnu.org/git/?p=gcc.git;a=blob;f=libstdc%2B%2B-v3/include/std/variant;hb=releases/gcc-12.4.0).*
 
 ---
 
