@@ -29,7 +29,7 @@ Same source code. Same hardware (Intel Xeon Gold 6130). Same `-O2 -march=skylake
 | GCC 14.3 | 1.44 | 2.39 | variant (40% faster) |
 | GCC 15.2 | 1.47 | 2.42 | variant (39% faster) |
 
-All six versions compiled with the same flags (`-O2 -march=skylake-avx512 -fcf-protection -falign-functions=64 -falign-loops=64`) and measured on the same hardware in the same session. The alignment flags eliminate code placement artifacts that can add up to 0.48 ns of noise to indirect call benchmarks.
+All seven versions compiled with the same flags (`-O2 -march=skylake-avx512 -fcf-protection -falign-functions=64 -falign-loops=64`) and measured on the same hardware in the same session. The alignment flags eliminate code placement artifacts that can add up to 0.48 ns of noise to indirect call benchmarks.
 
 From GCC 11 to GCC 12, `std::visit` went from the slowest dispatch mechanism to the fastest. The variant numbers dropped from 3.72 ns to 1.44 ns -- a 61% reduction. Virtual dispatch stayed at 2.39 ns across all versions -- no change.
 
