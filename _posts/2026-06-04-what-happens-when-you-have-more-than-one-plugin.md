@@ -1,5 +1,5 @@
 ---
-title: "What Happens When You Have More Than One Plugin?"
+title: "When Dispatch Mechanism Choice Stops Mattering"
 date: 2026-06-04
 categories: [C++, Performance]
 tags: [dispatch, virtual, crtp, variant, function-pointer, benchmarks, branch-prediction]
