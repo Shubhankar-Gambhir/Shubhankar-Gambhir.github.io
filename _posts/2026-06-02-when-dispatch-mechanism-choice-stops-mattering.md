@@ -9,19 +9,30 @@ description: >-
   dispatch mechanism degrades most gracefully.
 ---
 
-Every benchmark in this series has been a lie of omission.
+Every dispatch benchmark I've seen -- including [the ones I wrote]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) -- tests the same thing: pick one implementation, call it a hundred million times, report the winner.
 
-We selected one plugin at startup, then hammered it 100 million times. The branch predictor learned the target on the first few iterations and predicted it perfectly for the remaining 99,999,990. That's the nicest possible scenario for indirect dispatch -- and the least realistic one.
+The branch predictor learns the target on the first few iterations and predicts it perfectly for the remaining 99,999,990. That's the nicest possible scenario for indirect dispatch -- and the least realistic one.
 
 Real systems don't work that way. A JVM's garbage collector barrier fires on every heap write, and in a generational collector, the write pattern determines *which* barrier runs. An audio pipeline routes samples through different effects depending on frequency band. A network stack selects protocol handlers based on packet headers. In every case, the hot loop sees a mix of concrete types, and the dispatch mechanism has to cope with targets that change from call to call.
 
-This post measures what happens when you take the four mechanisms from [Part 1]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) and feed them polymorphic workloads: round-robin, weighted random, and uniform random. The results change the decision framework.
+This post measures what happens when you take the four mechanisms from [Part 1]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) -- virtual dispatch, function pointer, `std::variant + std::visit`, and decoupled CRTP (a compile-time template pattern that [resolves to a cached function pointer]({% post_url 2026-05-12-lazy-resolution-resolve-once-dispatch-forever %}) at runtime) -- and feed them polymorphic workloads: round-robin, weighted random, and uniform random. The results change the decision framework.
 
 ## Setup
 
 Same hardware as the rest of the series: Intel Xeon Gold 6130 @ 2.10 GHz. Two compilers: GCC 11.4.0 and GCC 15.2.0 (the bookends from [Part 4]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %})). Same flags: `-O2 -march=skylake-avx512 -fcf-protection -falign-functions=64 -falign-loops=64`.
 
-Each benchmark pre-generates a pattern array of 1M plugin indices (Epsilon=0, Serial=1, G1=2) before timing begins. The hot loop walks this array, dispatching to whichever plugin the index selects, for 100M total iterations. No allocation, no branching on the pattern itself -- just the dispatch mechanism under test.
+Each benchmark pre-generates a pattern array of 1M plugin indices (Epsilon=0, Serial=1, G1=2) before timing begins. The hot loop walks this array, dispatching to whichever plugin the index selects, for 100M total iterations. Here's the virtual dispatch version -- the others are structurally identical:
+
+```cpp
+BarrierSet* plugins[3] = { &epsilon, &serial, &g1 };
+auto pattern = make_pattern(pattern_name);  // 1M entries, pre-generated
+
+for (long i = 0; i < 100'000'000L; ++i)
+    plugins[pattern[i % 1'000'000]]->store(
+        heap + (i % 64), static_cast<int>(i));
+```
+
+No allocation, no branching on the pattern itself -- just the dispatch mechanism under test.
 
 Three workloads, each with a different degree of branch predictor friendliness:
 
@@ -77,7 +88,7 @@ This is the workload that most resembles production. 90% of calls hit G1 (the he
 
 The numbers are significantly higher across the board. Virtual dispatch nearly doubled from its round-robin number (3.05 to 5.58 on GCC 15). Function pointer and CRTP jumped from 2.88 to 4.63. The misprediction penalty is real: when the predictor guesses G1 (which is correct 90% of the time), the 10% Serial calls cause pipeline flushes that cost 15-20 cycles each on Skylake.
 
-To put that in perspective: even at a 10% misprediction rate, those flushes dominate the total cost. A correctly predicted indirect call on this hardware takes about 1 ns. A mispredicted one takes 15-20 ns. So 90% of calls cost ~1 ns and 10% cost ~17 ns, giving an expected average around 2.6 ns of branch prediction cost alone -- which is roughly the gap between the monomorphic and weighted numbers.
+To put that in perspective: even at a 10% misprediction rate, those flushes dominate the total cost. On Skylake, a correctly predicted indirect call takes on the order of 1 ns, while a mispredicted one costs roughly 15-20 cycles ([Agner Fog's microarchitecture guide](https://www.agner.org/optimize/microarchitecture.pdf), Table 3.16). At 2.1 GHz, that's 7-10 ns per mispredict. So 90% of calls are cheap and 10% are expensive, and the expensive ones dominate the average -- which is roughly the gap between the monomorphic and weighted numbers.
 
 CRTP and function pointer remain locked together: 4.65 vs 4.67 on GCC 11, 4.63 vs 4.63 on GCC 15. At this point, treating them as distinct mechanisms is misleading. They *are* the same mechanism. CRTP is the source-level abstraction; function pointer is the runtime reality.
 
@@ -114,28 +125,37 @@ The misprediction penalty magnifies each extra operation. When the CPU flushes t
 
 ## The Full Picture
 
-Here are all the numbers in one place, with degradation ratios from monomorphic (Parts 1/4) to uniform random:
+Here are all the numbers in one place. All values in ns/call.
 
-| Mechanism | Mono GCC 11 | Mono GCC 15 | Round-robin | Weighted 90/10 | Random GCC 11 | Random GCC 15 | Degradation (GCC 15) |
-|-----------|-------------|-------------|-------------|----------------|---------------|---------------|----------------------|
-| Virtual | 2.90 | 2.42 | 3.05 | 5.58 | 17.61 | 17.57 | 7.3x |
-| FnPtr | 2.43 | 2.42 | 2.88 | 4.63 | 14.11 | 14.15 | 5.8x |
-| Variant | 3.71 | 1.47 | 4.65 / 2.24 | 7.08 / 4.31 | 18.89 | 13.95 | 9.5x |
-| CRTP | 2.42 | 2.41 | 2.87 | 4.63 | 14.11 | 14.15 | 5.9x |
+**GCC 11.4.0:**
 
-*Round-robin and Weighted columns show GCC 15 numbers; Variant shows GCC 11 / GCC 15 where they differ significantly.*
+| Mechanism | Monomorphic | Round-robin | Weighted 90/10 | Random | Degradation |
+|-----------|-------------|-------------|----------------|--------|-------------|
+| Virtual | 2.90 | 3.05 | 5.60 | 17.61 | 6.1x |
+| FnPtr | 2.43 | 2.88 | 4.67 | 14.11 | 5.8x |
+| Variant | 3.71 | 4.65 | 7.08 | 18.89 | 5.1x |
+| CRTP | 2.42 | 2.87 | 4.65 | 14.11 | 5.8x |
 
-Five findings from the polymorphic data:
+**GCC 15.2.0:**
+
+| Mechanism | Monomorphic | Round-robin | Weighted 90/10 | Random | Degradation |
+|-----------|-------------|-------------|----------------|--------|-------------|
+| Virtual | 2.42 | 3.05 | 5.58 | 17.57 | 7.3x |
+| FnPtr | 2.42 | 2.88 | 4.63 | 14.15 | 5.8x |
+| Variant | 1.47 | 2.24 | 4.31 | 13.95 | 9.5x |
+| CRTP | 2.41 | 2.88 | 4.63 | 14.15 | 5.9x |
+
+*Degradation = Random / Monomorphic ratio.*
+
+Four findings from the polymorphic data:
 
 **1. Variant is the biggest GCC 15 story.** The switch optimization doesn't just help monomorphic dispatch. Under round-robin, variant drops from 4.65 to 2.24 ns (52% faster). Under random, from 18.89 to 13.95 ns. On GCC 15, variant goes from worst-in-class to best-in-class at every workload.
 
-**2. CRTP and function pointer are provably identical.** They land at the same number in every single measurement across all three workloads and both compilers. Under polymorphic dispatch, lazy resolution collapses to a function pointer array. If you don't need composable barrier layers, a raw function pointer gives you the same runtime performance with less code.
+**2. CRTP and function pointer are provably identical.** They land at the same number in every single measurement across all three workloads and both compilers. Under polymorphic dispatch, [lazy resolution]({% post_url 2026-05-12-lazy-resolution-resolve-once-dispatch-forever %}) collapses to a function pointer array. If you don't need composable barrier layers, a raw function pointer gives you the same runtime performance with less code.
 
 **3. Virtual dispatch barely benefits from GCC 15.** The vtable indirection is the bottleneck, and compiler upgrades can't optimize it away. Virtual went from 2.90 to 2.42 in the monomorphic case (alignment/codegen improvements), but under random dispatch the improvement vanishes: 17.61 vs 17.57.
 
-**4. Random dispatch is the great equalizer.** All mechanisms see 5-7x slowdown from monomorphic to random. At that point, the dispatch mechanism matters far less than the branch misprediction penalty. If your workload is truly random, spend your optimization budget on reducing the number of dispatches, not on picking a faster dispatch mechanism.
-
-**5. Variant has the highest degradation ratio.** GCC 15 variant goes from 1.47 ns (monomorphic) to 13.95 ns (random) -- a 9.5x degradation. That's because the monomorphic number is artificially good: the compiler hoists the switch out of the loop entirely (as we showed in Part 4). Under polymorphic dispatch, the switch has to execute on every call, and variant loses its structural advantage. The monomorphic number was the outlier, not the polymorphic one.
+**4. Random dispatch is the great equalizer -- and monomorphic benchmarks can be misleading.** All mechanisms see 5-7x slowdown from monomorphic to random. Variant's 9.5x degradation (1.47 to 13.95 on GCC 15) is the most dramatic: the monomorphic number was artificially good because the compiler [hoisted the switch out of the loop entirely]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %}). Under polymorphic dispatch, that optimization disappears, and the monomorphic number turns out to be the outlier, not the polymorphic one.
 
 ### Updated Decision Framework
 
