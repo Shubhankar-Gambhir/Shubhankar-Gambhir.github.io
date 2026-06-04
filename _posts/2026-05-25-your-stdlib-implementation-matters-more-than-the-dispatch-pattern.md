@@ -45,7 +45,18 @@ constexpr size_t __max = 11; // "These go to eleven."
 
 For single-variant visits with 11 or fewer alternatives, [GCC 12 added a switch-based fast path](https://gcc.gnu.org/git/?p=gcc.git;a=blobdiff;f=libstdc%2B%2B-v3/include/std/variant;hb=releases/gcc-12.1.0;hpb=releases/gcc-11.4.0) in `__do_visit`. Instead of building a function pointer table and calling through it, the compiler generates a `switch` on the variant's index and inlines the visitor body directly into each case.
 
-But the real win isn't the switch itself. It's what the optimizer does with it.
+But the real win isn't the switch itself. It's what the optimizer does with it. The transformation happens in two stages. First, `__do_visit` generates a `switch` on the variant index instead of a function pointer table:
+
+```cpp
+// What GCC 12's __do_visit effectively generates (simplified)
+switch (__v.index()) {
+    case 0: return __visitor(std::get<0>(__v));  // EpsilonBS
+    case 1: return __visitor(std::get<1>(__v));  // SerialBS
+    case 2: return __visitor(std::get<2>(__v));  // G1BS
+}
+```
+
+This alone wouldn't help much -- the switch still dispatches on every call. The second stage is what the optimizer does: since the variant doesn't change type inside the loop, the compiler hoists the switch above the loop and jumps directly to the matching case's loop body. The switch runs once; the loop runs 100M times with the visitor inlined.
 
 Here's the GCC 9 hot loop (pre-switch, representative of GCC 9-11):
 
@@ -119,7 +130,7 @@ The switch optimization didn't appear everywhere at once. Each major standard li
 
 **libc++ (Clang/LLVM):** Has never added a switch fast path. From [LLVM 5 (2017)](https://github.com/llvm/llvm-project/commit/6169a59c51) to [LLVM 20 (2026)](https://github.com/llvm/llvm-project/blob/llvmorg-20.1.0/libcxx/include/variant), the dispatch strategy is unchanged: `__make_fmatrix` builds a nested array of function pointers (`__farray`), and every visit call goes through an indirect call that the optimizer cannot see through. Nine years, no switch optimization. On macOS, where Clang defaults to libc++, this is the dispatch path your code uses unless you explicitly switch to libstdc++.
 
-**MSVC STL:** Had graduated switches before the STL was even [open-sourced in September 2019](https://github.com/microsoft/STL). The implementation uses `_STL_STAMP` macros to generate switch cases in powers of four: 4 cases, 16, 64, and 256. Beyond 256 total states (the product of all variant sizes for a multi-variant visit), it falls back to a function pointer table. It also flattens all variant indices into a single canonical integer biased by +1, so the valueless state maps to case 0 rather than requiring a separate check. The most sophisticated strategy from day one.
+**MSVC STL:** Had graduated switches before the STL was even [open-sourced in September 2019](https://github.com/microsoft/STL). The [visit implementation](https://github.com/microsoft/STL/blob/main/stl/inc/variant) uses `_STL_STAMP` macros to generate switch cases in powers of four: 4 cases, 16, 64, and 256. Beyond 256 total states (the product of all variant sizes for a multi-variant visit), it falls back to a function pointer table. It also flattens all variant indices into a single canonical integer biased by +1, so the valueless state maps to case 0 rather than requiring a separate check. I haven't benchmarked MSVC here (the series focuses on GCC/Linux), but the approach is the most sophisticated of the three from a design perspective.
 
 ## The Michael Park Paradox
 
@@ -158,9 +169,9 @@ The dispatch problem doesn't disappear. It moves from library to language. But t
 
 ## What This Means for You
 
-1. **Check your GCC version.** If you're on GCC 11 or earlier, `std::visit` uses a function pointer table for dispatch. Upgrade to GCC 12+ and the same code runs 2.6x faster for small variants.
+1. **Check your GCC version.** If you're on GCC 11 or earlier, `std::visit` uses a function pointer table for dispatch. Upgrade to GCC 12+ and the same code runs 2.6x faster for small variants. To check: `g++ --version`.
 
-2. **Know your stdlib.** On Linux, Clang can use either libc++ or libstdc++. If you're using Clang with libstdc++, you get the switch optimization (if the libstdc++ version is >= 12). If you're using Clang with libc++, you don't -- and won't until libc++ adds one.
+2. **Know your stdlib.** On Linux, Clang can use either libc++ or libstdc++. To find out which one you're linking against: `echo '#include <variant>' | clang++ -xc++ -dM -E - | grep _LIBCPP`. If that prints a define, you're on libc++ (no switch optimization). If it prints nothing, you're on libstdc++ (switch optimization available if version >= 12). On macOS, Clang defaults to libc++.
 
 3. **Pin your compiler in benchmarks.** "std::variant is slower than virtual dispatch" was true on GCC 11 and false on GCC 12. Any benchmark that says "GCC" without a version number is incomplete.
 

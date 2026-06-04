@@ -71,7 +71,7 @@ But what does the called function look like, and where does `_S_vtable` come fro
 
 ## Inside the Stdlib: How std::visit Dispatches
 
-The assembly above is a consequence of specific implementation choices in libstdc++. Let's look at what's happening inside the standard library.
+The assembly above is a consequence of specific implementation choices in libstdc++. This section traces the dispatch path through three layers of template machinery. If you're mainly interested in the performance implications and not the stdlib internals, you can [skip ahead to the valueless_by_exception section](#the-valueless_by_exception-tax) -- the key takeaway is that libstdc++ builds a compile-time function pointer table and calls through it, which the optimizer cannot inline through.
 
 ### libstdc++ (GCC 11.4): The Vtable Builder
 
@@ -195,7 +195,7 @@ The key difference: libc++ **always** uses this function pointer table approach,
 
 Why does this matter? The compiler **cannot inline through function pointer calls** as effectively as through a `switch` statement. When the compiler sees `switch (index) { case 0: ...; case 1: ...; }`, it can inline the visitor body directly into each case. When it sees `table[index](visitor, variant)`, the call target is opaque -- it's just an address.
 
-If you compile the same benchmark with Clang 19 and libc++ on [Compiler Explorer](https://godbolt.org/), you can see the difference: the hot loop looks structurally similar to the libstdc++ version (discriminant load, indexed call), but the `__farray` table and the `__dispatch` trampolines are generated differently. The critical point is the same -- an indirect call through a function pointer that the optimizer cannot see through.
+The practical difference: libstdc++ at least has a path to optimization (GCC 12 added a switch for small variants, as we'll see in [Part 4]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %})). libc++ has no such path. Every `std::visit` call, regardless of variant size, goes through an indirect call that the optimizer cannot see through. On macOS, where Clang defaults to libc++, this is the dispatch path your variant code uses unless you explicitly link against libstdc++.
 
 This distinction is significant enough that Michael Park (who [wrote libc++'s variant implementation](https://github.com/llvm/llvm-project/commit/6169a59c51) in 2016) later demonstrated in his standalone [mpark::variant](https://github.com/mpark/variant) library that a switch-based approach is 2-4x faster than the table approach for small variants. libstdc++ added a switch optimization in GCC 12. libc++ never did.
 
