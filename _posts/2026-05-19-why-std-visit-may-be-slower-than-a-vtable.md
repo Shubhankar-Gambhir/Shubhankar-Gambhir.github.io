@@ -11,7 +11,7 @@ redirect_from:
   - /posts/why-std-visit-is-slower-than-a-vtable/
 ---
 
-If you benchmark dispatching 100M calls through three small strategy objects -- a no-op, one that does a write after the call, and one that does a read before and a write after -- you'd expect `std::variant + std::visit` to be faster than virtual dispatch. The variant is stack-allocated, there's no heap indirection, no vtable pointer, and the compiler can see the entire closed type set. In a [previous post]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) comparing four dispatch approaches, `std::variant` was actually the *slowest*: 3.72 ns/call versus 2.87 ns for virtual dispatch. That's 28% slower.
+If you benchmark dispatching 100M calls through three small strategy objects (a no-op, one that does a write after the call, and one that does a read before and a write after) you'd expect `std::variant + std::visit` to be faster than virtual dispatch. The variant is stack-allocated, there's no heap indirection, no vtable pointer, and the compiler can see the entire closed type set. In a [previous post]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) comparing four dispatch approaches, `std::variant` was actually the *slowest*: 3.72 ns/call versus 2.87 ns for virtual dispatch. That's 28% slower.
 
 Something is wrong with that picture. So where does the overhead come from?
 
@@ -35,7 +35,7 @@ Virtual dispatch is the baseline everyone knows. Here's the hot loop from our be
 
 Two dependent memory loads, then a call. The second load (`call *16(%rax)`) cannot start until the first (`movq (%rdi), %rax`) completes, because the vtable address depends on the vptr. That's the cost: two serial cache accesses per call.
 
-But there's a reason this works well in practice. The vptr doesn't change between calls. The branch predictor learns the target quickly and predicts it correctly on every subsequent iteration. For a monomorphic call site (one concrete type at runtime), virtual dispatch is essentially free after warmup -- the CPU speculatively executes through the indirect call without stalling.
+But there's a reason this works well in practice. The vptr doesn't change between calls. The branch predictor learns the target quickly and predicts it correctly on every subsequent iteration. For a monomorphic call site (one concrete type at runtime), virtual dispatch is essentially free after warmup. The CPU speculatively executes through the indirect call without stalling.
 
 ## What std::visit Actually Generates
 
@@ -61,7 +61,7 @@ There's more happening here. Before the actual dispatch:
 
 1. **Two stack stores** (`movq %rbp, 16(%rsp)` and `movq %r13, 24(%rsp)`) build the lambda capture struct. The visitor lambda `[&](auto& b) { b.store(...); }` captures local variables by reference, and `std::visit` passes the visitor as an argument to a generated function. Those captured references need to live at an address the callee can read.
 
-2. **A discriminant load** (`movzbl 7(%rsp), %eax`) reads the variant's index byte -- a one-byte tag that identifies which alternative is currently stored.
+2. **A discriminant load** (`movzbl 7(%rsp), %eax`) reads the variant's index byte, a one-byte tag that identifies which alternative is currently stored.
 
 3. **An indexed indirect call** (`call *(%r14,%rax,8)`) uses the discriminant to index into a function pointer table at `%r14`. This is `_S_vtable`, a compile-time generated array of function pointers, one per alternative.
 
@@ -110,7 +110,7 @@ template<typename _Result_type, typename _Visitor, typename... _Variants>
   }
 ```
 
-**Layer 3: `__gen_vtable`** is where the work happens. It builds a compile-time `_Multi_array` -- an N-dimensional array of function pointers, one dimension per variant argument. For our case (one variant with 3 alternatives), it's a simple 1D array of 3 function pointers:
+**Layer 3: `__gen_vtable`** is where the work happens. It builds a compile-time `_Multi_array`, an N-dimensional array of function pointers with one dimension per variant argument. For our case (one variant with 3 alternatives), it's a simple 1D array of 3 function pointers:
 
 ```cpp
 // libstdc++ 11.4, <variant> line 1048
@@ -126,7 +126,7 @@ template<typename _Result_type, typename _Visitor, typename... _Variants>
   };
 ```
 
-Each entry points to a `__visit_invoke` function that calls `std::__invoke` with the correct alternative extracted via `__variant::__get<N>`. The demangled symbol names confirm this -- GCC generates three `__visit_invoke` specializations, one for each index:
+Each entry points to a `__visit_invoke` function that calls `std::__invoke` with the correct alternative extracted via `__variant::__get<N>`. The demangled symbol names confirm this. GCC generates three `__visit_invoke` specializations, one for each index:
 
 ```
 std::__detail::__variant::__gen_vtable_impl<
@@ -177,11 +177,11 @@ Five instructions. Arguments arrive in registers, the function does its work and
 | **Branch misses** | ~0.00% | ~0.00% | ~0.00% |
 | **ns/call** | 3.74 | 2.88 | 2.42 |
 
-Branch misses are essentially zero across all three. The CPU predicts the indirect call target perfectly in every case. The variant version actually has the *highest* IPC (3.44) -- the CPU is executing those extra instructions efficiently, with no pipeline stalls. It's simply doing more work per call. The 69% instruction overhead maps directly to the 30% cycle overhead, which maps to the 28% wall-time difference.
+Branch misses are essentially zero across all three. The CPU predicts the indirect call target perfectly in every case. The variant version actually has the *highest* IPC (3.44); the CPU is executing those extra instructions efficiently, with no pipeline stalls. It's simply doing more work per call. The 69% instruction overhead maps directly to the 30% cycle overhead, which maps to the 28% wall-time difference.
 
 ### libc++ (Clang/LLVM): Pure Function Pointer Table
 
-libc++ uses a different mechanism that produces a similar result. In [libc++ 19.1's `<variant>` header](https://github.com/llvm/llvm-project/blob/llvmorg-19.1.0/libcxx/include/variant), dispatch goes through `__make_fmatrix` -- a compile-time function that builds a nested array of function pointers (called `__farray`):
+libc++ uses a different mechanism that produces a similar result. In [libc++ 19.1's `<variant>` header](https://github.com/llvm/llvm-project/blob/llvmorg-19.1.0/libcxx/include/variant), dispatch goes through `__make_fmatrix`, a compile-time function that builds a nested array of function pointers (called `__farray`):
 
 ```cpp
 // libc++ 19.1, <variant> (simplified)
@@ -193,7 +193,7 @@ template <class _Visitor, class... _Vs>
 
 The key difference: libc++ **always** uses this function pointer table approach, regardless of variant size. Even a `variant<A, B>` with just two alternatives goes through a table lookup and an indirect call through a function pointer.
 
-Why does this matter? The compiler **cannot inline through function pointer calls** as effectively as through a `switch` statement. When the compiler sees `switch (index) { case 0: ...; case 1: ...; }`, it can inline the visitor body directly into each case. When it sees `table[index](visitor, variant)`, the call target is opaque -- it's just an address.
+Why does this matter? The compiler **cannot inline through function pointer calls** as effectively as through a `switch` statement. When the compiler sees `switch (index) { case 0: ...; case 1: ...; }`, it can inline the visitor body directly into each case. When it sees `table[index](visitor, variant)`, the call target is opaque. It's just an address.
 
 The practical difference: libstdc++ at least has a path to optimization (GCC 12 added a switch for small variants, as we'll see in [Part 4]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %})). libc++ has no such path. Every `std::visit` call, regardless of variant size, goes through an indirect call that the optimizer cannot see through. On macOS, where Clang defaults to libc++, this is the dispatch path your variant code uses unless you explicitly link against libstdc++.
 
@@ -225,7 +225,7 @@ template<typename _Tp>
 
 When all alternatives satisfy this trait, `__never_valueless()` returns `true`. In our benchmark, GCC 11 at `-O2` sees through the inline expansion of `valueless_by_exception()`, determines it always returns `false`, and eliminates the check entirely from the hot loop. So our benchmark doesn't actually pay this cost.
 
-But change one alternative to a non-trivially-copyable type -- say, a struct containing `std::string` -- and the check appears:
+But change one alternative to a non-trivially-copyable type (say, a struct containing `std::string`) and the check appears:
 
 ```nasm
 ; std::visit with variant<Light, Heavy> where Heavy contains std::string
@@ -235,7 +235,7 @@ But change one alternative to a non-trivially-copyable type -- say, a struct con
     ; ... dispatch continues ...
 ```
 
-That `cmpb $-1` / `je` pair runs on every visit call, branching to a cold path that throws. The CPU branch predictor handles it well (always not-taken), but it's an instruction pair that has no equivalent in virtual dispatch -- a vtable pointer is always valid if the object exists.
+That `cmpb $-1` / `je` pair runs on every visit call, branching to a cold path that throws. The CPU branch predictor handles it well (always not-taken), but it's an instruction pair that has no equivalent in virtual dispatch, where a vtable pointer is always valid if the object exists.
 
 libc++ has no equivalent `_Never_valueless_alt` optimization. It always emits the check, even for trivially copyable types where the variant physically cannot become valueless.
 
@@ -253,7 +253,7 @@ Putting it all together:
 | **Valueless check** | None -- vtable pointer is always valid | Elided for trivially copyable types (libstdc++); always present (libc++) |
 | **Storage** | Heap-allocated, pointer indirection | Stack-allocated, cache-local |
 
-`std::visit` actually has *fewer* dependent dispatch loads than virtual -- its discriminant and table base are independent, while virtual's vtable lookup must wait for the vptr load. The 28% overhead doesn't come from the dispatch itself. It comes from the **lambda capture indirection**: the visitor lambda captures local variables by reference, so `std::visit` materializes a capture struct on the stack before the call, and the callee has to load those references back and reconstruct the arguments. Virtual dispatch passes arguments directly in registers -- 5 instructions in the callee versus 15. That instruction overhead (69% more instructions, confirmed by `perf stat`) is the root cause, not branch misprediction or cache misses.
+`std::visit` actually has *fewer* dependent dispatch loads than virtual: its discriminant and table base are independent, while virtual's vtable lookup must wait for the vptr load. The 28% overhead doesn't come from the dispatch itself. It comes from the **lambda capture indirection**: the visitor lambda captures local variables by reference, so `std::visit` materializes a capture struct on the stack before the call, and the callee has to load those references back and reconstruct the arguments. Virtual dispatch passes arguments directly in registers: 5 instructions in the callee versus 15. That instruction overhead (69% more instructions, confirmed by `perf stat`) is the root cause, not branch misprediction or cache misses.
 
 The last row is the one that makes `std::variant` attractive: no heap allocation, no pointer indirection for the data itself. For access patterns that read the stored value frequently but dispatch infrequently, variant wins. But for dispatch-heavy hot paths where every call goes through `std::visit`, the dispatch mechanism's overhead outweighs the storage advantage.
 

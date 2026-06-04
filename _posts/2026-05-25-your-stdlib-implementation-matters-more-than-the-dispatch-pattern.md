@@ -11,7 +11,7 @@ description: >-
 
 In a [previous post]({% post_url 2026-05-19-why-std-visit-may-be-slower-than-a-vtable %}), I showed that `std::variant + std::visit` was 28% slower than virtual dispatch on GCC 11, and traced the overhead to libstdc++'s implementation: a compile-time-generated function pointer table, a lambda capture round-trip through the stack, and an unconditional valueless check.
 
-That analysis was correct. It was also specific to one version of one standard library. The conclusion -- "variant is slower than virtual" -- was a property of the implementation, not the abstraction.
+That analysis was correct. It was also specific to one version of one standard library. The conclusion ("variant is slower than virtual") was a property of the implementation, not the abstraction.
 
 Then I upgraded the compiler.
 
@@ -31,7 +31,7 @@ Same source code. Same hardware (Intel Xeon Gold 6130). Same `-O2 -march=skylake
 
 All seven versions compiled with the same flags (`-O2 -march=skylake-avx512 -fcf-protection -falign-functions=64 -falign-loops=64`) and measured on the same hardware in the same session. The alignment flags eliminate code placement artifacts that can add up to 0.48 ns of noise to indirect call benchmarks.
 
-From GCC 11 to GCC 12, `std::visit` went from the slowest dispatch mechanism to the fastest. The variant numbers dropped from 3.72 ns to 1.44 ns -- a 61% reduction. Virtual dispatch stayed at 2.39 ns across all versions -- no change.
+From GCC 11 to GCC 12, `std::visit` went from the slowest dispatch mechanism to the fastest. The variant numbers dropped from 3.72 ns to 1.44 ns, a 61% reduction. Virtual dispatch stayed at 2.39 ns across all versions -- no change.
 
 You didn't change your code. You didn't change your algorithm. You changed your standard library.
 
@@ -56,7 +56,7 @@ switch (__v.index()) {
 }
 ```
 
-This alone wouldn't help much -- the switch still dispatches on every call. The second stage is what the optimizer does: since the variant doesn't change type inside the loop, the compiler hoists the switch above the loop and jumps directly to the matching case's loop body. The switch runs once; the loop runs 100M times with the visitor inlined.
+This alone wouldn't help much; the switch still dispatches on every call. The second stage is what the optimizer does: since the variant doesn't change type inside the loop, the compiler hoists the switch above the loop and jumps directly to the matching case's loop body. The switch runs once; the loop runs 100M times with the visitor inlined.
 
 Here's the GCC 9 hot loop (pre-switch, representative of GCC 9-11):
 
@@ -111,7 +111,7 @@ Compare that to the virtual dispatch loop, which is **unchanged** across all sev
     jne    .L36
 ```
 
-Virtual dispatch can't be optimized away the same way. The compiler can't hoist the vtable lookup out of the loop because the object pointer could, in principle, change between iterations (even though it doesn't in this benchmark). The indirect call through the vtable prevents inlining. The two dependent loads are the structural cost of the mechanism -- they're the same on every GCC version because there's nothing for the compiler to improve.
+Virtual dispatch can't be optimized away the same way. The compiler can't hoist the vtable lookup out of the loop because the object pointer could, in principle, change between iterations (even though it doesn't in this benchmark). The indirect call through the vtable prevents inlining. The two dependent loads are the structural cost of the mechanism. They're the same on every GCC version because there's nothing for the compiler to improve.
 
 This is why the GCC 12 switch optimization inverted the result. It didn't make the indirect call faster. It eliminated the indirect call entirely, replacing library-level dispatch with compiler-level control flow that the optimizer can see through.
 
@@ -126,7 +126,7 @@ The switch optimization didn't appear everywhere at once. Each major standard li
 | **2022** | **+ switch for <= 11 alternatives** | -- | -- |
 | 2025 | + C++26 member visit | Still table-only | -- |
 
-**libstdc++ (GCC):** Five years of table-only dispatch (GCC 7 through 11), then a single commit in GCC 12 added the switch path with a threshold of 11 alternatives. The threshold hasn't changed since. Earlier versions weren't idle -- GCC 8 added compact index types (smaller variant objects), GCC 9 added the [`_Never_valueless_alt`](https://gcc.gnu.org/git/?p=gcc.git;a=blob;f=libstdc%2B%2B-v3/include/std/variant;hb=releases/gcc-9.1.0#l370) optimization that eliminates the valueless check for trivially copyable types. But none of those touched the dispatch path. GCC 12 was the inflection point.
+**libstdc++ (GCC):** Five years of table-only dispatch (GCC 7 through 11), then a single commit in GCC 12 added the switch path with a threshold of 11 alternatives. The threshold hasn't changed since. Earlier versions weren't idle. GCC 8 added compact index types (smaller variant objects), GCC 9 added the [`_Never_valueless_alt`](https://gcc.gnu.org/git/?p=gcc.git;a=blob;f=libstdc%2B%2B-v3/include/std/variant;hb=releases/gcc-9.1.0#l370) optimization that eliminates the valueless check for trivially copyable types. But none of those touched the dispatch path. GCC 12 was the inflection point.
 
 **libc++ (Clang/LLVM):** Has never added a switch fast path. From [LLVM 5 (2017)](https://github.com/llvm/llvm-project/commit/6169a59c51) to [LLVM 20 (2026)](https://github.com/llvm/llvm-project/blob/llvmorg-20.1.0/libcxx/include/variant), the dispatch strategy is unchanged: `__make_fmatrix` builds a nested array of function pointers (`__farray`), and every visit call goes through an indirect call that the optimizer cannot see through. Nine years, no switch optimization. On macOS, where Clang defaults to libc++, this is the dispatch path your code uses unless you explicitly switch to libstdc++.
 
@@ -134,7 +134,7 @@ The switch optimization didn't appear everywhere at once. Each major standard li
 
 ## The Michael Park Paradox
 
-Michael Park [wrote libc++'s variant implementation](https://github.com/llvm/llvm-project/commit/6169a59c51) in 2016. He then created the standalone [mpark::variant](https://github.com/mpark/variant) library as a C++11/14 backport, where he implemented *both* dispatch strategies -- table and switch -- and benchmarked them head-to-head.
+Michael Park [wrote libc++'s variant implementation](https://github.com/llvm/llvm-project/commit/6169a59c51) in 2016. He then created the standalone [mpark::variant](https://github.com/mpark/variant) library as a C++11/14 backport, where he implemented *both* dispatch strategies (table and switch) and benchmarked them head-to-head.
 
 His [January 2019 results](https://mpark.github.io/programming/2019/01/22/variant-visitation-v2/) were unambiguous:
 
@@ -163,9 +163,9 @@ inspect (bs) {
 };
 ```
 
-If adopted, this moves dispatch from a library mechanism (where the optimizer has to reverse-engineer the intent from template metaprogramming) to a language construct (where the compiler knows exactly what's happening from the start). The entire `std::visit` implementation strategy -- table vs switch, valueless checks, lambda captures -- becomes irrelevant.
+If adopted, this moves dispatch from a library mechanism (where the optimizer has to reverse-engineer the intent from template metaprogramming) to a language construct (where the compiler knows exactly what's happening from the start). The entire `std::visit` implementation strategy (table vs switch, valueless checks, lambda captures) becomes irrelevant.
 
-The dispatch problem doesn't disappear. It moves from library to language. But that's exactly where it belongs -- the compiler has always been better at generating dispatch code than the library.
+The dispatch problem doesn't disappear. It moves from library to language. But that's exactly where it belongs. The compiler has always been better at generating dispatch code than the library.
 
 ## What This Means for You
 
