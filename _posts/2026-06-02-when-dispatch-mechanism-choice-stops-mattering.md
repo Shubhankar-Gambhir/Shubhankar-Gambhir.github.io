@@ -14,7 +14,7 @@ Every dispatch benchmark I've seen, including [the ones I wrote]({% post_url 202
 
 The branch predictor learns the target on the first few iterations and predicts it perfectly for the remaining 99,999,990. That's the nicest possible scenario for indirect dispatch, and the least realistic one.
 
-Real systems don't work that way. A JVM's garbage collector barrier fires on every heap write, and in a generational collector, the write pattern determines *which* barrier runs. An audio pipeline routes samples through different effects depending on frequency band. A network stack selects protocol handlers based on packet headers. In every case, the hot loop sees a mix of concrete types, and the dispatch mechanism has to cope with targets that change from call to call.
+Real systems don't work that way. An audio pipeline routes samples through different effects depending on frequency band. A network stack selects protocol handlers based on packet headers. A rendering engine dispatches draw calls through different material shaders depending on the object. In every case, the hot loop sees a mix of concrete types, and the dispatch mechanism has to cope with targets that change from call to call.
 
 This post measures what happens when you take the four mechanisms from [Part 1]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) (virtual dispatch, function pointer, `std::variant + std::visit`, and decoupled CRTP, a compile-time template pattern that [resolves to a cached function pointer]({% post_url 2026-05-12-lazy-resolution-resolve-once-dispatch-forever %}) at runtime) and feed them polymorphic workloads: round-robin, weighted random, and uniform random. The results change the decision framework.
 
@@ -22,7 +22,7 @@ This post measures what happens when you take the four mechanisms from [Part 1](
 
 Same hardware as the rest of the series: Intel Xeon Gold 6130 @ 2.10 GHz. Two compilers: GCC 11.4.0 and GCC 15.2.0 (the bookends from [Part 4]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %})). Same flags: `-O2 -march=skylake-avx512 -fcf-protection -falign-functions=64 -falign-loops=64`.
 
-Each benchmark pre-generates a pattern array of 1M plugin indices (Epsilon=0, Serial=1, G1=2) before timing begins. The hot loop walks this array, dispatching to whichever plugin the index selects, for 100M total iterations. Here's the virtual dispatch version; the others are structurally identical:
+The series uses a GC barrier scenario with three plugin types as its running example, but the dispatch mechanics apply to any strategy pattern. Each benchmark pre-generates a pattern array of 1M plugin indices (Light=0, Medium=1, Heavy=2) before timing begins. The hot loop walks this array, dispatching to whichever plugin the index selects, for 100M total iterations. Here's the virtual dispatch version; the others are structurally identical:
 
 ```cpp
 BarrierSet* plugins[3] = { &epsilon, &serial, &g1 };
@@ -37,11 +37,11 @@ No allocation, no branching on the pattern itself. Just the dispatch mechanism u
 
 Three workloads, each with a different degree of branch predictor friendliness:
 
-- **Round-robin**: Epsilon, Serial, G1, Epsilon, Serial, G1, ... A perfectly periodic pattern with period 3. The branch predictor can learn this.
-- **Weighted 90/10**: 90% G1, 10% Serial, randomly distributed. Close to a realistic JVM workload where most writes hit the generational barrier but some go through a simpler path.
-- **Uniform random**: Equal probability of Epsilon, Serial, or G1 on each call. Pure chaos for the branch predictor.
+- **Round-robin**: Light, Medium, Heavy, Light, Medium, Heavy, ... A perfectly periodic pattern with period 3. The branch predictor can learn this.
+- **Weighted 90/10**: 90% Heavy, 10% Medium, randomly distributed. Close to a realistic workload where one strategy dominates but alternatives appear intermittently.
+- **Uniform random**: Equal probability of Light, Medium, or Heavy on each call. Pure chaos for the branch predictor.
 
-For reference, here are the monomorphic baselines from Parts 1 and 4 (G1 plugin, 100M calls to the same target):
+For reference, here are the monomorphic baselines from Parts 1 and 4 (Heavy plugin, 100M calls to the same target):
 
 | Mechanism | GCC 11 (ns/call) | GCC 15 (ns/call) |
 |-----------|-------------------|-------------------|
@@ -112,9 +112,9 @@ The vtable lookup is identical in both cases: load vptr, indirect call through v
 | std::variant + std::visit | 7.08 | 4.31 |
 | Decoupled CRTP | 4.65 | 4.63 |
 
-This is the workload that most resembles production. 90% of calls hit G1 (the heavyweight barrier with pre and post barriers), and 10% hit Serial (post-barrier only). The distribution is random, seeded deterministically, so the branch predictor can't learn a repeating pattern. But it *can* learn the dominant target and take its chances.
+This is the workload that most resembles production. 90% of calls hit the heaviest plugin (the most work per dispatch), and 10% hit a lighter alternative. The distribution is random, seeded deterministically, so the branch predictor can't learn a repeating pattern. But it *can* learn the dominant target and take its chances.
 
-The numbers are significantly higher across the board. Virtual dispatch nearly doubled from its round-robin number (3.05 to 5.58 on GCC 15). Function pointer and CRTP jumped from 2.88 to 4.63. The misprediction penalty is real: when the predictor guesses G1 (which is correct 90% of the time), the 10% Serial calls cause pipeline flushes that cost 15-20 cycles each on Skylake.
+The numbers are significantly higher across the board. Virtual dispatch nearly doubled from its round-robin number (3.05 to 5.58 on GCC 15). Function pointer and CRTP jumped from 2.88 to 4.63. The misprediction penalty is real: when the predictor guesses the dominant type (which is correct 90% of the time), the 10% minority calls cause pipeline flushes that cost 15-20 cycles each on Skylake.
 
 To put that in perspective: even at a 10% misprediction rate, those flushes dominate the total cost. On Skylake, a correctly predicted indirect call takes on the order of 1 ns, while a mispredicted one costs roughly 15-20 cycles ([Agner Fog's microarchitecture guide](https://www.agner.org/optimize/microarchitecture.pdf), Table 3.16). At 2.1 GHz, that's 7-10 ns per mispredict. So 90% of calls are cheap and 10% are expensive, and the expensive ones dominate the average, which is roughly the gap between the monomorphic and weighted numbers.
 
@@ -192,7 +192,7 @@ Here are all the numbers in one place. All values in ns/call.
 
 The clearest finding is what happened to variant. The GCC 12+ switch optimization doesn't just help monomorphic dispatch; it restructures how variant fails under polymorphism. On GCC 15, variant drops from 4.65 to 2.24 ns under round-robin (52% faster) and from 18.89 to 13.95 ns under random. It goes from worst-in-class on GCC 11 to best-in-class on GCC 15 at every workload.
 
-CRTP and function pointer, meanwhile, are provably the same mechanism. They land at identical numbers in every single measurement across all three workloads and both compilers. Under polymorphic dispatch, [lazy resolution]({% post_url 2026-05-12-lazy-resolution-resolve-once-dispatch-forever %}) collapses to a function pointer array. If you don't need composable barrier layers, a raw function pointer gives you the same runtime performance with less code.
+CRTP and function pointer, meanwhile, are provably the same mechanism. They land at identical numbers in every single measurement across all three workloads and both compilers. Under polymorphic dispatch, [lazy resolution]({% post_url 2026-05-12-lazy-resolution-resolve-once-dispatch-forever %}) collapses to a function pointer array. If you don't need composable plugin layers, a raw function pointer gives you the same runtime performance with less code.
 
 Virtual dispatch barely benefits from GCC 15. The vtable indirection is the bottleneck, and compiler upgrades can't optimize it away. Virtual went from 2.90 to 2.42 ns in the monomorphic case (alignment and codegen improvements), but under random dispatch the improvement vanishes: 17.61 vs 17.57.
 
