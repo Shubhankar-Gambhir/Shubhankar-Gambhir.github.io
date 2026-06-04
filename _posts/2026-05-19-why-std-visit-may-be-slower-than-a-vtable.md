@@ -65,13 +65,13 @@ There's more happening here. Before the actual dispatch:
 
 3. **An indexed indirect call** (`call *(%r14,%rax,8)`) uses the discriminant to index into a function pointer table at `%r14`. This is `_S_vtable`, a compile-time generated array of function pointers, one per alternative.
 
-So libstdc++ builds **its own vtable** to dispatch through `std::visit`. The variant was supposed to avoid vtables, but the dispatch mechanism creates one anyway. Worse, the two stack stores before the call build a lambda capture struct that the callee has to read back -- overhead that virtual dispatch avoids by passing arguments in registers.
+So libstdc++ builds **its own vtable** to dispatch through `std::visit`. The variant was supposed to avoid vtables, but the dispatch mechanism creates one anyway. Worse, the two stack stores before the call build a lambda capture struct that the callee has to read back, overhead that virtual dispatch avoids by passing arguments in registers.
 
 But what does the called function look like, and where does `_S_vtable` come from? To answer that, we need to look inside the standard library.
 
 ## Inside the Stdlib: How std::visit Dispatches
 
-The assembly above is a consequence of specific implementation choices in libstdc++. This section traces the dispatch path through three layers of template machinery. If you're mainly interested in the performance implications and not the stdlib internals, you can [skip ahead to the valueless_by_exception section](#the-valueless_by_exception-tax) -- the key takeaway is that libstdc++ builds a compile-time function pointer table and calls through it, which the optimizer cannot inline through.
+The assembly above is a consequence of specific implementation choices in libstdc++. This section traces the dispatch path through three layers of template machinery. If you're mainly interested in the performance implications and not the stdlib internals, you can [skip ahead to the valueless_by_exception section](#the-valueless_by_exception-tax); the key takeaway is that libstdc++ builds a compile-time function pointer table and calls through it, which the optimizer cannot inline through.
 
 ### libstdc++ (GCC 11.4): The Vtable Builder
 
@@ -211,7 +211,7 @@ if ((__variant::__as(__variants).valueless_by_exception() || ...))
 
 A variant becomes valueless when a type-changing assignment's move/copy constructor throws. The old value has already been destroyed, but the new one failed to construct, leaving the variant in a "neither" state. `std::visit` must check for this and throw `bad_variant_access` if it encounters one.
 
-For our benchmark, **this check can never fire**. All three alternative types (`EpsilonBS`, `SerialBS`, `G1BS`) are trivially copyable structs smaller than 256 bytes. A type-changing assignment for these types uses a temporary and a `memcpy` -- it cannot throw. The variant physically cannot become valueless.
+For our benchmark, **this check can never fire**. All three alternative types (`EpsilonBS`, `SerialBS`, `G1BS`) are trivially copyable structs smaller than 256 bytes. A type-changing assignment for these types uses a temporary and a `memcpy`; it cannot throw. The variant physically cannot become valueless.
 
 libstdc++ knows this. Since [GCC 9](https://gcc.gnu.org/git/?p=gcc.git;a=blob;f=libstdc%2B%2B-v3/include/std/variant;hb=releases/gcc-9.1.0#l370), it has a `_Never_valueless_alt` trait:
 
@@ -245,12 +245,12 @@ Putting it all together:
 
 | Aspect | Virtual dispatch | `std::visit` |
 |--------|-----------------|------------|
-| **Dispatch loads** | 2 dependent loads (vptr, then vtable entry -- serial) | 1 discriminant load + 1 table lookup (independent -- parallel) |
+| **Dispatch loads** | 2 dependent loads (vptr, then vtable entry; serial) | 1 discriminant load + 1 table lookup (independent; parallel) |
 | **Extra per-call work** | None | 2 stores to build lambda capture (caller) + 2 loads to read it back (callee) |
 | **Argument passing** | Registers (`%rdi` = this, `%rsi`/`%rdx` = args) | Stack (lambda capture struct round-trip) |
-| **Branch prediction** | Monomorphic sites predict perfectly | Same after warmup -- single target from same call site |
+| **Branch prediction** | Monomorphic sites predict perfectly | Same after warmup; single target from same call site |
 | **Inlinability** | Compiler can devirtualize known types | Function pointer calls are opaque to optimizer |
-| **Valueless check** | None -- vtable pointer is always valid | Elided for trivially copyable types (libstdc++); always present (libc++) |
+| **Valueless check** | None; vtable pointer is always valid | Elided for trivially copyable types (libstdc++); always present (libc++) |
 | **Storage** | Heap-allocated, pointer indirection | Stack-allocated, cache-local |
 
 `std::visit` actually has *fewer* dependent dispatch loads than virtual: its discriminant and table base are independent, while virtual's vtable lookup must wait for the vptr load. The 28% overhead doesn't come from the dispatch itself. It comes from the **lambda capture indirection**: the visitor lambda captures local variables by reference, so `std::visit` materializes a capture struct on the stack before the call, and the callee has to load those references back and reconstruct the arguments. Virtual dispatch passes arguments directly in registers: 5 instructions in the callee versus 15. That instruction overhead (69% more instructions, confirmed by `perf stat`) is the root cause, not branch misprediction or cache misses.
@@ -267,6 +267,6 @@ For example, if you're pattern-matching a variant of message types once per netw
 
 ---
 
-**Previously:** [Lazy Resolution: Resolve Once, Dispatch Forever]({% post_url 2026-05-12-lazy-resolution-resolve-once-dispatch-forever %}) -- self-patching function pointers that resolve on first call and dispatch at zero cost forever after.
+**Previously:** [Lazy Resolution: Resolve Once, Dispatch Forever]({% post_url 2026-05-12-lazy-resolution-resolve-once-dispatch-forever %}). Self-patching function pointers that resolve on first call and dispatch at zero cost forever after.
 
-**Next:** [Your Stdlib Implementation Matters More Than the Dispatch Pattern]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %}) -- GCC 12 added a switch optimization that inverted the result. Variant went from 28% slower to 50% faster than virtual dispatch. Same source code, same hardware.
+**Next:** [Your Stdlib Implementation Matters More Than the Dispatch Pattern]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %}). GCC 12 added a switch optimization that inverted the result. Variant went from 28% slower to 50% faster than virtual dispatch. Same source code, same hardware.

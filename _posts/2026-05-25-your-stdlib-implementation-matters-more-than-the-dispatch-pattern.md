@@ -31,7 +31,7 @@ Same source code. Same hardware (Intel Xeon Gold 6130). Same `-O2 -march=skylake
 
 All seven versions compiled with the same flags (`-O2 -march=skylake-avx512 -fcf-protection -falign-functions=64 -falign-loops=64`) and measured on the same hardware in the same session. The alignment flags eliminate code placement artifacts that can add up to 0.48 ns of noise to indirect call benchmarks.
 
-From GCC 11 to GCC 12, `std::visit` went from the slowest dispatch mechanism to the fastest. The variant numbers dropped from 3.72 ns to 1.44 ns, a 61% reduction. Virtual dispatch stayed at 2.39 ns across all versions -- no change.
+From GCC 11 to GCC 12, `std::visit` went from the slowest dispatch mechanism to the fastest. The variant numbers dropped from 3.72 ns to 1.44 ns, a 61% reduction. Virtual dispatch stayed at 2.39 ns across all versions, unchanged.
 
 You didn't change your code. You didn't change your algorithm. You changed your standard library.
 
@@ -175,7 +175,7 @@ The dispatch problem doesn't disappear. It moves from library to language. But t
 
 3. **Pin your compiler in benchmarks.** "std::variant is slower than virtual dispatch" was true on GCC 11 and false on GCC 12. Any benchmark that says "GCC" without a version number is incomplete.
 
-4. **For hot-path dispatch, measure your toolchain.** If you can't upgrade your compiler and you're dispatching millions of times per second, consider the [lazy resolution pattern]({% post_url 2026-05-12-lazy-resolution-resolve-once-dispatch-forever %}) from Part 2 -- it's compiler-independent and matches raw function pointer performance on any version.
+4. **For hot-path dispatch, measure your toolchain.** If you can't upgrade your compiler and you're dispatching millions of times per second, consider the [lazy resolution pattern]({% post_url 2026-05-12-lazy-resolution-resolve-once-dispatch-forever %}) from Part 2, which is compiler-independent and matches raw function pointer performance on any version.
 
 ---
 
@@ -183,12 +183,12 @@ The dispatch problem doesn't disappear. It moves from library to language. But t
 
 ---
 
-**Previously:** [Why std::visit May Be Slower Than a Vtable]({% post_url 2026-05-19-why-std-visit-may-be-slower-than-a-vtable %}) -- the assembly-level explanation of where the overhead comes from on GCC 11.
+**Previously:** [Why std::visit May Be Slower Than a Vtable]({% post_url 2026-05-19-why-std-visit-may-be-slower-than-a-vtable %}). The assembly-level explanation of where the overhead comes from on GCC 11.
 
-**Series start:** [Four Ways to Dispatch a Runtime-Selected Strategy in C++]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) -- the head-to-head comparison that started this investigation.
+**Series start:** [Four Ways to Dispatch a Runtime-Selected Strategy in C++]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}). The head-to-head comparison that started this investigation.
 
 ## Why the Alignment Flags?
 
-You might have noticed `-falign-functions=64 -falign-loops=64` in the benchmark methodology. Without those flags, virtual dispatch measured anywhere from 2.39 ns to 2.87 ns depending on the GCC version -- not because the compiler generated better code, but because the linker happened to place the called function across a cache line boundary in some builds. A 0.48 ns ghost that looked like a compiler improvement but was pure binary layout noise. A future post will trace how we found it, why it matters, and what it means for every C++ microbenchmark you've ever read.
+You might have noticed `-falign-functions=64 -falign-loops=64` in the benchmark methodology. Without those flags, virtual dispatch measured anywhere from 2.39 ns to 2.87 ns depending on the GCC version, not because the compiler generated better code, but because the linker happened to place the called function across a cache line boundary in some builds. A 0.48 ns ghost that looked like a compiler improvement but was pure binary layout noise. A future post will trace how we found it, why it matters, and what it means for every C++ microbenchmark you've ever read.
 
-**Next:** [When Dispatch Mechanism Choice Stops Mattering]({% post_url 2026-06-02-when-dispatch-mechanism-choice-stops-mattering %}) -- what happens when you mix multiple plugin types in the same hot loop, and which dispatch mechanism degrades most gracefully.
+**Next:** [When Dispatch Mechanism Choice Stops Mattering]({% post_url 2026-06-02-when-dispatch-mechanism-choice-stops-mattering %}). What happens when you mix multiple plugin types in the same hot loop, and which dispatch mechanism degrades most gracefully.
