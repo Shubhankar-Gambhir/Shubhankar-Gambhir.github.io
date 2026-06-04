@@ -80,8 +80,11 @@ Virtual dispatch shows a mild increase from its monomorphic baseline (2.90 to 3.
 ; MONOMORPHIC (Part 1): one plugin, called 100M times
   movq   8(%rsp), %rdi          ; load the same BarrierSet* every time
   movq   (%rdi), %rax           ; vptr (same address every iteration)
+  movl   %ebx, %edx             ; value argument
   call   *16(%rax)              ; vtable[2] (same target every iteration)
-  jne    loop                   ; 4 instructions per iteration
+  incq   %rbx
+  cmpq   $100000000, %rbx
+  jne    loop                   ; 7 instructions per iteration
 ```
 
 ```nasm

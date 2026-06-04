@@ -97,7 +97,7 @@ The compiler checked the variant index **once** before entering the loop (`cmpb 
 
 The function pointer table (`_S_vtable`, `__gen_vtable`, `__visit_invoke`) doesn't just get optimized. In GCC 12's output, those symbols don't exist at all. GCC 9 generates 32 symbols related to the visit dispatch machinery. GCC 12 generates zero.
 
-Compare that to the virtual dispatch loop, which is **unchanged** across all six compiler versions:
+Compare that to the virtual dispatch loop, which is **unchanged** across all seven compiler versions:
 
 ```nasm
 ; Virtual dispatch -- same on GCC 9 through GCC 15
