@@ -5,10 +5,6 @@ order: 3
 title: Speaking
 ---
 
-## Upcoming
-
-*Stay tuned for new talks coming later this year.*
-
 ## Past Talks
 
 ### Zero-Cost Abstractions in Large Systems: Lessons from OpenJDK's Barrier Refactoring
