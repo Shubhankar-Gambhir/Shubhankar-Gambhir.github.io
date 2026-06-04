@@ -73,7 +73,23 @@ Why does the switch outperform a function pointer here? Under monomorphic dispat
 
 On GCC 11, variant is worst in class at 4.65 ns. The old function-pointer-table `std::visit` implementation stacks two overheads: the lambda capture round-trip from [Part 3]({% post_url 2026-05-19-why-std-visit-may-be-slower-than-a-vtable %}) and the new cost of cycling through three different dispatch targets. The vtable-style implementation was already slower for one target; now it's dispatching through three.
 
-Virtual dispatch shows a mild increase from its monomorphic baseline (2.90 to 3.05 on GCC 11), but not much. The vtable lookup is the same two dependent loads regardless of how many types pass through -- the cost comes from branch misprediction on the indirect call, and a period-3 pattern is easy enough to predict.
+Virtual dispatch shows a mild increase from its monomorphic baseline (2.90 to 3.05 on GCC 11), but not much. Here's the hot loop on GCC 15:
+
+```nasm
+; Polymorphic virtual dispatch hot loop (GCC 15, -O2 -march=skylake-avx512)
+  mov    %r15,%rax              ; rax = i
+  mul    %r12                   ; 128-bit multiply for i % 1'000'000
+  ; ... 4 instructions computing remainder ...
+  movslq (%rbp,%rax,4),%rax    ; load pat[i % PATTERN_SIZE]
+  mov    (%rbp,%rax,8),%rdi    ; rdi = plugins[pat[...]] (this pointer)
+  lea    (%rbx,%rax,4),%rsi    ; rsi = &heap[i % 64]
+  mov    (%rdi),%rax           ; LOAD 1: vptr from selected object
+  call   *0x10(%rax)           ; LOAD 2: vtable[2] -> indirect call
+  cmp    $0x5f5e100,%r15
+  jne    loop
+```
+
+Compare that to the monomorphic loop from Part 1, which just loads a single known object pointer from the stack and calls through its vtable. Here, the CPU has to chase two extra indirections before it even reaches the vtable: one into the pattern array, one into the plugins array. The vtable lookup itself is identical, but the branch predictor now sees a different `call *` target every three iterations instead of the same one forever. A period-3 pattern is easy enough to predict, so the cost stays modest.
 
 ## Weighted 90/10: The Realistic Workload
 
@@ -107,7 +123,7 @@ Variant on GCC 11 (7.08 ns) is worst in class by a wide margin. It stacks the ol
 | std::variant + std::visit | 18.89 | 13.95 |
 | Decoupled CRTP | 14.11 | 14.15 |
 
-Every call is a coin flip among three options, equally weighted. The branch predictor has no pattern to learn, no dominant target to bet on. Every third call (on average) is a misprediction, and each misprediction flushes the pipeline.
+Every call is a coin flip among three options, equally weighted. The branch predictor has no pattern to learn, no dominant target to bet on. A naive "predict last target" strategy would miss one in three, but modern predictors (TAGE and similar) do slightly better by tracking deeper history. The actual miss rate, measured below, lands at 22%.
 
 `perf stat` confirms this. Here are the hardware counters for the random pattern on GCC 15, alongside monomorphic baselines:
 

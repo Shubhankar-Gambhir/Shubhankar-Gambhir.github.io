@@ -12,7 +12,7 @@ mermaid: true
 
 What if a function pointer could resolve itself on first use, then dispatch at zero cost forever after?
 
-In a [previous post](https://shubhankar-gambhir.github.io/posts/four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp/), I compared four approaches to runtime dispatch in C++: virtual functions, function pointers, `std::variant`, and a template-based technique called decoupled CRTP. The template approach matched raw function pointers in steady-state performance, but I glossed over the interesting part: how it resolves the right implementation at runtime without paying for it on every call.
+In a [previous post]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}), I compared four approaches to runtime dispatch in C++: virtual functions, function pointers, `std::variant`, and a template-based technique called decoupled CRTP. The template approach matched raw function pointers in steady-state performance, but I glossed over the interesting part: how it resolves the right implementation at runtime without paying for it on every call.
 
 This post takes that mechanism apart. We'll walk through the three states of a self-patching function pointer, look at the assembly, measure the resolution cost, and see where this pattern shows up in production (OpenJDK's GC barrier dispatch).
 
@@ -34,7 +34,7 @@ The idea is simple. You have a function pointer that starts pointing at a resolv
 
 A note on terminology: "GC barriers" are bookkeeping hooks a runtime inserts around heap stores (e.g. marking a card dirty), unrelated to CPU memory barriers or `std::atomic_thread_fence`. Different GC algorithms need different hooks -- some none, some post-store only, some pre-and-post. The exact semantics don't matter here; what matters is that the choice is fixed at startup.
 
-Here's the minimal version. The [previous post](https://shubhankar-gambhir.github.io/posts/four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp/) used `printf` for barrier side effects; here we use a `volatile int sink` instead, which gives the compiler a visible side effect without the I/O overhead that would dominate the benchmark.
+Here's the minimal version. The [previous post]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) used `printf` for barrier side effects; here we use a `volatile int sink` instead, which gives the compiler a visible side effect without the I/O overhead that would dominate the benchmark.
 
 ```cpp
 using StoreFn = void(*)(int*, int);
@@ -139,7 +139,7 @@ The "Direct function pointer" column is a plain function pointer assigned once a
 
 The resolution cost is about 43-69 ns and it happens exactly once. That cost is dominated by the indirect branch through the unresolved pointer (a cold branch target the predictor hasn't seen) plus the switch. The variance comes from CPU frequency scaling on the first call. After patching, the branch predictor learns the target and subsequent calls are indistinguishable from a direct function pointer. At 100M iterations, the one-time cost amortizes to well under 0.001 ns per call.
 
-For context, here's how it stacks up against all four approaches from the [previous post](https://shubhankar-gambhir.github.io/posts/four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp/) (G1 barriers, same machine):
+For context, here's how it stacks up against all four approaches from the [previous post]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) (G1 barriers, same machine):
 
 | Approach | ns/call | Dispatch overhead | Notes |
 |---|---|---|---|
@@ -181,7 +181,7 @@ This only works when the resolver is **idempotent**: the same inputs must always
 
 ## Type Safety Without RTTI
 
-In the [previous post](https://shubhankar-gambhir.github.io/posts/four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp/), I flagged a correctness concern with decoupled CRTP: the `static_cast` targets a global singleton whose concrete type is a runtime decision. If the resolver pairs the wrong type with the wrong `AccessBarrier` specialization, you get undefined behavior. How does the resolver know the type?
+In the [previous post]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}), I flagged a correctness concern with decoupled CRTP: the `static_cast` targets a global singleton whose concrete type is a runtime decision. If the resolver pairs the wrong type with the wrong `AccessBarrier` specialization, you get undefined behavior. How does the resolver know the type?
 
 C++ RTTI (`dynamic_cast`) would work, but OpenJDK avoids it entirely. Instead, each `BarrierSet` carries a lightweight type identity based on a bitset:
 
@@ -334,4 +334,4 @@ The production implementation also includes a decorator-based template metaprogr
 
 **Previously:** [Four Ways to Dispatch a Runtime-Selected Strategy in C++]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) -- the head-to-head comparison of virtual, function pointers, `std::variant`, and decoupled CRTP that motivated this deep dive.
 
-**Next:** [Why std::visit Is Slower Than a Vtable]({% post_url 2026-05-19-why-std-visit-may-be-slower-than-a-vtable %}) -- cracking open the assembly and stdlib source to explain why `std::variant` was the slowest approach in Part 1.
+**Next:** [Why std::visit May Be Slower Than a Vtable]({% post_url 2026-05-19-why-std-visit-may-be-slower-than-a-vtable %}) -- cracking open the assembly and stdlib source to explain why `std::variant` was the slowest approach in Part 1.

@@ -65,7 +65,7 @@ There's more happening here. Before the actual dispatch:
 
 3. **An indexed indirect call** (`call *(%r14,%rax,8)`) uses the discriminant to index into a function pointer table at `%r14`. This is `_S_vtable`, a compile-time generated array of function pointers, one per alternative.
 
-The irony: libstdc++ builds **its own vtable** to dispatch through `std::visit`. The variant was supposed to avoid vtables, but the dispatch mechanism creates one anyway. Worse, the two stack stores before the call build a lambda capture struct that the callee has to read back -- overhead that virtual dispatch avoids by passing arguments in registers.
+So libstdc++ builds **its own vtable** to dispatch through `std::visit`. The variant was supposed to avoid vtables, but the dispatch mechanism creates one anyway. Worse, the two stack stores before the call build a lambda capture struct that the callee has to read back -- overhead that virtual dispatch avoids by passing arguments in registers.
 
 But what does the called function look like, and where does `_S_vtable` come from? To answer that, we need to look inside the standard library.
 
@@ -259,7 +259,7 @@ The last row is the one that makes `std::variant` attractive: no heap allocation
 
 For example, if you're pattern-matching a variant of message types once per network packet, the dispatch cost is negligible and variant's exhaustive type checking is the clear win. If you're dispatching a strategy 100 million times per second in a tight loop, every unnecessary stack spill shows up in the profile.
 
-The core irony: `std::variant` is a zero-cost type-safe union. `std::visit` is the dispatch mechanism layered on top. Combining them introduces costs that a plain vtable doesn't have. "Zero-cost abstraction" does not mean "zero-cost composition."
+`std::variant` is a zero-cost type-safe union. `std::visit` is the dispatch mechanism layered on top. Combining them introduces costs that a plain vtable doesn't have. "Zero-cost abstraction" does not mean "zero-cost composition."
 
 ---
 

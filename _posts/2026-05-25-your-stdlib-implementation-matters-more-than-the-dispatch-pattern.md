@@ -178,4 +178,6 @@ The dispatch problem doesn't disappear. It moves from library to language. But t
 
 ## Why the Alignment Flags?
 
-You might have noticed `-falign-functions=64 -falign-loops=64` in the benchmark methodology. Without those flags, virtual dispatch measured anywhere from 2.39 ns to 2.87 ns depending on the GCC version -- not because the compiler generated better code, but because the linker happened to place the called function across a cache line boundary in some builds. A 0.48 ns ghost that looked like a compiler improvement but was pure binary layout noise. In the next post, we'll trace how we found it, why it matters, and what it means for every C++ microbenchmark you've ever read.
+You might have noticed `-falign-functions=64 -falign-loops=64` in the benchmark methodology. Without those flags, virtual dispatch measured anywhere from 2.39 ns to 2.87 ns depending on the GCC version -- not because the compiler generated better code, but because the linker happened to place the called function across a cache line boundary in some builds. A 0.48 ns ghost that looked like a compiler improvement but was pure binary layout noise. A future post will trace how we found it, why it matters, and what it means for every C++ microbenchmark you've ever read.
+
+**Next:** [When Dispatch Mechanism Choice Stops Mattering]({% post_url 2026-06-02-when-dispatch-mechanism-choice-stops-mattering %}) -- what happens when you mix multiple plugin types in the same hot loop, and which dispatch mechanism degrades most gracefully.
