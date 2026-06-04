@@ -109,7 +109,20 @@ Variant on GCC 11 (7.08 ns) is worst in class by a wide margin. It stacks the ol
 
 Every call is a coin flip among three options, equally weighted. The branch predictor has no pattern to learn, no dominant target to bet on. Every third call (on average) is a misprediction, and each misprediction flushes the pipeline.
 
-The numbers are striking. Function pointer went from 2.88 ns (round-robin) to 14.15 ns (random) -- a 4.9x increase. Virtual went from 3.05 to 17.57 -- a 5.8x increase. These are not dispatch overhead numbers anymore; they're branch misprediction numbers. The dispatch mechanism is a rounding error compared to the cost of guessing wrong.
+`perf stat` confirms this. Here are the hardware counters for the random pattern on GCC 15, alongside monomorphic baselines:
+
+| Mechanism | ns/call | Branch miss rate | IPC | Instructions |
+|-----------|---------|-----------------|-----|--------------|
+| Virtual (random) | 17.55 | 22.0% | 0.58 | 10.8B |
+| FnPtr (random) | 14.15 | 22.0% | 0.66 | 9.8B |
+| Variant (random) | 13.95 | 23.5% | 0.66 | 9.6B |
+| CRTP (random) | 14.15 | 22.0% | 0.66 | 9.8B |
+| Virtual (mono) | 2.42 | 0.00% | 3.18 | 1.6B |
+| Variant (mono) | 1.47 | 0.01% | 3.00 | 0.9B |
+
+The branch miss rate is ~22% across all four mechanisms under random dispatch, consistent with a predictor that guesses the most recent target and misses roughly one in three. IPC collapses from 3.0-3.2 (monomorphic) to 0.6 (random). The CPU spends most of its time waiting for mispredicted branches to resolve rather than executing useful work.
+
+The numbers are striking. Function pointer went from 2.88 ns (round-robin) to 14.15 ns (random), a 4.9x increase. Virtual went from 3.05 to 17.57, a 5.8x increase. These are not dispatch overhead numbers anymore; they're branch misprediction numbers. The dispatch mechanism is a rounding error compared to the cost of guessing wrong.
 
 But the relative order still matters.
 
