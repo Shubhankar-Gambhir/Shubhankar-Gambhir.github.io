@@ -3,6 +3,7 @@ title: "When Dispatch Mechanism Choice Stops Mattering"
 date: 2026-06-02
 categories: [C++, Performance]
 tags: [dispatch, virtual, crtp, variant, function-pointer, benchmarks, branch-prediction]
+mermaid: true
 description: >-
   The benchmarks in Parts 1-4 always dispatched to a single plugin type. Here's
   what happens when you mix multiple plugins in the same hot loop -- and which
@@ -73,23 +74,31 @@ Why does the switch outperform a function pointer here? Under monomorphic dispat
 
 On GCC 11, variant is worst in class at 4.65 ns. The old function-pointer-table `std::visit` implementation stacks two overheads: the lambda capture round-trip from [Part 3]({% post_url 2026-05-19-why-std-visit-may-be-slower-than-a-vtable %}) and the new cost of cycling through three different dispatch targets. The vtable-style implementation was already slower for one target; now it's dispatching through three.
 
-Virtual dispatch shows a mild increase from its monomorphic baseline (2.90 to 3.05 on GCC 11), but not much. Here's the hot loop on GCC 15:
+Virtual dispatch shows a mild increase from its monomorphic baseline (2.90 to 3.05 on GCC 11), but not much. The assembly tells us why. Here's the monomorphic hot loop from Part 1 next to the polymorphic version, both GCC 15:
 
 ```nasm
-; Polymorphic virtual dispatch hot loop (GCC 15, -O2 -march=skylake-avx512)
+; MONOMORPHIC (Part 1): one plugin, called 100M times
+  movq   8(%rsp), %rdi          ; load the same BarrierSet* every time
+  movq   (%rdi), %rax           ; vptr (same address every iteration)
+  call   *16(%rax)              ; vtable[2] (same target every iteration)
+  jne    loop                   ; 4 instructions per iteration
+```
+
+```nasm
+; POLYMORPHIC (Part 5): plugin changes every iteration
   mov    %r15,%rax              ; rax = i
   mul    %r12                   ; 128-bit multiply for i % 1'000'000
   ; ... 4 instructions computing remainder ...
   movslq (%rbp,%rax,4),%rax    ; load pat[i % PATTERN_SIZE]
-  mov    (%rbp,%rax,8),%rdi    ; rdi = plugins[pat[...]] (this pointer)
+  mov    (%rbp,%rax,8),%rdi    ; rdi = plugins[pat[...]] (different object each time)
   lea    (%rbx,%rax,4),%rsi    ; rsi = &heap[i % 64]
-  mov    (%rdi),%rax           ; LOAD 1: vptr from selected object
-  call   *0x10(%rax)           ; LOAD 2: vtable[2] -> indirect call
+  mov    (%rdi),%rax           ; vptr (DIFFERENT address each iteration)
+  call   *0x10(%rax)           ; vtable[2] (DIFFERENT target each iteration)
   cmp    $0x5f5e100,%r15
-  jne    loop
+  jne    loop                  ; 11+ instructions per iteration
 ```
 
-Compare that to the monomorphic loop from Part 1, which just loads a single known object pointer from the stack and calls through its vtable. Here, the CPU has to chase two extra indirections before it even reaches the vtable: one into the pattern array, one into the plugins array. The vtable lookup itself is identical, but the branch predictor now sees a different `call *` target every three iterations instead of the same one forever. A period-3 pattern is easy enough to predict, so the cost stays modest.
+The vtable lookup is identical in both cases: load vptr, indirect call through vtable entry. What changes is everything before it. The monomorphic version loads one known pointer from the stack. The polymorphic version chases two extra indirections: one into the pattern array, one into the plugins array. More importantly, the branch predictor now sees a different `call *` target every three iterations instead of the same one. A period-3 pattern is easy enough to predict, so the cost stays modest.
 
 ## Weighted 90/10: The Realistic Workload
 
@@ -188,13 +197,41 @@ Finally, the degradation ratios deserve attention. All mechanisms see 5-7x slowd
 
 ### Updated Decision Framework
 
-Parts 1-4 established: use virtual dispatch as the default, function pointer if you need simplicity, CRTP if you need composability, and variant if you control the compiler and need the expression problem.
+Part 1's [flowchart]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) asked about extensibility and composability. Polymorphic dispatch adds one question at the top:
 
-Polymorphic dispatch adds one more question: **how mixed is your workload?**
+```mermaid
+flowchart TD
+    A{Is your dispatch site<br>monomorphic or polymorphic?} -->|Monomorphic| B["Use Part 1 framework:<br>virtual (default) / fnptr (simple) /<br>CRTP (composable) / variant (GCC 12+)"]
+    A -->|Polymorphic| C{Can you restructure<br>to batch by type?}
+    C -->|Yes| D["Batch, then dispatch<br>monomorphically per batch"]
+    C -->|No| E{Need composability?}
+    E -->|Yes| F["Decoupled CRTP<br>(same perf as fnptr,<br>but composable)"]
+    E -->|No| G["Function pointer or variant (GCC 15+)<br>Mechanism choice matters less here —<br>branch prediction dominates"]
+```
 
-If your hot loop always dispatches to the same type (monomorphic), the Part 1-4 framework holds. If your hot loop mixes types, the mechanism choice becomes less important than the branch prediction profile. The gap between the fastest and slowest mechanism shrinks from 2.5x (monomorphic, GCC 11) to 1.3x (random, GCC 15).
+If your hot loop always dispatches to the same type, the Part 1-4 framework holds and mechanism choice matters. If your loop mixes types, the gap between fastest and slowest shrinks from 2.5x (monomorphic, GCC 11) to 1.3x (random, GCC 15). The branch predictor dominates, and all four mechanisms degrade roughly together.
 
-The practical advice: pick the mechanism that fits your design constraints (extensibility, composability, type safety). For monomorphic workloads, the performance differences are real and measurable. For polymorphic workloads, the branch predictor dominates, and all four mechanisms degrade roughly together. If you're spending your optimization budget on dispatch overhead in a polymorphic hot loop, you're optimizing the wrong thing. Batch calls by type, reduce the total number of dispatches, or restructure to avoid mixing types in the inner loop. Those changes will dwarf any gain from switching mechanisms.
+### When You Can Restructure
+
+The biggest win for polymorphic dispatch isn't picking a faster mechanism. It's reducing how often the branch predictor has to guess. If your loop dispatches to different plugin types in an unpredictable order, consider sorting or grouping by type before dispatching:
+
+```cpp
+// Before: mixed dispatch, branch predictor thrashes
+for (auto& item : items)
+    plugins[item.type]->process(item);
+
+// After: batch by type, each inner loop is monomorphic
+std::sort(items.begin(), items.end(),
+          [](auto& a, auto& b) { return a.type < b.type; });
+for (auto& item : items)
+    plugins[item.type]->process(item);  // same target for long runs
+```
+
+The sort costs O(N log N) once, but the inner loop now hits the same branch target for each batch of consecutive same-type items. For large N with a small number of types, this can recover most of the monomorphic performance. Whether the sort is worth it depends on your N, your type count, and how expensive each `process` call is relative to the sort overhead.
+
+### Limitations
+
+These benchmarks used 3 plugin types. Three is the minimum for meaningful polymorphism, but real systems may have 8, 15, or more. With more types, the branch miss rate climbs higher (the predictor has more targets to track), and the mechanisms may diverge further. The relative ranking should hold, but the absolute numbers will be worse.
 
 ---
 
