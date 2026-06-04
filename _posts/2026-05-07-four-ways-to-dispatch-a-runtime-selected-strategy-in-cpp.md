@@ -241,7 +241,7 @@ call  *_store_func(%rip)     ; indirect call through global
 
 Same dispatch cost as a function pointer, but the target function is composed. Each barrier concern is layered, not duplicated.
 
-One caveat worth noting: conventional CRTP also uses `static_cast`, but it casts `this`, which is always the correct derived type by construction. In decoupled CRTP, the cast targets a global singleton (`_barrier_set`) whose concrete type is a runtime decision. If the resolution switch pairs the wrong type with the wrong `AccessBarrier` instantiation, you get undefined behavior. The resolution logic must get this right. OpenJDK solves this with a lightweight type identity mechanism (`FakeRtti`) that avoids C++ RTTI entirely. The [follow-up post](https://shubhankar-gambhir.github.io/posts/lazy-resolution-resolve-once-dispatch-forever/) covers this along with the full lazy resolution mechanism.
+One caveat worth noting: conventional CRTP also uses `static_cast`, but it casts `this`, which is always the correct derived type by construction. In decoupled CRTP, the cast targets a global singleton (`_barrier_set`) whose concrete type is a runtime decision. If the resolution switch pairs the wrong type with the wrong `AccessBarrier` instantiation, you get undefined behavior. The resolution logic must get this right. OpenJDK solves this with a lightweight type identity mechanism (`FakeRtti`) that avoids C++ RTTI entirely. The [follow-up post]({% post_url 2026-05-12-lazy-resolution-resolve-once-dispatch-forever %}) covers this along with the full lazy resolution mechanism.
 
 ## Comparison
 
