@@ -204,13 +204,15 @@ Part 1's [flowchart]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-sele
 
 ```mermaid
 flowchart TD
-    A{Is your dispatch site<br>monomorphic or polymorphic?} -->|Monomorphic| B["Use Part 1 framework:<br>virtual (default) / fnptr (simple) /<br>CRTP (composable) / variant (GCC 12+)"]
-    A -->|Polymorphic| C{Can you restructure<br>to batch by type?}
-    C -->|Yes| D["Batch, then dispatch<br>monomorphically per batch"]
-    C -->|No| E{Need composability?}
-    E -->|Yes| F["Decoupled CRTP<br>(same perf as fnptr,<br>but composable)"]
-    E -->|No| G["Function pointer or variant (GCC 15+)<br>Mechanism choice matters less here.<br>Branch prediction dominates."]
+    A{Monomorphic or<br>polymorphic?} -->|Monomorphic| B[Part 1 framework]
+    A -->|Polymorphic| C{Can you batch<br>by type?}
+    C -->|Yes| D[Batch, then<br>dispatch per batch]
+    C -->|No| E{Need<br>composability?}
+    E -->|Yes| F[Decoupled CRTP]
+    E -->|No| G[Function pointer<br>or variant]
 ```
+
+Reading the chart: if your call site is monomorphic (same target every time), the [Part 1 decision framework]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) still applies. If it's polymorphic, the first question is whether you can restructure to batch calls by type. If you can, each batch dispatches monomorphically and you recover most of the performance. If you can't, mechanism choice matters less because branch prediction dominates the cost. Pick decoupled CRTP if you need composable layers; otherwise function pointer or variant (GCC 15+) are roughly equivalent.
 
 If your hot loop always dispatches to the same type, the Part 1-4 framework holds and mechanism choice matters. If your loop mixes types, the gap between fastest and slowest shrinks from 2.5x (monomorphic, GCC 11) to 1.3x (random, GCC 15). The branch predictor dominates, and all four mechanisms degrade roughly together.
 
