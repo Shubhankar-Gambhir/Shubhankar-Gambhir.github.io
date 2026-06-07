@@ -32,7 +32,7 @@ All seven versions compiled with the same flags (`-O2 -march=skylake-avx512 -fcf
 
 From GCC 11 to GCC 12, `std::visit` went from the slowest dispatch mechanism to the fastest. The variant numbers dropped from 3.72 ns to 1.44 ns, a 61% reduction. Virtual dispatch stayed at 2.39 ns across all versions, unchanged.
 
-You didn't change your code. You didn't change your algorithm. You changed your standard library.
+Nothing changed but the compiler.
 
 ## What GCC 12 Actually Did
 
@@ -112,7 +112,7 @@ Compare that to the virtual dispatch loop, which is **unchanged** across all sev
 
 Virtual dispatch can't be optimized away the same way. The compiler can't hoist the vtable lookup out of the loop because the object pointer could, in principle, change between iterations (even though it doesn't in this benchmark). The indirect call through the vtable prevents inlining. The two dependent loads are the structural cost of the mechanism. They're the same on every GCC version because there's nothing for the compiler to improve.
 
-This is why the GCC 12 switch optimization inverted the result. It didn't make the indirect call faster. It eliminated the indirect call entirely, replacing library-level dispatch with compiler-level control flow that the optimizer can see through.
+This is why the GCC 12 switch optimization inverted the result. It eliminated the indirect call entirely. The optimizer can see through a switch; it can't see through a function pointer table.
 
 ## The Timeline: How Three Stdlibs Diverged
 
@@ -145,7 +145,7 @@ His [January 2019 results](https://mpark.github.io/programming/2019/01/22/varian
 
 The switch approach was 2-4x faster across the board. This directly influenced libstdc++'s decision to add a switch path in GCC 12. The optimization he proved was necessary in his own library was never backported to libc++, the standard library he originally authored.
 
-Park is also the author of the C++20 `visit<R>()` overload ([P0655](https://wg21.link/P0655)) and C++26's pattern matching proposal ([P2688](https://wg21.link/P2688)), which would give C++ a language-level `inspect` expression that could replace `std::visit` entirely. His influence flows in both directions: library implementer and language designer. The person who built the slow path, proved it was slow, and is now working to make the entire question obsolete.
+Park is also the author of the C++20 `visit<R>()` overload ([P0655](https://wg21.link/P0655)) and C++26's pattern matching proposal ([P2688](https://wg21.link/P2688)), which would give C++ a language-level `inspect` expression that could replace `std::visit` entirely. He's in a unique position: the person who wrote the original dispatch path, proved it was slow in his own library, and is now working on language-level pattern matching that would make `std::visit` obsolete.
 
 ## What's Coming
 
@@ -164,7 +164,7 @@ inspect (bs) {
 
 If adopted, this moves dispatch from a library mechanism (where the optimizer has to reverse-engineer the intent from template metaprogramming) to a language construct (where the compiler knows exactly what's happening from the start). The entire `std::visit` implementation strategy (table vs switch, valueless checks, lambda captures) becomes irrelevant.
 
-The dispatch problem doesn't disappear. It moves from library to language. But that's exactly where it belongs. The compiler has always been better at generating dispatch code than the library.
+The dispatch problem doesn't go away, but moving it from library to language puts it where the compiler can actually help.
 
 ## What This Means for You
 
