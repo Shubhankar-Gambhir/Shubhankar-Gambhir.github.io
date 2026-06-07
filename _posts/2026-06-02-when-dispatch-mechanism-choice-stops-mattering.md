@@ -209,7 +209,7 @@ flowchart TD
     C -->|Yes| D["Batch, then dispatch<br>monomorphically per batch"]
     C -->|No| E{Need composability?}
     E -->|Yes| F["Decoupled CRTP<br>(same perf as fnptr,<br>but composable)"]
-    E -->|No| G["Function pointer or variant (GCC 15+)<br>Mechanism choice matters less here —<br>branch prediction dominates"]
+    E -->|No| G["Function pointer or variant (GCC 15+)<br>Mechanism choice matters less here.<br>Branch prediction dominates."]
 ```
 
 If your hot loop always dispatches to the same type, the Part 1-4 framework holds and mechanism choice matters. If your loop mixes types, the gap between fastest and slowest shrinks from 2.5x (monomorphic, GCC 11) to 1.3x (random, GCC 15). The branch predictor dominates, and all four mechanisms degrade roughly together.
