@@ -10,7 +10,7 @@ description: >-
 mermaid: true
 ---
 
-You're building a system with pluggable strategies. The user picks one at startup - a config flag, a command-line argument - and every call goes through that strategy. The call runs millions of times per second. How do you dispatch it?
+You're building a system with pluggable strategies. The user picks one at startup via a config flag or command-line argument, and every call goes through that strategy millions of times per second. How do you dispatch it?
 
 This post compares four approaches to this problem using the same domain, the same API, and the same three plugins. We'll look at the generated assembly, measure dispatch overhead, and build a decision framework for picking the right one.
 
@@ -166,7 +166,7 @@ Notice that the base class compiles without knowing any concrete GC type. It can
 
 The template machinery generates code for *all* derived types at compile time: `G1BarrierSet::AccessBarrier<>::store`, `SerialBarrierSet::AccessBarrier<>::store`, `EpsilonBarrierSet::AccessBarrier<>::store` all exist in the binary. Lazy resolution then picks the correct one at runtime based on the user's flag, caches a function pointer to it, and every subsequent call goes direct.
 
-The net effect: **we replace the vtable overhead on every call with a one-time initialization cost.** After that first resolution, the dispatch path is identical to a direct function pointer: no vptr load, no vtable lookup, just a single indirect call.
+The net effect: **we replace the vtable overhead on every call with a one-time initialization cost.** After that first resolution, the dispatch path is identical to a direct function pointer.
 
 This is what [OpenJDK](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/gc/shared/barrierSet.hpp) actually uses. Here's what it looks like with real barrier composition, where each GC subclass provides its own `AccessBarrier` that layers one concern on top:
 
@@ -202,7 +202,7 @@ class G1BarrierSet : public CardTableBarrierSet {
 };
 ```
 
-Each GC only adds its own concern, no duplication. The compiler sees through the template chain and generates the same code as if you'd hand-written each barrier combination. The templates are the source-level abstraction; they don't exist at runtime.
+Each GC only adds its own concern, no duplication. The compiler sees through the template chain and generates the same code as if you'd hand-written each barrier combination; the templates don't exist at runtime.
 
 So now we have all the concrete implementations compiled and ready: `G1BarrierSet::AccessBarrier<>::store`, `SerialBarrierSet::AccessBarrier<>::store`, `EpsilonBarrierSet::AccessBarrier<>::store`. The last piece: how do we pick the right one when the user passes a flag at startup?
 
