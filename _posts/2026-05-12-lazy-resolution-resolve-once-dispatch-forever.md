@@ -14,9 +14,9 @@ What if a function pointer could resolve itself on first use, then dispatch at z
 
 In a [previous post]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}), I compared four approaches to runtime dispatch in C++: virtual functions, function pointers, `std::variant`, and a template-based technique called decoupled CRTP. The template approach matched raw function pointers in steady-state performance, but I glossed over the interesting part: how it resolves the right implementation at runtime without paying for it on every call.
 
-This post takes that mechanism apart. We'll walk through the three states of a self-patching function pointer, look at the assembly, measure the resolution cost, and see where this pattern shows up in production (OpenJDK's GC barrier dispatch).
+This post takes that mechanism apart.
 
-## The Problem
+## Every Call Pays a Tax
 
 You have a set of concrete implementations compiled at build time. Templates give you composition and inlining within each implementation. But the user picks which one to use at runtime, via a flag or config file.
 
@@ -28,7 +28,7 @@ The obvious solutions each have a cost on every call:
 
 What if you could decide once and never pay again?
 
-## The Pattern
+## A Self-Patching Function Pointer
 
 The idea is simple. You have a function pointer that starts pointing at a resolver stub. The first call runs the resolver, which figures out the right implementation, patches the pointer to point directly at it, and forwards the call. Every subsequent call goes through the patched pointer, which is now a direct function call. No vtable, no branch, no switch.
 
@@ -83,11 +83,11 @@ flowchart LR
     linkStyle 4 stroke-dasharray: 0
 ```
 
-**State 1: Unresolved.** The pointer holds the address of `store_init`. No runtime choice has been made yet.
+**Unresolved.** The pointer holds the address of `store_init`. No runtime choice has been made yet.
 
-**State 2: Resolving.** The first call to `store()` invokes `store_init`. It reads the runtime configuration, picks the right implementation, writes the function address into `_store_func`, and then tail-calls the resolved function so the first invocation still gets the right answer.
+**Resolving.** The first call to `store()` invokes `store_init`, which reads the runtime configuration, picks the right implementation, writes the function address into `_store_func`, and tail-calls the resolved function so the first invocation still gets the right answer.
 
-**State 3: Resolved.** The pointer now holds the address of the concrete implementation (e.g., `&g1_store`). Every subsequent call is a single indirect call through a global. The resolver is never called again.
+**Resolved.** From this point on, the pointer holds the address of the concrete implementation (e.g., `&g1_store`), and the resolver is never called again.
 
 In concrete terms, the global `_store_func` changes from holding the address of `store_init` (say, `0x401234`) to holding the address of `g1_store` (say, `0x401180`). That single pointer write is the entire cost of resolution.
 
@@ -151,7 +151,7 @@ For context, here's how it stacks up against all four approaches from the [previ
 
 Lazy resolution matches function pointers in steady state, but it also gives you the composition that function pointers lack.
 
-The benchmarks show the pattern works. But correctness matters more than speed. Two things can go wrong: concurrent resolution and type mismatches. The next two sections address each.
+That covers the fast path. Two things can still go wrong: concurrent resolution and type mismatches.
 
 ## Thread Safety
 
@@ -268,14 +268,13 @@ It's overkill when:
 
 ## If This Looks Familiar
 
-If you've worked with ELF binaries, you've already used this pattern. PLT (Procedure Linkage Table) stubs in ELF dynamic linking work the same way: the first call to a dynamically linked function goes through a stub that resolves the symbol and patches the GOT (Global Offset Table) entry. Every subsequent call goes through the patched GOT entry directly. Lazy resolution applies the same principle at the application level, with the resolver under your control instead of the dynamic linker's.
+If you've worked with ELF binaries, you've already used this pattern. PLT (Procedure Linkage Table) stubs in ELF dynamic linking work the same way: the first call to a dynamically linked function goes through a stub that resolves the symbol and patches the GOT (Global Offset Table) entry. Every subsequent call goes through the patched GOT entry directly.
 
 ## Key Takeaways
 
-1. **Lazy resolution trades a one-time startup cost for zero per-call overhead.** After resolution, it's indistinguishable from a direct function pointer.
-2. **The pattern has three moving parts**: a function pointer, a resolver stub, and a patch. The resolver runs once and then gets out of the way.
-3. **Combined with decoupled CRTP**, lazy resolution gives you both composition (template inheritance chains) and zero-overhead dispatch. That's the combination that makes it compelling over raw function pointers.
-4. **OpenJDK has used this pattern since JDK 10** for GC barrier dispatch, with `FakeRtti` providing type-safe downcasts at the cost of a single bitwise AND, no C++ RTTI required.
+After resolution, lazy dispatch is indistinguishable from a direct function pointer. The entire pattern is three moving parts: a function pointer, a resolver stub, and a patch. The resolver runs once and gets out of the way.
+
+What makes this compelling over raw function pointers is the combination with decoupled CRTP: you get both composition (template inheritance chains) and zero-overhead dispatch. OpenJDK has used exactly this since JDK 10 for GC barrier dispatch, with `FakeRtti` providing type-safe downcasts at the cost of a single bitwise AND.
 
 ---
 
@@ -320,7 +319,7 @@ flowchart LR
     C -->|subsequent| G
 ```
 
-The caller (`HeapAccess::store`) never changes. It always calls through `RuntimeDispatch::store`, which always calls through `_store_func`. The only thing that changes is what `_store_func` points to, and that changes exactly once.
+The caller (`HeapAccess::store`) never changes. It always calls through `RuntimeDispatch::store`, which always calls through `_store_func`. What `_store_func` points to changes exactly once.
 
 The production implementation also includes a decorator-based template metaprogramming layer for composing barrier concerns, but that's orthogonal to the lazy resolution pattern itself.
 

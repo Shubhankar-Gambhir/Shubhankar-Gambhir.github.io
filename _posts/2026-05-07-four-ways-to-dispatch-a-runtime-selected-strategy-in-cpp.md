@@ -14,7 +14,7 @@ You're building a system with pluggable strategies. The user picks one at startu
 
 This post compares four approaches to this problem using the same domain, the same API, and the same three plugins. We'll look at the generated assembly, measure dispatch overhead, and build a decision framework for picking the right one.
 
-## The Scenario
+## GC Barriers: One Hot Path, Three Strategies
 
 Consider a garbage collector barrier system (borrowed from OpenJDK). A *barrier* is a small piece of bookkeeping that runs every time you write to the heap. Think of it as a hook that fires around every store, letting the GC track what changed. The user selects a GC algorithm at startup via a flag, and every memory write goes through the selected barrier (`store(addr, value)`), millions of times per second. There are three GC algorithms, each with different barrier logic:
 
