@@ -99,6 +99,7 @@ After resolution, the `store()` function compiles down to:
 ; store() - steady state
 jmp   *_store_func(%rip)       ; tail-call through global function pointer
 ```
+[See it on Compiler Explorer →](https://godbolt.org/z/Y7voz9Ynx)
 
 That's it. One instruction. The pointer lives at a fixed RIP-relative address, so there's no object dereference, no vptr load, no vtable indexing. Just a jump through a global.
 
@@ -109,6 +110,7 @@ Compare that to virtual dispatch:
 movq  (%rdi), %rax             ; LOAD 1: vptr from object
 call  *16(%rax)                ; LOAD 2: vtable entry → indirect call
 ```
+[See it on Compiler Explorer →](https://godbolt.org/z/eYqqGvrK1)
 
 Two dependent loads. The second can't start until the first completes.
 
@@ -137,7 +139,7 @@ All measurements on the same hardware as the previous post (Intel Xeon Gold 6130
 
 The "Direct function pointer" column is a plain function pointer assigned once at startup (no lazy resolution machinery), called from the same global-pointer path. The "Difference" column is the steady-state cost of lazy resolution minus the direct function pointer: effectively zero.
 
-The resolution cost is about 43-69 ns and it happens exactly once. That cost is dominated by the indirect branch through the unresolved pointer (a cold branch target the predictor hasn't seen) plus the switch. The variance comes from CPU frequency scaling on the first call. After patching, the branch predictor learns the target and subsequent calls are indistinguishable from a direct function pointer. At 100M iterations, the one-time cost amortizes to well under 0.001 ns per call.
+The resolution cost is about 43-69 ns and it happens exactly once. That cost is dominated by the indirect branch through the unresolved pointer (a cold branch target the predictor hasn't seen) plus the switch and string comparison in the resolver. After patching, the branch predictor learns the target and subsequent calls are indistinguishable from a direct function pointer. At 100M iterations, the one-time cost amortizes to well under 0.001 ns per call.
 
 For context, here's how it stacks up against all four approaches from the [previous post]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) (G1 barriers, same machine):
 

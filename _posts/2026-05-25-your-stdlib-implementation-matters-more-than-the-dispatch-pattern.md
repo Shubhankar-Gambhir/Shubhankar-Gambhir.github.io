@@ -122,12 +122,13 @@ The switch optimization didn't appear everywhere at once. Each major standard li
 |------|-----------------|----------------|----------|
 | 2017 | Function pointer table only | Function pointer table only | Graduated switches (internal, pre-open-source) |
 | 2019 | + `__never_valueless` | -- | Open-sourced with switches already in place |
-| **2022** | **+ switch for <= 11 alternatives** | -- | -- |
+| 2020 | -- | Switch upstreamed, reverted twice (binary size) | -- |
+| **2022** | **+ switch for <= 11 alternatives** | Still table-only | -- |
 | 2025 | + C++26 member visit | Still table-only | -- |
 
 **libstdc++ (GCC):** Five years of table-only dispatch (GCC 7 through 11), then a single commit in GCC 12 added the switch path with a threshold of 11 alternatives. The threshold hasn't changed since. Earlier versions weren't idle. GCC 8 added compact index types (smaller variant objects), GCC 9 added the [`_Never_valueless_alt`](https://gcc.gnu.org/git/?p=gcc.git;a=blob;f=libstdc%2B%2B-v3/include/std/variant;hb=releases/gcc-9.1.0#l370) optimization that eliminates the valueless check for trivially copyable types. But none of those touched the dispatch path. GCC 12 was the inflection point.
 
-**libc++ (Clang/LLVM):** Has never added a switch fast path. From [LLVM 5 (2017)](https://github.com/llvm/llvm-project/commit/6169a59c51) to [LLVM 20 (2026)](https://github.com/llvm/llvm-project/blob/llvmorg-20.1.0/libcxx/include/variant), the dispatch strategy is unchanged: `__make_fmatrix` builds a nested array of function pointers (`__farray`), and every visit call goes through an indirect call that the optimizer cannot see through. Nine years, no switch optimization. On macOS, where Clang defaults to libc++, this is the dispatch path your code uses unless you explicitly switch to libstdc++.
+**libc++ (Clang/LLVM):** The switch optimization was [upstreamed in August 2020](https://github.com/llvm/llvm-project/commit/a175a96) based on the mpark::variant implementation, then [reverted](https://github.com/llvm/llvm-project/commit/057028e) due to internal failures at Google. It was [re-applied in October 2020](https://github.com/llvm/llvm-project/commit/35d2269), then [reverted again in November 2020](https://github.com/llvm/llvm-project/commit/9c09757) due to substantial binary size increases in non-optimized builds. As of [LLVM 20 (2026)](https://github.com/llvm/llvm-project/blob/llvmorg-20.1.0/libcxx/include/variant), the switch path has not been re-applied: `__make_fmatrix` builds a nested array of function pointers (`__farray`), and every visit call goes through an indirect call that the optimizer cannot see through. On macOS, where Clang defaults to libc++, this is the dispatch path your code uses unless you explicitly switch to libstdc++.
 
 **MSVC STL:** Had graduated switches before the STL was even [open-sourced in September 2019](https://github.com/microsoft/STL). The [visit implementation](https://github.com/microsoft/STL/blob/main/stl/inc/variant) uses `_STL_STAMP` macros to generate switch cases in powers of four: 4 cases, 16, 64, and 256. Beyond 256 total states (the product of all variant sizes for a multi-variant visit), it falls back to a function pointer table. It also flattens all variant indices into a single canonical integer biased by +1, so the valueless state maps to case 0 rather than requiring a separate check. I haven't benchmarked MSVC here (the series focuses on GCC/Linux), but the approach is the most sophisticated of the three from a design perspective.
 
@@ -143,22 +144,27 @@ His [January 2019 results](https://mpark.github.io/programming/2019/01/22/varian
 | 15 | 12,432 | 2,950 | 4.2x |
 | 32 | 10,590 | 2,927 | 3.6x |
 
-The switch approach was 2-4x faster across the board. This directly influenced libstdc++'s decision to add a switch path in GCC 12. The optimization he proved was necessary in his own library was never backported to libc++, the standard library he originally authored.
+The switch approach was 2-4x faster across the board. This directly influenced libstdc++'s decision to add a switch path in GCC 12. The optimization was [upstreamed to libc++ in 2020](https://github.com/llvm/llvm-project/commit/a175a96), but was reverted twice: first due to internal test failures, then due to binary size increases in debug builds. As of 2026, the switch path has not been re-applied to libc++.
 
-Park is also the author of the C++20 `visit<R>()` overload ([P0655](https://wg21.link/P0655)) and C++26's pattern matching proposal ([P2688](https://wg21.link/P2688)), which would give C++ a language-level `inspect` expression that could replace `std::visit` entirely. He's in a unique position: the person who wrote the original dispatch path, proved it was slow in his own library, and is now working on language-level pattern matching that would make `std::visit` obsolete.
+Park is also the author of the C++20 `visit<R>()` overload ([P0655](https://wg21.link/P0655)) and C++26's pattern matching proposal ([P2688](https://wg21.link/P2688)), which proposes an infix `match` expression and `let` binding introducer that could replace `std::visit` entirely. He's in a unique position: the person who wrote the original dispatch path, proved it was slow in his own library, and is now working on language-level pattern matching that would make `std::visit` obsolete.
 
 ## What's Coming
 
 **C++26 member visit** ([P2637](https://wg21.link/P2637)): `v.visit(f)` instead of `std::visit(f, v)`. Using deducing `this`, the implementation gets more information at the call site. The variant knows its own type, which can simplify the dispatch path compared to the free function version where the variant arrives as a forwarding reference.
 
-**Pattern matching** ([P2688](https://wg21.link/P2688)): A language-level `inspect` expression that would let the compiler handle dispatch natively:
+**Pattern matching** ([P2688](https://wg21.link/P2688)): A language-level infix `match` expression with `let` bindings that would let the compiler handle dispatch natively:
 
 ```cpp
-// Hypothetical C++26 pattern matching (P2688)
-inspect (bs) {
-    <EpsilonBS> e => e.store(addr, value);
-    <SerialBS>  s => s.store(addr, value);
-    <G1BS>      g => g.store(addr, value);
+// P2688 pattern matching
+bs match {
+    EpsilonBS: let e => e.store(addr, value);
+    SerialBS:  let s => s.store(addr, value);
+    G1BS:      let g => g.store(addr, value);
+};
+
+// Or with a wildcard, equivalent to std::visit with a generic lambda:
+bs match {
+    auto: let b => b.store(addr, value);
 };
 ```
 
