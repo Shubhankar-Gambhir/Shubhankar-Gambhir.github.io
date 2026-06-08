@@ -14,7 +14,7 @@ Every dispatch benchmark I've seen, including [the ones I wrote]({% post_url 202
 
 The branch predictor learns the target on the first few iterations and predicts it perfectly for the remaining 99,999,990. That's the nicest possible scenario for indirect dispatch, and the least realistic one.
 
-Real systems don't work that way. An audio pipeline routes samples through different effects depending on frequency band. A network stack selects protocol handlers based on packet headers. A rendering engine dispatches draw calls through different material shaders depending on the object. In every case, the hot loop sees a mix of concrete types, and the dispatch mechanism has to cope with targets that change from call to call.
+Real systems don't work that way. An audio pipeline routes samples through different effects depending on frequency band. In a network stack, the protocol handler changes with each packet's headers, and a rendering engine faces the same problem when dispatching draw calls through per-object material shaders. The hot loop sees a mix of concrete types, and the dispatch mechanism has to cope with targets that change from call to call.
 
 This post measures what happens when you take the four mechanisms from [Part 1]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) (virtual dispatch, function pointer, `std::variant + std::visit`, and decoupled CRTP, a compile-time template pattern that [resolves to a cached function pointer]({% post_url 2026-05-12-lazy-resolution-resolve-once-dispatch-forever %}) at runtime) and feed them polymorphic workloads: round-robin, weighted random, and uniform random. The results change the decision framework.
 
@@ -68,9 +68,9 @@ Two things jump out immediately.
 
 First, **CRTP and function pointer are identical**. Not close. Identical. 2.87 vs 2.88 on GCC 11, 2.88 vs 2.88 on GCC 15. This is the design prediction from Part 2 playing out: after lazy resolution, decoupled CRTP collapses to a function pointer array. Under monomorphic dispatch, the two mechanisms looked similar but could have diverged due to code layout or alignment effects. Under polymorphic dispatch, they converge exactly. The function pointer *is* the dispatch mechanism in both cases; CRTP just gave you composability on top.
 
-Second, **variant on GCC 15 is the fastest indirect mechanism at 2.24 ns**. That's faster than function pointer (2.88 ns) and faster than virtual (3.05 ns). The switch-based `std::visit` from GCC 12+ generates a `switch` on the variant index, which the compiler lowers to a jump table. For a repeating three-element pattern, the CPU's indirect branch predictor handles this jump table better than a function pointer call: the jump target is predictable, and the switch structure gives the optimizer more to work with than an opaque `call`.
+Second, **variant on GCC 15 is the fastest indirect mechanism at 2.24 ns**. That's faster than function pointer (2.88 ns) and faster than virtual (3.05 ns). The switch-based `std::visit` from GCC 12+ lowers to a jump table on the variant index, and the jump table targets are direct jumps within the same function, giving the optimizer more latitude than an opaque indirect `call` through a function pointer.
 
-Why does the switch outperform a function pointer here? Under monomorphic dispatch in Part 4, the compiler hoisted the switch out of the loop entirely: one check, then a tight loop body with no dispatch at all. Under round-robin, the switch has to execute on every iteration (the variant index changes), but the jump table targets are still direct jumps within the same function. A function pointer call is an indirect `call` instruction: push return address, jump to an unknown location. A jump table hit is an indirect `jmp` within a known function. The branch predictor treats these differently, and for a short repeating pattern, the jump table wins.
+Under monomorphic dispatch in Part 4, the compiler hoisted the switch out of the loop entirely: one check, then a tight loop body with no dispatch at all. Under round-robin, the switch executes on every iteration (the variant index changes), but it retains the structural advantage: a jump table `jmp` stays within the function, while a function pointer `call` pushes a return address and jumps to an external function. The 0.64 ns gap (2.88 vs 2.24) is consistent with saving that per-call overhead across 100M iterations.
 
 On GCC 11, variant is worst in class at 4.65 ns. The old function-pointer-table `std::visit` implementation stacks two overheads: the lambda capture round-trip from [Part 3]({% post_url 2026-05-19-why-std-visit-may-be-slower-than-a-vtable %}) and the new cost of cycling through three different dispatch targets. The vtable-style implementation was already slower for one target; now it's dispatching through three.
 
@@ -100,6 +100,7 @@ Virtual dispatch shows a mild increase from its monomorphic baseline (2.90 to 3.
   cmp    $0x5f5e100,%r15
   jne    loop                  ; 11+ instructions per iteration
 ```
+[Benchmark source →](https://github.com/Shubhankar-Gambhir/cpp-dispatch-benchmark)
 
 The vtable lookup is identical in both cases: load vptr, indirect call through vtable entry. What changes is everything before it. The monomorphic version loads one known pointer from the stack. The polymorphic version chases two extra indirections: one into the pattern array, one into the plugins array. More importantly, the branch predictor now sees a different `call *` target every three iterations instead of the same one. A period-3 pattern is easy enough to predict, so the cost stays modest.
 
@@ -116,7 +117,7 @@ This is the workload that most resembles production. 90% of calls hit the heavie
 
 The numbers are significantly higher across the board. Virtual dispatch nearly doubled from its round-robin number (3.05 to 5.58 on GCC 15). Function pointer and CRTP jumped from 2.88 to 4.63. The misprediction penalty is real: when the predictor guesses the dominant type (which is correct 90% of the time), the 10% minority calls cause pipeline flushes that cost 15-20 cycles each on Skylake.
 
-To put that in perspective: even at a 10% misprediction rate, those flushes dominate the total cost. On Skylake, a correctly predicted indirect call takes on the order of 1 ns, while a mispredicted one costs roughly 15-20 cycles ([Agner Fog's microarchitecture guide](https://www.agner.org/optimize/microarchitecture.pdf), Table 3.16). At 2.1 GHz, that's 7-10 ns per mispredict. So 90% of calls are cheap and 10% are expensive, and the expensive ones dominate the average, which is roughly the gap between the monomorphic and weighted numbers.
+To put that in perspective: even at a 10% misprediction rate, those flushes dominate the total cost. On Skylake, a correctly predicted indirect call takes on the order of 1 ns, while a mispredicted one costs roughly 15-20 cycles ([Agner Fog's microarchitecture guide](https://www.agner.org/optimize/microarchitecture.pdf), Skylake chapter). At 2.1 GHz, that's 7-10 ns per mispredict. So 90% of calls are cheap and 10% are expensive, and the expensive ones dominate the average, which is roughly the gap between the monomorphic and weighted numbers.
 
 CRTP and function pointer remain locked together: 4.65 vs 4.67 on GCC 11, 4.63 vs 4.63 on GCC 15. At this point, treating them as distinct mechanisms is misleading. They *are* the same mechanism. CRTP is the source-level abstraction; function pointer is the runtime reality.
 
@@ -168,7 +169,7 @@ Misprediction amplifies these differences. When the CPU discards speculative wor
 
 ## The Full Picture
 
-Here are all the numbers in one place. All values in ns/call.
+The tables above presented each workload separately to support the per-section analysis. Here they are consolidated. All values in ns/call.
 
 **GCC 11.4.0:**
 
@@ -209,7 +210,7 @@ flowchart TD
     C -->|Yes| D[Batch, then<br>dispatch per batch]
     C -->|No| E{Need<br>composability?}
     E -->|Yes| F[Decoupled CRTP]
-    E -->|No| G[Function pointer<br>or variant]
+    E -->|No| G["Function pointer<br>or variant (GCC 15+)"]
 ```
 
 Reading the chart: if your call site is monomorphic (same target every time), the [Part 1 decision framework]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) still applies. If it's polymorphic, the first question is whether you can restructure to batch calls by type. If you can, each batch dispatches monomorphically and you recover most of the performance. If you can't, mechanism choice matters less because branch prediction dominates the cost. Pick decoupled CRTP if you need composable layers; otherwise function pointer or variant (GCC 15+) are roughly equivalent.
@@ -236,7 +237,17 @@ The sort costs O(N log N) once, but the inner loop now hits the same branch targ
 
 ### Limitations
 
-These benchmarks used 3 plugin types. Three is the minimum for meaningful polymorphism, but real systems may have 8, 15, or more. With more types, the branch miss rate climbs higher (the predictor has more targets to track), and the mechanisms may diverge further. The relative ranking should hold, but the absolute numbers will be worse.
+These benchmarks used 3 plugin types. Three is the minimum for meaningful polymorphism, but real systems may have 8, 15, or more. With more types, the branch miss rate climbs higher (the predictor has more targets to track), and the mechanisms may diverge further. The relative ranking is likely to hold (the structural differences between mechanisms don't change with type count), but the absolute numbers will be worse, and the gap between mechanisms may widen as BTB pressure increases.
+
+## What This Means for You
+
+1. **If your hot loop is monomorphic, mechanism choice matters.** The Part 1-4 analysis holds, and variant (GCC 15+) can be the fastest option.
+
+2. **If your hot loop is polymorphic, the branch predictor dominates.** The gap between fastest and slowest shrinks from 2.5x (monomorphic) to 1.3x (random). Spend your optimization budget on reducing type mixing, not picking a faster dispatch mechanism.
+
+3. **CRTP and function pointer are the same mechanism at runtime.** Under every workload and both compilers, they produce identical numbers. CRTP buys composability; if you don't need it, a raw function pointer is simpler.
+
+4. **Sort by type before dispatching.** If you can batch calls by concrete type, each batch dispatches monomorphically and you recover most of the performance. This is almost always a bigger win than changing the dispatch mechanism.
 
 ---
 

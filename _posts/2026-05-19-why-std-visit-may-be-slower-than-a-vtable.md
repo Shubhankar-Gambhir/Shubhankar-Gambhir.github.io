@@ -195,7 +195,9 @@ The key difference: libc++ **always** uses this function pointer table approach,
 
 Why does this matter? The compiler **cannot inline through function pointer calls** as effectively as through a `switch` statement. When the compiler sees `switch (index) { case 0: ...; case 1: ...; }`, it can inline the visitor body directly into each case. When it sees `table[index](visitor, variant)`, the call target is opaque. It's just an address.
 
-The practical difference: libstdc++ at least has a path to optimization (GCC 12 added a switch for small variants, as we'll see in [Part 4]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %})). libc++ has no such path. Every `std::visit` call, regardless of variant size, goes through an indirect call that the optimizer cannot see through. On macOS, where Clang defaults to libc++, this is the dispatch path your variant code uses unless you explicitly link against libstdc++.
+The practical difference: libstdc++ at least has a path to optimization (GCC 12 added a switch for small variants, as we'll see in [Part 4]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %})). libc++ has no such path in its headers. Every `std::visit` call, regardless of variant size, goes through an indirect call that the optimizer cannot see through. On macOS, where Clang defaults to libc++, this is the dispatch path your variant code uses unless you explicitly link against libstdc++.
+
+**Update (June 2026):** LLVM has taken a different approach. Instead of adding a switch path to libc++'s headers (which was [tried and reverted twice](https://github.com/llvm/llvm-project/commit/9c09757) due to debug build binary size), LLVM now has a mid-level optimizer pass called [JumpTableToSwitch](https://github.com/llvm/llvm-project/commit/a80d2a719374) that recognizes the function-pointer-table pattern and transforms it to a switch automatically. The pass was enabled by default in May 2026 and will ship in a future Clang release. This solves the problem at the optimizer level: libc++ keeps its compact headers and small debug builds, and the optimizer recovers the switch form at `-O2`. Thanks to Reid Kleckner for pointing this out.
 
 This distinction is significant enough that Michael Park (who [wrote libc++'s variant implementation](https://github.com/llvm/llvm-project/commit/6169a59c51) in 2016) later demonstrated in his standalone [mpark::variant](https://github.com/mpark/variant) library that a switch-based approach is 2-4x faster than the table approach for small variants. libstdc++ added a switch optimization in GCC 12. libc++ never did.
 
@@ -260,6 +262,10 @@ The last row is the one that makes `std::variant` attractive: no heap allocation
 For example, if you're pattern-matching a variant of message types once per network packet, the dispatch cost is negligible and variant's exhaustive type checking is the clear win. If you're dispatching a strategy 100 million times per second in a tight loop, every unnecessary stack spill shows up in the profile.
 
 `std::variant` is a zero-cost type-safe union. `std::visit` is the dispatch mechanism layered on top. Combining them introduces costs that a plain vtable doesn't have. "Zero-cost abstraction" does not mean "zero-cost composition."
+
+Two caveats. First, this analysis is specific to GCC 11's libstdc++. [Part 4]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %}) shows that GCC 12 added a switch-based fast path that eliminates the function pointer table entirely, dropping variant from 3.72 ns to 1.44 ns and making it faster than virtual dispatch. The overhead traced above is a solved problem on modern compilers.
+
+Second, every benchmark here dispatches to a single plugin type for 100M iterations. The branch predictor learns the target perfectly. [Part 5]({% post_url 2026-06-02-when-dispatch-mechanism-choice-stops-mattering %}) measures what happens when you mix plugin types per iteration, and the branch predictor, not the dispatch mechanism, becomes the dominant cost.
 
 ---
 

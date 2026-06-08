@@ -151,7 +151,7 @@ For context, here's how it stacks up against all four approaches from the [previ
 | Virtual dispatch | 2.87 ns | +1.43 ns | Two dependent loads (vptr + vtable entry) |
 | `std::variant` + `std::visit` | 3.72 ns | +2.28 ns | Closed type set, stdlib-dependent overhead |
 
-Lazy resolution matches function pointers in steady state, but it also gives you the composition that function pointers lack.
+Lazy resolution matches function pointers in steady state, but it also gives you the composition that function pointers lack. (Note: the variant number above reflects GCC 11's function-pointer-table `std::visit`. [Part 4]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %}) shows that GCC 12 added a switch optimization that drops variant to 1.44 ns, making it the fastest mechanism on newer compilers.)
 
 That covers the fast path. Two things can still go wrong: concurrent resolution and type mismatches.
 
@@ -267,6 +267,7 @@ It's overkill when:
 
 - **You need per-object dispatch.** Lazy resolution works on globals/singletons. If different objects need different strategies, virtual dispatch is the right tool.
 - **The strategy set changes at runtime.** Plugin systems where users can load new strategies dynamically need a different pattern.
+- **Your call site is polymorphic.** If the hot loop dispatches to different plugin types per iteration, lazy resolution's "resolve once" advantage disappears: you end up with a function pointer array, identical to the function pointer approach. [Part 5]({% post_url 2026-06-02-when-dispatch-mechanism-choice-stops-mattering %}) measures this and confirms that CRTP and function pointer produce identical numbers under every polymorphic workload.
 
 ## If This Looks Familiar
 

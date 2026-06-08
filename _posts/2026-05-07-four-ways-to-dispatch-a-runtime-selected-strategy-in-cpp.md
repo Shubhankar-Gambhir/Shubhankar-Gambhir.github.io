@@ -261,7 +261,7 @@ All measurements on an Intel Xeon Gold 6130, 100M iterations with G1 barriers, c
 
 CRTP and function pointer tie at +0.9 ns, but CRTP is the only approach where barrier concerns compose instead of being duplicated. That composability comes at a price: 5x more code, the largest binary (+67%), and the steepest learning curve.
 
-Variant is the slowest despite having no vtable. The overhead comes from libstdc++'s `std::visit`, which builds a lambda capture struct and indexes into its own function pointer table on every call. Adding a new type means modifying the variant typedef everywhere.
+Variant is the slowest despite having no vtable. The overhead comes from libstdc++'s `std::visit`, which builds a lambda capture struct and indexes into its own function pointer table on every call ([Part 3]({% post_url 2026-05-19-why-std-visit-may-be-slower-than-a-vtable %}) traces exactly where those cycles go). This result is specific to GCC 11; [Part 4]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %}) shows that GCC 12 added a switch optimization that drops variant from 3.72 ns to 1.44 ns, making it the *fastest* mechanism. Adding a new type means modifying the variant typedef everywhere.
 
 Virtual dispatch sits in the middle on almost every dimension. Most debuggable, easiest to understand, and the ~0.5 ns extra over a function pointer is rarely the bottleneck. For most codebases, this is the right default.
 
@@ -291,6 +291,8 @@ flowchart TD
 2. **`std::variant + std::visit` is NOT always faster than virtual**. Check your stdlib implementation.
 3. **The right question isn't "which is fastest?"** It's: do I need to extend with new types or new operations? Do I need composable layers? Then pick the simplest approach that satisfies those.
 
+4. **These benchmarks are monomorphic.** Every measurement above dispatches to a single plugin type for the entire run. The branch predictor sees the same target on every iteration and predicts perfectly. If your hot loop dispatches to different types per iteration, the ranking changes and the branch predictor becomes the dominant cost. [Part 5]({% post_url 2026-06-02-when-dispatch-mechanism-choice-stops-mattering %}) measures three polymorphic workloads and updates the decision framework.
+
 ---
 
 *All four implementations, benchmarks, and build instructions are in the [companion repository](https://github.com/Shubhankar-Gambhir/cpp-dispatch-benchmark). Measured on Intel Xeon Gold 6130, GCC 11, libstdc++, `-O2 -march=skylake-avx512`.*
@@ -304,3 +306,5 @@ flowchart TD
 **Part 3:** [Why std::visit May Be Slower Than a Vtable]({% post_url 2026-05-19-why-std-visit-may-be-slower-than-a-vtable %}). Cracking open the assembly and stdlib source to explain why `std::variant` was the slowest approach above.
 
 **Part 4:** [Your Stdlib Implementation Matters More Than the Dispatch Pattern]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %}). Same code, same hardware, different compiler: variant goes from 28% slower to 50% faster than virtual.
+
+**Part 5:** [When Dispatch Mechanism Choice Stops Mattering]({% post_url 2026-06-02-when-dispatch-mechanism-choice-stops-mattering %}). What happens when you mix multiple plugin types in the same hot loop, and which dispatch mechanism degrades most gracefully.

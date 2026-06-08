@@ -152,23 +152,7 @@ Park is also the author of the C++20 `visit<R>()` overload ([P0655](https://wg21
 
 **C++26 member visit** ([P2637](https://wg21.link/P2637)): `v.visit(f)` instead of `std::visit(f, v)`. Using deducing `this`, the implementation gets more information at the call site. The variant knows its own type, which can simplify the dispatch path compared to the free function version where the variant arrives as a forwarding reference.
 
-**Pattern matching** ([P2688](https://wg21.link/P2688)): A language-level infix `match` expression with `let` bindings that would let the compiler handle dispatch natively:
-
-```cpp
-// P2688 pattern matching
-bs match {
-    EpsilonBS: let e => e.store(addr, value);
-    SerialBS:  let s => s.store(addr, value);
-    G1BS:      let g => g.store(addr, value);
-};
-
-// Or with a wildcard, equivalent to std::visit with a generic lambda:
-bs match {
-    auto: let b => b.store(addr, value);
-};
-```
-
-If adopted, this moves dispatch from a library mechanism (where the optimizer has to reverse-engineer the intent from template metaprogramming) to a language construct (where the compiler knows exactly what's happening from the start). The entire `std::visit` implementation strategy (table vs switch, valueless checks, lambda captures) becomes irrelevant.
+**Pattern matching** ([P2688](https://wg21.link/P2688)): An infix `match` expression with `let` bindings that would move dispatch from a library mechanism (where the optimizer has to reverse-engineer the intent from template metaprogramming) to a language construct (where the compiler knows exactly what's happening from the start). The entire `std::visit` implementation strategy (table vs switch, valueless checks, lambda captures) becomes irrelevant.
 
 The dispatch problem doesn't go away, but moving it from library to language puts it where the compiler can actually help.
 
@@ -182,6 +166,8 @@ The dispatch problem doesn't go away, but moving it from library to language put
 
 4. **For hot-path dispatch, measure your toolchain.** If you can't upgrade your compiler and you're dispatching millions of times per second, consider the [lazy resolution pattern]({% post_url 2026-05-12-lazy-resolution-resolve-once-dispatch-forever %}) from Part 2, which is compiler-independent and matches raw function pointer performance on any version.
 
+5. **These results assume monomorphic call sites.** Every benchmark in Parts 1 through 4 dispatches to a single plugin type for the entire run. The branch predictor sees the same indirect call target every iteration and predicts perfectly. In real systems, you often dispatch to different types in the same loop. [Part 5]({% post_url 2026-06-02-when-dispatch-mechanism-choice-stops-mattering %}) measures what happens when you mix plugin types per iteration, and the ranking shifts.
+
 ---
 
 *All benchmarks and source code are in the [companion repository](https://github.com/Shubhankar-Gambhir/cpp-dispatch-benchmark). Measured on Intel Xeon Gold 6130, `-O2 -march=skylake-avx512 -fcf-protection -falign-functions=64 -falign-loops=64`, pinned to a single core with `taskset -c 0`. GCC versions: 9.5.0, 10.4.0, 11.4.0, 12.4.0, 13.4.0, 14.3.0 (all via conda-forge); 15.2 conda-forge binary, statically linked (Xeon host glibc 2.28 predates GCC 15's glibc 2.34 requirement). Best of 3 runs reported. Stdlib source: [libstdc++ 12.4 `<variant>`](https://gcc.gnu.org/git/?p=gcc.git;a=blob;f=libstdc%2B%2B-v3/include/std/variant;hb=releases/gcc-12.4.0).*
@@ -194,6 +180,6 @@ The dispatch problem doesn't go away, but moving it from library to language put
 
 ## Why the Alignment Flags?
 
-You might have noticed `-falign-functions=64 -falign-loops=64` in the benchmark methodology. Without those flags, virtual dispatch measured anywhere from 2.39 ns to 2.87 ns depending on the GCC version, not because the compiler generated better code, but because the linker happened to place the called function across a cache line boundary in some builds. A 0.48 ns ghost that looked like a compiler improvement but was pure binary layout noise. A future post will trace how we found it, why it matters, and what it means for every C++ microbenchmark you've ever read.
+You might have noticed `-falign-functions=64 -falign-loops=64` in the benchmark methodology. Without those flags, virtual dispatch measured anywhere from 2.39 ns to 2.87 ns depending on the GCC version, not because the compiler generated better code, but because the linker happened to place the called function across a cache line boundary in some builds. A 0.48 ns ghost that looked like a compiler improvement but was pure binary layout noise. I plan to write a separate post tracing how we found it, why it matters, and what it means for every C++ microbenchmark you've ever read.
 
 **Next:** [When Dispatch Mechanism Choice Stops Mattering]({% post_url 2026-06-02-when-dispatch-mechanism-choice-stops-mattering %}). What happens when you mix multiple plugin types in the same hot loop, and which dispatch mechanism degrades most gracefully.
