@@ -3,7 +3,6 @@ title: "The 0.48 ns Ghost: How Code Alignment Broke Our Dispatch Benchmarks"
 date: 2026-06-10
 categories: [C++, Performance]
 tags: [dispatch, alignment, benchmarks, perf-stat, cache-line, dsb, microbenchmark]
-mermaid: true
 description: >-
   Virtual dispatch measured 2.87 ns on GCC 11 and 2.39 ns on GCC 13. Same source,
   same flags, same hardware. The investigation that traced a phantom 20% swing
@@ -17,7 +16,7 @@ This is that investigation.
 
 ## Reproducing the Ghost
 
-The first step was to run a systematic matrix: four dispatch mechanisms, three GCC versions, three alignment settings. Twelve combinations, each measured best-of-3 on the same Xeon Gold 6130 core.
+The first step was a systematic matrix: four dispatch mechanisms across three GCC versions and three alignment settings, for thirty-six combinations in total. Each cell was measured best-of-3 on a single Xeon Gold 6130 core.
 
 | Mechanism | GCC | ns/call |
 |-----------|-----|---------|
@@ -57,7 +56,11 @@ This is the smoking gun before we even touch perf counters.
 
 ## Finding the Culprit
 
-So I ran `perf stat` with Intel PMU events on three specimens: gcc13 with default alignment (the ghost), gcc13 with align64 (the fix), and gcc11 with default alignment (for comparison).
+The clearest swings in the matrix are function pointer and CRTP dispatch on GCC 13: 3.35 ns at default alignment, 2.39 ns with `-falign-functions=64`. A 0.96 ns difference on functions that compile to a handful of instructions each. When the hot path is that small, a misaligned entry forces the front-end to fetch and decode across boundaries on every single call, and there's no instruction footprint to amortize the penalty over.
+
+Virtual dispatch shows a smaller version of the same effect: 2.87 ns default vs. 2.40 ns aligned, a 0.47 ns gap. Its function body is large enough that the entry-point misalignment matters less proportionally. That makes virtual a less dramatic demonstration, but it's the case I had time to instrument with `perf stat`, so the rest of this section is about the subtler half of the data.
+
+I ran `perf stat` with Intel PMU events on three specimens: gcc13 with default alignment (the ghost), gcc13 with align64 (the fix), and gcc11 with default alignment (for comparison).
 
 | Specimen | DSB uops | MITE uops | DSB miss | L1i miss | ITLB walk | ns/call |
 |----------|----------|-----------|----------|----------|-----------|---------|
@@ -65,25 +68,21 @@ So I ran `perf stat` with Intel PMU events on three specimens: gcc13 with defaul
 | virtual gcc13 align64 | 1,826M | 2.6M | 157K | 120K | 630 | 2.41 |
 | virtual gcc11 default | 1,824M | 2.6M | 175K | 132K | 586 | 2.89 |
 
-The data is anticlimactic, at least for virtual dispatch. The DSB (decoded stream buffer, Intel's micro-op cache) delivers roughly the same number of uops in all three cases. The MITE (the legacy decoder) handles 2.6M uops across the board. DSB misses are in the noise. The counters do not show a dramatic front-end delivery bottleneck.
+The DSB (decoded stream buffer, Intel's micro-op cache; see the Intel 64 and IA-32 Architectures Optimization Reference Manual, Section 3.4.2.5) delivers roughly the same number of uops in all three cases. The MITE legacy decoder handles 2.6M uops across the board. DSB miss counts cluster around 155-175K: the slow GCC 11 specimen has about 20K more DSB misses than the GCC 13 specimens, a 13% increase that correlates with its slower wallclock time but isn't large enough on its own to explain the gap.
 
-The L1i miss count is the most interesting column. The aligned build has 120K instruction cache misses versus 138K for the default build, about a 13% reduction. That correlates directionally with the timing improvement, but 18K fewer L1i misses across 100M iterations is modest.
+The L1i miss column tells a similar story. The aligned build has 120K instruction cache misses versus 138K for the default build, about a 13% reduction. The GCC 11 specimen sits in the middle at 132K. No single counter dominates; the slowdown is distributed across several front-end stages.
 
-For virtual dispatch specifically, the function body is large enough that it spans multiple DSB windows even when aligned. The front-end can handle it either way. The alignment effect is there, but it's subtle.
-
-The function pointer and CRTP cases tell the real story. Those functions are tiny: just a few instructions. When a tiny function starts in the middle of a cache line, the penalty is proportionally larger because the function has less instruction footprint to amortize the misalignment over. That's why fnptr and CRTP show 0.96 ns swings while virtual shows 0.47 ns. The mechanism is the same; the magnitude depends on function size.
-
-The perf counters don't give us a dramatic graph to point at.
+That distribution is itself useful information. When `perf stat` doesn't surface a single dominant counter, the slowdown is the sum of small front-end costs (extra fetch cycles, DSB fragmentation, occasional decoder fallback) rather than one bottleneck. The fix is the same regardless of which stage gets the largest share of the blame.
 
 ## What's Actually Happening
 
 ### Cache Line Straddling
 
-x86 processors fetch instructions in 64-byte cache lines. When a function entry point sits near the end of a cache line, the processor needs two fetches to fill the first window of instructions: one for the tail end of the current line, one for the beginning of the next. At 100M iterations, even a single extra L1i fetch at the function entry adds up. The address table above shows `G1BS::store` at offset 32 in the default build: it's right at the midpoint, so roughly half the function's prologue lives in the next cache line.
+x86 processors load instructions from L1i in 64-byte cache lines, but Skylake's instruction fetch unit reads at most 16 aligned bytes per cycle from the line. When a function entry sits near the end of a cache line, the IFU may need to issue two fetch cycles to gather the first 32 bytes of the function: one for the bytes still in the current line, one for the start of the next. The cache line load itself is usually warm, but the extra fetch cycle is real and it compounds with the DSB hazard described below. The address table above shows `G1BS::store` at offset 32 in the default build, sitting right at the midpoint, so roughly half the function's prologue lives in the next cache line.
 
 ### DSB Window Misalignment
 
-Intel's decoded stream buffer caches decoded micro-ops in 32-byte aligned windows. Each window holds up to 6 uops from a contiguous 32-byte region of instruction bytes. A function starting at, say, offset 0x18 within a 32-byte window has only 8 bytes of usable window space before the boundary. The DSB caches the decoded uops for those 8 bytes in one window entry and the rest in the next. If the DSB can't serve a window (because it's fragmented or evicted), the processor falls back to the MITE legacy decoder, which delivers roughly 4 uops per cycle instead of up to 6.
+Intel's decoded stream buffer caches decoded micro-ops in 32-byte aligned windows (Intel Optimization Reference Manual, Section 3.4.2.5). Each window holds up to 6 uops from a contiguous 32-byte region of instruction bytes. A function starting at, say, offset 0x18 within a 32-byte window has only 8 bytes of usable window space before the boundary. The DSB caches the decoded uops for those 8 bytes in one window entry and the rest in the next. If the DSB can't serve a window (because it's fragmented or evicted), the processor falls back to the MITE legacy decoder, which delivers roughly 4 uops per cycle instead of up to 6.
 
 For the function pointer benchmark, `store()` is small enough that the entire hot path fits in one or two DSB windows when aligned, but straddles three when misaligned. The function is so short that the misalignment penalty has almost no instruction footprint to amortize over. That's why fnptr and CRTP show a 0.96 ns swing while virtual (with its larger function body) shows only 0.47 ns.
 
@@ -91,11 +90,25 @@ For the function pointer benchmark, `store()` is small enough that the entire ho
 
 The virtual dispatch ghost between GCC 11 (2.87 ns) and GCC 13 (2.39 ns) is particularly tricky because it's two effects stacked on top of each other.
 
-GCC 13 hoists the vtable pointer into register `r12` before entering the loop. GCC 11 reloads the object pointer from the stack (`mov 0x8(%rsp),%rdi`) on every iteration. That's a real codegen improvement: one fewer memory access per call.
+GCC 13 keeps the object pointer in a callee-saved register across the loop. GCC 11 reloads it from the stack on every iteration. From `objdump -d` of the hot loop:
 
-But the alignment data shows that the codegen improvement accounts for almost nothing. With `-falign-functions=64`, GCC 11 measures 2.40 ns and GCC 13 measures 2.39 ns. The difference is 0.01 ns, which is within measurement noise. The remaining 0.47 ns gap (2.87 minus 2.40) is pure alignment artifact.
+```nasm
+; GCC 11 (per-iteration reload)
+  mov    0x8(%rsp),%rdi          ; reload object pointer from stack
+  mov    (%rdi),%rax              ; load vtable pointer
+  callq  *(%rax)                  ; indirect call
 
-Without controlling alignment, the codegen improvement and the alignment artifact look like one big 0.48 ns win. You'd conclude "GCC 13 generates better virtual dispatch code" and be wrong, or at least only 2% right. The alignment fix contributes 98% of the measured improvement. You need the controlled experiment to separate the two.
+; GCC 13 (object pointer hoisted)
+  mov    %r12,%rdi                ; object pointer in callee-saved r12
+  mov    (%rdi),%rax              ; load vtable pointer
+  callq  *(%rax)                  ; indirect call
+```
+
+That's a real codegen improvement: one fewer memory access per call. But the alignment data shows the codegen improvement accounts for almost nothing of the measured timing gap. With `-falign-functions=64`, GCC 11 measures 2.40 ns and GCC 13 measures 2.39 ns. The 0.01 ns difference is within measurement noise. The remaining 0.47 ns gap (2.87 minus 2.40) is pure alignment artifact.
+
+Without controlling alignment, the codegen improvement and the alignment artifact look like one big 0.48 ns win. You'd conclude "GCC 13 generates better virtual dispatch code" and be wrong, or at least only 2% right. The alignment fix contributes 98% of the measured improvement. The controlled experiment is what separates the two.
+
+The full source for these benchmarks is in the [companion repo](https://github.com/Shubhankar-Gambhir/cpp-dispatch-benchmark); paste `bench_virtual.cpp` and the barrier headers into Compiler Explorer to inspect the assembly for any GCC version.
 
 Here's the visual version of good versus bad function placement:
 
@@ -155,7 +168,7 @@ Why 64 instead of 32? Because 32-byte alignment fixes DSB window issues but does
 
 ### What the Padding Looks Like
 
-With `-falign-functions=64`, the compiler inserts a NOP sled before each function entry:
+With `-falign-functions=64`, the compiler inserts a NOP sled before each function entry. From `objdump -d` on the aligned binary:
 
 ```nasm
 ; ... end of previous function ...
@@ -193,7 +206,7 @@ For microbenchmarks, use `-falign-functions=64 -falign-loops=64` globally. The b
 
 In a measurement range of 1-3 ns per call, a 0.48-0.96 ns alignment artifact is 16-50% of the measured signal. That's not noise you can average away. It's a systematic error that biases every run of a particular binary in the same direction. Rebuild with a different compiler version, link order, or even an extra `#include`, and the function lands at a different address. Your "regression" might just be a cache line boundary that moved.
 
-If you publish or consume C++ microbenchmarks, report the alignment flags. Every benchmark methodology section should list them alongside the optimization level, target architecture, and iteration count. If you don't see `-falign-functions` and `-falign-loops` in someone else's methodology section, treat sub-nanosecond differences between compiler versions as unverified. They might be real. They might be ghosts.
+If you publish or consume C++ microbenchmarks, report the alignment flags. Every benchmark methodology section should list them alongside the optimization level, target architecture, and iteration count. If you don't see `-falign-functions` and `-falign-loops` in someone else's methodology section, treat sub-nanosecond differences between compiler versions as unverified, because they could be real codegen wins or pure layout artifacts and there's no way to tell from the numbers alone.
 
 When you see a performance swing between compiler versions, check alignment before blaming the optimizer. Rebuild with `-falign-functions=64` and see if the difference persists. If it vanishes, the "regression" was a layout accident. If it persists, the compiler actually changed something meaningful.
 
@@ -205,6 +218,8 @@ Next time: a standalone deep-dive that isolates the alignment effect with a mini
 
 ---
 
-*Benchmarks run on Intel Xeon Gold 6130 @ 2.10 GHz, single core via `taskset -c 0`. GCC 11.4.0, 13.4.0, 15.2.0 (conda-forge). GCC 15 required `-static` due to glibc version mismatch on the benchmark host. Baseline: `-O2 -march=skylake-avx512 -fcf-protection`; alignment flags varied as the experimental variable. 100M iterations, 1M warmup, best of 3 runs. `perf stat` on Linux 5.15, perf 5.15. Benchmark source: [cpp-dispatch-benchmark](https://github.com/Shubhankar-Gambhir/cpp-dispatch-benchmark).*
+*Benchmarks run on Intel Xeon Gold 6130 @ 2.10 GHz, single core via `taskset -c 0`. GCC 11.4.0, 13.4.0, 15.2.0 (conda-forge). GCC 15 required `-static` due to glibc version mismatch on the benchmark host. Baseline: `-O2 -march=skylake-avx512 -fcf-protection`; alignment flags varied as the experimental variable. Function offsets within each binary are deterministic; what changes across compiler versions and alignment flags is the relative placement chosen by the linker, not run-to-run randomization from ASLR. 100M iterations, 1M warmup, best of 3 runs. `perf stat` on Linux 5.15, perf 5.15. Benchmark source: [cpp-dispatch-benchmark](https://github.com/Shubhankar-Gambhir/cpp-dispatch-benchmark).*
+
+*Series start: [Four Ways to Dispatch a Runtime-Selected Strategy in C++]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %})*
 
 *Previously: [When Dispatch Mechanism Choice Stops Mattering]({% post_url 2026-06-02-when-dispatch-mechanism-choice-stops-mattering %})*
