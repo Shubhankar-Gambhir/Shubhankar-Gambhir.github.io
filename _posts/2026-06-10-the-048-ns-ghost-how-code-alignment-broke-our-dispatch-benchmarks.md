@@ -141,17 +141,17 @@ Here's what adding those flags does to the numbers:
 <table>
   <thead>
     <tr>
-      <th rowspan="2">GCC</th>
-      <th colspan="2">virtual</th>
+      <th rowspan="2">GCC \ align</th>
+      <th colspan="2">virt</th>
       <th colspan="2">fnptr</th>
-      <th colspan="2">variant</th>
+      <th colspan="2">var</th>
       <th colspan="2">crtp</th>
     </tr>
     <tr>
-      <th>=32</th><th>=64</th>
-      <th>=32</th><th>=64</th>
-      <th>=32</th><th>=64</th>
-      <th>=32</th><th>=64</th>
+      <th>32</th><th>64</th>
+      <th>32</th><th>64</th>
+      <th>32</th><th>64</th>
+      <th>32</th><th>64</th>
     </tr>
   </thead>
   <tbody>
