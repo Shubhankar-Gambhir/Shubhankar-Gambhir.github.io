@@ -19,30 +19,28 @@ This is that investigation.
 
 The first step was to run a systematic matrix: four dispatch mechanisms, three GCC versions, three alignment settings. Twelve combinations, each measured best-of-3 on the same Xeon Gold 6130 core.
 
-| Mechanism | GCC | Default | align=32 | align=64 |
-|-----------|-----|---------|----------|----------|
-| virtual | 11 | 2.87 | 2.42 | 2.40 |
-| virtual | 13 | 2.39 | 2.39 | 2.39 |
-| virtual | 15 | 2.87 | 2.39 | 2.39 |
-| fnptr | 11 | 2.39 | 2.39 | 2.39 |
-| fnptr | 13 | 3.35 | 2.39 | 2.39 |
-| fnptr | 15 | 3.35 | 2.39 | 2.39 |
-| variant | 11 | 3.62 | 3.63 | 3.59 |
-| variant | 13 | 1.44 | 1.44 | 1.44 |
-| variant | 15 | 1.44 | 1.44 | 1.44 |
-| crtp | 11 | 2.87 | 2.39 | 2.39 |
-| crtp | 13 | 3.35 | 2.39 | 2.39 |
-| crtp | 15 | 2.39 | 2.39 | 2.39 |
+| Mechanism | GCC | ns/call |
+|-----------|-----|---------|
+| virtual   | 11  | 2.87    |
+| virtual   | 13  | 2.39    |
+| virtual   | 15  | 2.87    |
+| fnptr     | 11  | 2.39    |
+| fnptr     | 13  | 3.35    |
+| fnptr     | 15  | 3.35    |
+| variant   | 11  | 3.62    |
+| variant   | 13  | 1.44    |
+| variant   | 15  | 1.44    |
+| crtp      | 11  | 2.87    |
+| crtp      | 13  | 3.35    |
+| crtp      | 15  | 2.39    |
 
-Stare at the default column for a moment.
+Stare at it for a moment.
 
-Function pointer on GCC 13: 3.35 ns. Add `-falign-functions=64 -falign-loops=64` and it drops to 2.39 ns. That's a 0.96 ns swing, 40% of the measured signal, in a benchmark where the source code and compiler optimizations are identical between the two builds. The only thing that changed is where the linker placed the function in the binary.
+Function pointer on GCC 13: 3.35 ns. On GCC 11: 2.39 ns. Same source, same `-O2`, same hardware. CRTP shows the same reversal. Virtual dispatch flips the other direction: 2.87 ns on GCC 11, 2.39 ns on GCC 13. GCC 15 matches GCC 11 for virtual but matches GCC 13 for variant.
 
-CRTP on GCC 13 shows the same pattern: 3.35 ns default, 2.39 ns aligned. Same 0.96 ns gap. Virtual dispatch on GCC 11 and GCC 15 shows the subtler version: 2.87 ns default, 2.40 ns aligned. A 0.47 ns improvement from adding two compiler flags that don't affect the generated instructions at all.
+Nothing here follows a consistent story. GCC 13 isn't uniformly faster or slower. The same compiler version that cuts virtual dispatch time by 17% inflates function pointer dispatch by 40%.
 
-Now look at the aligned columns. With `-falign-functions=64 -falign-loops=64`, every non-variant mechanism converges to 2.39-2.40 ns regardless of GCC version. The 20% difference between GCC 11 and GCC 13 that prompted this investigation evaporates. It was never a compiler improvement. It was the linker happening to place the function at a favorable address in one build and an unfavorable one in another.
-
-The variant row tells a different story. Its numbers are 3.62 ns on GCC 11 and 1.44 ns on GCC 13 under all three alignment settings. The 60% improvement is real: it comes from the switch-based `std::visit` optimization introduced in GCC 12, which I covered in [Part 4]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %}). The codegen is fundamentally different, and adding alignment flags doesn't change anything because the improvement isn't a layout artifact.
+The variant row is different. 3.62 ns on GCC 11, 1.44 ns on GCC 13 and GCC 15. That 60% improvement is real: it comes from the switch-based `std::visit` optimization in GCC 12, which I covered in [Part 4]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %}). For the other three mechanisms, the numbers jump around with no pattern that maps to assembly changes.
 
 ### Where the Functions Actually Land
 
@@ -133,6 +131,25 @@ GCC provides four alignment flags:
 | `-falign-labels=N` | Pad all labels | 4 | usually unnecessary |
 
 The defaults shown are for `-march=skylake-avx512`. GCC's generic defaults are lower.
+
+Here's what adding those flags does to the numbers:
+
+| Mechanism | GCC | Default | align=32 | align=64 |
+|-----------|-----|---------|----------|----------|
+| virtual   | 11  | 2.87    | 2.42     | 2.40     |
+| virtual   | 13  | 2.39    | 2.39     | 2.39     |
+| virtual   | 15  | 2.87    | 2.39     | 2.39     |
+| fnptr     | 11  | 2.39    | 2.39     | 2.39     |
+| fnptr     | 13  | 3.35    | 2.39     | 2.39     |
+| fnptr     | 15  | 3.35    | 2.39     | 2.39     |
+| variant   | 11  | 3.62    | 3.63     | 3.59     |
+| variant   | 13  | 1.44    | 1.44     | 1.44     |
+| variant   | 15  | 1.44    | 1.44     | 1.44     |
+| crtp      | 11  | 2.87    | 2.39     | 2.39     |
+| crtp      | 13  | 3.35    | 2.39     | 2.39     |
+| crtp      | 15  | 2.39    | 2.39     | 2.39     |
+
+Every non-variant mechanism converges to 2.39-2.40 ns regardless of GCC version. The 20% difference between GCC 11 and GCC 13 for virtual dispatch evaporates. The 40% swing for function pointer disappears. It was never the optimizer. It was the linker placing functions at different addresses.
 
 Why 64 instead of 32? Because 32-byte alignment fixes DSB window issues but doesn't guarantee cache line alignment. The data confirms this: `-falign-functions=32` brought function pointer GCC 13 from 3.35 ns all the way down to 2.39 ns (matching align=64), but for virtual GCC 11, align=32 gave 2.42 ns while align=64 gave 2.40 ns. The 0.02 ns difference is small but consistent across runs, suggesting the cache line straddling fix provides a marginal improvement on top of DSB alignment for virtual dispatch's larger function body.
 
