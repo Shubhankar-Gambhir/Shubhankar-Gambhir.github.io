@@ -18,20 +18,19 @@ This is that investigation.
 
 The first step was a systematic matrix: four dispatch mechanisms across three GCC versions and three alignment settings, for thirty-six combinations in total. Each cell was measured best-of-3 on a single Xeon Gold 6130 core.
 
-| Mechanism | GCC 11 | GCC 13 | GCC 15 |
-|-----------|--------|--------|--------|
-| virtual   | 2.87   | 2.39   | 2.87   |
-| fnptr     | 2.39   | 3.35   | 3.35   |
-| variant   | 3.62   | 1.44   | 1.44   |
-| crtp      | 2.87   | 3.35   | 2.39   |
+| GCC    | virtual | fnptr | variant | crtp |
+|--------|---------|-------|---------|------|
+| GCC 11 | 2.87    | 2.39  | 3.62    | 2.87 |
+| GCC 13 | 2.39    | 3.35  | 1.44    | 3.35 |
+| GCC 15 | 2.87    | 3.35  | 1.44    | 2.39 |
 
 Stare at it for a moment.
 
-Read across the virtual row and GCC 13 looks like a hero: 2.39 ns vs. 2.87 ns on its neighbors. Read across the fnptr row and GCC 13 is the villain: 3.35 ns while GCC 11 sat at 2.39. CRTP shows yet another pattern: GCC 11 and GCC 13 are both slow (2.87 and 3.35), and only GCC 15 lands at the fast 2.39 number. Same source, same flags, same hardware.
+Read down the virtual column and GCC 13 looks like a hero: 2.39 ns vs. 2.87 ns on its neighbors. Read down the fnptr column and GCC 13 is the villain: 3.35 ns while GCC 11 sat at 2.39. The crtp column shows yet another pattern: GCC 11 and GCC 13 are both slow (2.87 and 3.35), and only GCC 15 lands at the fast 2.39 number. Same source, same flags, same hardware.
 
 Nothing here follows a consistent story. GCC 13 isn't uniformly faster or slower. The same compiler version that cuts virtual dispatch time by 17% inflates function pointer dispatch by 40%.
 
-The variant row is different. 3.62 ns on GCC 11, 1.44 ns on GCC 13 and GCC 15. That 60% improvement is real: it comes from the switch-based `std::visit` optimization in GCC 12, which I covered in [Part 4]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %}). For the other three mechanisms, the numbers jump around with no pattern that maps to assembly changes.
+The variant column is different. 3.62 ns on GCC 11, 1.44 ns on GCC 13 and GCC 15. That 60% improvement is real: it comes from the switch-based `std::visit` optimization in GCC 12, which I covered in [Part 4]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %}). For the other three mechanisms, the numbers jump around with no pattern that maps to assembly changes.
 
 ### Where the Functions Actually Land
 
@@ -139,20 +138,20 @@ The defaults shown are for `-march=skylake-avx512`. GCC's generic defaults are l
 
 Here's what adding those flags does to the numbers:
 
-| Mechanism | GCC | Default | align=32 | align=64 |
-|-----------|-----|---------|----------|----------|
-| virtual   | 11  | 2.87    | 2.42     | 2.40     |
-| virtual   | 13  | 2.39    | 2.39     | 2.39     |
-| virtual   | 15  | 2.87    | 2.39     | 2.39     |
-| fnptr     | 11  | 2.39    | 2.39     | 2.39     |
-| fnptr     | 13  | 3.35    | 2.39     | 2.39     |
-| fnptr     | 15  | 3.35    | 2.39     | 2.39     |
-| variant   | 11  | 3.62    | 3.63     | 3.59     |
-| variant   | 13  | 1.44    | 1.44     | 1.44     |
-| variant   | 15  | 1.44    | 1.44     | 1.44     |
-| crtp      | 11  | 2.87    | 2.39     | 2.39     |
-| crtp      | 13  | 3.35    | 2.39     | 2.39     |
-| crtp      | 15  | 2.39    | 2.39     | 2.39     |
+| Mechanism | GCC    | Default | align=32 | align=64 |
+|-----------|--------|---------|----------|----------|
+| virtual   | GCC 11 | 2.87    | 2.42     | 2.40     |
+| virtual   | GCC 13 | 2.39    | 2.39     | 2.39     |
+| virtual   | GCC 15 | 2.87    | 2.39     | 2.39     |
+| fnptr     | GCC 11 | 2.39    | 2.39     | 2.39     |
+| fnptr     | GCC 13 | 3.35    | 2.39     | 2.39     |
+| fnptr     | GCC 15 | 3.35    | 2.39     | 2.39     |
+| variant   | GCC 11 | 3.62    | 3.63     | 3.59     |
+| variant   | GCC 13 | 1.44    | 1.44     | 1.44     |
+| variant   | GCC 15 | 1.44    | 1.44     | 1.44     |
+| crtp      | GCC 11 | 2.87    | 2.39     | 2.39     |
+| crtp      | GCC 13 | 3.35    | 2.39     | 2.39     |
+| crtp      | GCC 15 | 2.39    | 2.39     | 2.39     |
 
 Every non-variant mechanism converges to 2.39-2.40 ns regardless of GCC version. The 20% difference between GCC 11 and GCC 13 for virtual dispatch evaporates. The 40% swing for function pointer disappears. It was never the optimizer. It was the linker placing functions at different addresses.
 
