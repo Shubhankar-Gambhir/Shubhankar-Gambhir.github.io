@@ -273,6 +273,8 @@ Second, every benchmark here dispatches to a single plugin type for 100M iterati
 
 ---
 
+**Series start:** [Four Ways to Dispatch a Runtime-Selected Strategy in C++]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}). The head-to-head comparison that started the investigation.
+
 **Previously:** [Lazy Resolution: Resolve Once, Dispatch Forever]({% post_url 2026-05-12-lazy-resolution-resolve-once-dispatch-forever %}). Self-patching function pointers that resolve on first call and dispatch at zero cost forever after.
 
 **Next:** [Your Stdlib Implementation Matters More Than the Dispatch Pattern]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %}). GCC 12 added a switch optimization that inverted the result. Variant went from 28% slower to 50% faster than virtual dispatch. Same source code, same hardware.
