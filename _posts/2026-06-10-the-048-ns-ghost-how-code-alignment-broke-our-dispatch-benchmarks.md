@@ -138,11 +138,28 @@ The defaults shown are for `-march=skylake-avx512`. GCC's generic defaults are l
 
 Here's what adding those flags does to the numbers:
 
-| GCC    | virt =32 | virt =64 | fnptr =32 | fnptr =64 | var =32 | var =64 | crtp =32 | crtp =64 |
-|--------|----------|----------|-----------|-----------|---------|---------|----------|----------|
-| GCC 11 | 2.42     | 2.40     | 2.39      | 2.39      | 3.63    | 3.59    | 2.39     | 2.39     |
-| GCC 13 | 2.39     | 2.39     | 2.39      | 2.39      | 1.44    | 1.44    | 2.39     | 2.39     |
-| GCC 15 | 2.39     | 2.39     | 2.39      | 2.39      | 1.44    | 1.44    | 2.39     | 2.39     |
+<table>
+  <thead>
+    <tr>
+      <th rowspan="2">GCC</th>
+      <th colspan="2">virtual</th>
+      <th colspan="2">fnptr</th>
+      <th colspan="2">variant</th>
+      <th colspan="2">crtp</th>
+    </tr>
+    <tr>
+      <th>=32</th><th>=64</th>
+      <th>=32</th><th>=64</th>
+      <th>=32</th><th>=64</th>
+      <th>=32</th><th>=64</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>GCC 11</td><td>2.42</td><td>2.40</td><td>2.39</td><td>2.39</td><td>3.63</td><td>3.59</td><td>2.39</td><td>2.39</td></tr>
+    <tr><td>GCC 13</td><td>2.39</td><td>2.39</td><td>2.39</td><td>2.39</td><td>1.44</td><td>1.44</td><td>2.39</td><td>2.39</td></tr>
+    <tr><td>GCC 15</td><td>2.39</td><td>2.39</td><td>2.39</td><td>2.39</td><td>1.44</td><td>1.44</td><td>2.39</td><td>2.39</td></tr>
+  </tbody>
+</table>
 
 Every non-variant mechanism converges to 2.39-2.40 ns regardless of GCC version. The 20% difference between GCC 11 and GCC 13 for virtual dispatch evaporates. The 40% swing for function pointer disappears. It was never the optimizer. It was the linker placing functions at different addresses.
 
