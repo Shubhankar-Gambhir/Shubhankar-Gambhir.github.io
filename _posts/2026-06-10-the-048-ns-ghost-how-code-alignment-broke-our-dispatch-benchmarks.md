@@ -18,24 +18,16 @@ This is that investigation.
 
 The first step was a systematic matrix: four dispatch mechanisms across three GCC versions and three alignment settings, for thirty-six combinations in total. Each cell was measured best-of-3 on a single Xeon Gold 6130 core.
 
-| Mechanism | GCC | ns/call |
-|-----------|-----|---------|
-| virtual   | 11  | 2.87    |
-| virtual   | 13  | 2.39    |
-| virtual   | 15  | 2.87    |
-| fnptr     | 11  | 2.39    |
-| fnptr     | 13  | 3.35    |
-| fnptr     | 15  | 3.35    |
-| variant   | 11  | 3.62    |
-| variant   | 13  | 1.44    |
-| variant   | 15  | 1.44    |
-| crtp      | 11  | 2.87    |
-| crtp      | 13  | 3.35    |
-| crtp      | 15  | 2.39    |
+| Mechanism | GCC 11 | GCC 13 | GCC 15 |
+|-----------|--------|--------|--------|
+| virtual   | 2.87   | 2.39   | 2.87   |
+| fnptr     | 2.39   | 3.35   | 3.35   |
+| variant   | 3.62   | 1.44   | 1.44   |
+| crtp      | 2.87   | 3.35   | 2.39   |
 
 Stare at it for a moment.
 
-Function pointer on GCC 13: 3.35 ns. On GCC 11: 2.39 ns. Same source, same `-O2`, same hardware. CRTP shows the same reversal. Virtual dispatch flips the other direction: 2.87 ns on GCC 11, 2.39 ns on GCC 13. GCC 15 matches GCC 11 for virtual but matches GCC 13 for variant.
+Read across the virtual row and GCC 13 looks like a hero: 2.39 ns vs. 2.87 ns on its neighbors. Read across the fnptr row and GCC 13 is the villain: 3.35 ns while GCC 11 sat at 2.39. CRTP shows yet another pattern: GCC 11 and GCC 13 are both slow (2.87 and 3.35), and only GCC 15 lands at the fast 2.39 number. Same source, same flags, same hardware.
 
 Nothing here follows a consistent story. GCC 13 isn't uniformly faster or slower. The same compiler version that cuts virtual dispatch time by 17% inflates function pointer dispatch by 40%.
 
