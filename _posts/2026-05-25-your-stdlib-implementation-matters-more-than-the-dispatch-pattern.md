@@ -55,7 +55,7 @@ switch (__v.index()) {
 }
 ```
 
-This alone wouldn't help much; the switch still dispatches on every call. The second stage is what the optimizer does: since the variant doesn't change type inside the loop, the compiler hoists the switch above the loop and jumps directly to the matching case's loop body. The switch runs once; the loop runs 100M times with the visitor inlined.
+This alone wouldn't help much; the switch still dispatches on every call. The second stage is what the optimizer does: since the variant doesn't change type inside the loop, the compiler hoists the switch above the loop and jumps directly to the matching case's loop body. The switch runs once; the loop runs 100M times with the visitor inlined. (The optimization depends on the variant staying type-stable across iterations. [Part 5]({% post_url 2026-06-02-when-dispatch-mechanism-choice-stops-mattering %}) measures what happens when it doesn't.)
 
 Here's the GCC 9 hot loop (pre-switch, representative of GCC 9-11):
 
@@ -92,7 +92,7 @@ Here's the GCC 12 hot loop for the same source code, same variant alternative (S
 
 Seven instructions total, **including the loop counter and branch**. No `call`. No function pointer. No lambda capture. No valueless check. The visitor body is fully inlined.
 
-The compiler checked the variant index **once** before entering the loop (`cmpb $1, %bl` earlier in the function), then jumped to the matching loop body. Since the variant doesn't change type during the loop, the switch is hoisted out entirely. What's left is a tight loop indistinguishable from hand-written code.
+The compiler checked the variant index **once** before entering the loop (`cmpb $1, %bl` earlier in the function), then jumped to the matching loop body. Since the variant doesn't change type during the loop, the switch is hoisted out entirely. What's left is a tight loop indistinguishable from hand-written code. The same source code dispatching to mixed types per iteration tells a different story; [Part 5]({% post_url 2026-06-02-when-dispatch-mechanism-choice-stops-mattering %}) has those numbers.
 
 The function pointer table (`_S_vtable`, `__gen_vtable`, `__visit_invoke`) doesn't just get optimized. In GCC 12's output, those symbols don't exist at all. GCC 9 generates 32 symbols related to the visit dispatch machinery. GCC 12 generates zero.
 
