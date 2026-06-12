@@ -8,6 +8,10 @@ description: >-
   mechanism is fastest? Benchmarks, generated assembly, compile times, and a
   decision framework for the strategy pattern in performance-critical code.
 mermaid: true
+image:
+  path: /assets/img/og/four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp.png
+  alt: "Four Ways to Dispatch a Runtime-Selected Strategy in C++"
+  hero: false
 ---
 
 You're building a system with pluggable strategies. The user picks one at startup via a config flag or command-line argument, and every call goes through that strategy millions of times per second. How do you dispatch it?

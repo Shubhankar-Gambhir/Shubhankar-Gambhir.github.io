@@ -6,6 +6,10 @@ tags: [dispatch, variant, virtual, stdlib, libstdc++, libc++, benchmarks, gcc]
 description: >-
   std::variant went from 28% slower than virtual dispatch on GCC 11 to 50%
   faster on GCC 12. Nothing changed but the compiler.
+image:
+  path: /assets/img/og/your-stdlib-implementation-matters-more-than-the-dispatch-pattern.png
+  alt: "Your Stdlib Implementation Matters More Than the Dispatch Pattern"
+  hero: false
 ---
 
 In a [previous post]({% post_url 2026-05-19-why-std-visit-may-be-slower-than-a-vtable %}), I showed that `std::variant + std::visit` was 28% slower than virtual dispatch on GCC 11, and traced the overhead to libstdc++'s implementation: a compile-time-generated function pointer table, a lambda capture round-trip through the stack, and an unconditional valueless check.

@@ -8,6 +8,10 @@ description: >-
   The benchmarks in Parts 1-4 always dispatched to a single plugin type. Here's
   what happens when you mix multiple plugins in the same hot loop, and which
   dispatch mechanism degrades most gracefully.
+image:
+  path: /assets/img/og/when-dispatch-mechanism-choice-stops-mattering.png
+  alt: "When Dispatch Mechanism Choice Stops Mattering"
+  hero: false
 ---
 
 Every dispatch benchmark I've seen, including [the ones I wrote]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}), tests the same thing: pick one implementation, call it a hundred million times, report the winner.

@@ -9,6 +9,10 @@ description: >-
   source to find out.
 redirect_from:
   - /posts/why-std-visit-is-slower-than-a-vtable/
+image:
+  path: /assets/img/og/why-std-visit-may-be-slower-than-a-vtable.png
+  alt: "Why std::visit May Be Slower Than a Vtable"
+  hero: false
 ---
 
 If you benchmark dispatching 100M calls through three small strategy objects (a no-op, one that does a write after the call, and one that does a read before and a write after) you'd expect `std::variant + std::visit` to be faster than virtual dispatch. The variant is stack-allocated, there's no heap indirection, no vtable pointer, and the compiler can see the entire closed type set. In a [previous post]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) comparing four dispatch approaches, `std::variant` was actually the *slowest*: 3.72 ns/call versus 2.87 ns for virtual dispatch. That's 28% slower.

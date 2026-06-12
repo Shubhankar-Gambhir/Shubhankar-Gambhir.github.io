@@ -8,6 +8,10 @@ description: >-
   same flags, same hardware. The investigation that traced a phantom 20% swing
   to code alignment artifacts, and what it means for every C++ microbenchmark you've
   trusted.
+image:
+  path: /assets/img/og/the-048-ns-ghost-how-code-alignment-broke-our-dispatch-benchmarks.png
+  alt: "The 0.48 ns Ghost: How Code Alignment Broke Our Dispatch Benchmarks"
+  hero: false
 ---
 
 In [Part 4]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %}), I reported that virtual dispatch measured 2.87 ns on GCC 11 and 2.39 ns on GCC 13 without alignment flags, and promised a separate investigation. Same source code, same optimization flags, same hardware. A 20% performance swing between compiler versions with no visible codegen explanation.

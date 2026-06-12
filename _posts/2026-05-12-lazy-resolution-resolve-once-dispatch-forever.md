@@ -8,6 +8,10 @@ description: >-
   Assembly analysis, 38ns/100M-call benchmarks, thread safety, and how OpenJDK
   uses this pattern for GC barrier resolution.
 mermaid: true
+image:
+  path: /assets/img/og/lazy-resolution-resolve-once-dispatch-forever.png
+  alt: "Lazy Resolution: Resolve Once, Dispatch Forever"
+  hero: false
 ---
 
 What if a function pointer could resolve itself on first use, then dispatch at zero cost forever after?
