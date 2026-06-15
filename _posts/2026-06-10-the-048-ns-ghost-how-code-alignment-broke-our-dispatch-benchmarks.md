@@ -227,4 +227,4 @@ Next time: a standalone deep-dive that isolates the alignment effect with a mini
 
 *Previously: [When Dispatch Mechanism Choice Stops Mattering]({% post_url 2026-06-02-when-dispatch-mechanism-choice-stops-mattering %})*
 
-*Next: [The Alignment Cliff: Tracing a 0.478 ns Penalty to Skylake's Micro-Op Cache]({% post_url 2026-06-16-the-alignment-cliff-code-alignment-and-the-skylake-micro-op-cache %})*
+*Next: [The Alignment Cliff: Tracing a 0.478 ns Penalty to Skylake's Micro-Op Cache]({% post_url 2026-06-15-the-alignment-cliff-code-alignment-and-the-skylake-micro-op-cache %})*

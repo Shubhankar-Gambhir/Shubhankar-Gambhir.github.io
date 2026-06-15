@@ -1,6 +1,6 @@
 ---
 title: "The Alignment Cliff: Tracing a 0.478 ns Penalty to Skylake's Micro-Op Cache"
-date: 2026-06-16
+date: 2026-06-15
 categories: [C++, Performance]
 tags: [alignment, skylake, dsb, micro-op-cache, cache-line, perf-stat, front-end, uops-not-delivered]
 description: >-
