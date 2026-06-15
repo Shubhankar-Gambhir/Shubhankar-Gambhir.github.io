@@ -226,3 +226,5 @@ Next time: a standalone deep-dive that isolates the alignment effect with a mini
 *Series start: [Four Ways to Dispatch a Runtime-Selected Strategy in C++]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %})*
 
 *Previously: [When Dispatch Mechanism Choice Stops Mattering]({% post_url 2026-06-02-when-dispatch-mechanism-choice-stops-mattering %})*
+
+*Next: [The Alignment Cliff: Tracing a 0.478 ns Penalty to Skylake's Micro-Op Cache]({% post_url 2026-06-16-the-alignment-cliff-code-alignment-and-the-skylake-micro-op-cache %})*
