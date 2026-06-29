@@ -115,7 +115,7 @@ Here is the result I was most sure I had wrong. `AtomicCounter` (relaxed) and `A
 
 On x86 the tie is no mystery. Both orders compile to one instruction ([Compiler Explorer](https://godbolt.org/z/43Y5vdKEh)):
 
-```asm
+```nasm
         lock xaddq  %rax, (counter)   # atomic read-modify-write, full barrier
 ```
 
@@ -123,7 +123,7 @@ The `lock` prefix on x86 is already a full barrier; sequential consistency for a
 
 ARM is where I expected to be vindicated. Compiling for the baseline `armv8-a` target, GCC 13 emits an out-of-line library call for each order ([Compiler Explorer](https://godbolt.org/z/j57eWPnx8)):
 
-```asm
+```nasm
 _Z17fetch_add_relaxedv:
         mov     x0, 1
         add     x1, x1, :lo12:.LANCHOR0
@@ -136,7 +136,7 @@ _Z17fetch_add_seq_cstv:
 
 These genuinely are different routines. The relaxed one uses plain `ldxr` / `stxr` (load-exclusive, store-exclusive). The seq_cst one uses `ldaxr` / `stlxr`: load-acquire-exclusive and store-release-exclusive. With `-march=armv8.1-a`, where the Large System Extensions give a single-instruction atomic add, the same distinction shows up as a suffix ([Compiler Explorer](https://godbolt.org/z/xeMaTerxE)):
 
-```asm
+```nasm
 f_relax:    ldadd    x1, x1, [x0]     # atomic add, no ordering
 f_seq_cst:  ldaddal  x1, x1, [x0]     # atomic add, acquire (a) + release (l)
 ```
@@ -145,7 +145,7 @@ So the ordering is right there in the encoding. Why no measured difference? Beca
 
 The lesson is not "memory ordering is free on ARM." It is "memory ordering is free for a *read-modify-write with nothing around it*." The difference reappears the instant you use standalone loads and stores instead of an RMW. The same probe shows it plainly ([Compiler Explorer](https://godbolt.org/z/j57eWPnx8)):
 
-```asm
+```nasm
 store relaxed:  str   x0, [x1]    # plain store
 store seq_cst:  stlr  x0, [x1]    # store-release
 load  relaxed:  ldr   x0, [x0]    # plain load
