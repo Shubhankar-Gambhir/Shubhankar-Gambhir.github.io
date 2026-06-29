@@ -121,27 +121,27 @@ On x86 the tie is no mystery. Both orders compile to one instruction ([Compiler 
 
 The `lock` prefix on x86 is already a full barrier; sequential consistency for a read-modify-write comes for free with the prefix. The `memory_order` argument only tells the *compiler* what it may reorder around the instruction. The emitted opcode is the same for relaxed and seq_cst, so the cost is identical by construction.
 
-ARM is where I expected to be vindicated. Compiling for the baseline `armv8-a` target, GCC 13 emits an out-of-line library call for each order ([Compiler Explorer](https://godbolt.org/z/j57eWPnx8)):
+ARM is where I expected to be vindicated. The benchmark was built with `-O2` and nothing else, and Ubuntu's GCC 13 defaults to outline-atomics, so each order becomes a call to a runtime-dispatched helper rather than inline instructions ([Compiler Explorer](https://godbolt.org/z/j57eWPnx8)):
 
 ```nasm
 _Z17fetch_add_relaxedv:
         mov     x0, 1
         add     x1, x1, :lo12:.LANCHOR0
-        bl      __aarch64_ldadd8_relax      # ldxr / stxr loop, no ordering
+        bl      __aarch64_ldadd8_relax      # runtime-dispatched relaxed add
 _Z17fetch_add_seq_cstv:
         mov     x0, 1
         add     x1, x1, :lo12:.LANCHOR0
-        bl      __aarch64_ldadd8_acq_rel    # ldaxr / stlxr loop, acquire+release
+        bl      __aarch64_ldadd8_acq_rel    # runtime-dispatched acquire+release add
 ```
 
-These genuinely are different routines. The relaxed one uses plain `ldxr` / `stxr` (load-exclusive, store-exclusive). The seq_cst one uses `ldaxr` / `stlxr`: load-acquire-exclusive and store-release-exclusive. With `-march=armv8.1-a`, where the Large System Extensions give a single-instruction atomic add, the same distinction shows up as a suffix ([Compiler Explorer](https://godbolt.org/z/xeMaTerxE)):
+The helper checks a global flag (`__aarch64_have_lse_atomics`) once and branches. On a pre-LSE core it falls back to an exclusive loop: `ldxr` / `stxr` for relaxed, `ldaxr` / `stlxr` (load-acquire-exclusive, store-release-exclusive) for seq_cst. The Neoverse-N1 implements the Large System Extensions, so the branch that actually ran on my hardware is the single-instruction LSE form, which is also what GCC emits directly with `-march=armv8.1-a` ([Compiler Explorer](https://godbolt.org/z/xeMaTerxE)):
 
 ```nasm
 f_relax:    ldadd    x1, x1, [x0]     # atomic add, no ordering
 f_seq_cst:  ldaddal  x1, x1, [x0]     # atomic add, acquire (a) + release (l)
 ```
 
-So the ordering is right there in the encoding. Why no measured difference? Because of what the ordering acts on. The acquire on the load stops *later* memory operations from being reordered before the RMW; the release on the store stops *earlier* memory operations from being reordered after it. In a tight loop whose entire body is one `fetch_add`, there are no surrounding loads or stores to hold back. The store-release-exclusive already has to make its result globally visible to complete the exclusive sequence, which is the expensive part, and the ordering guarantees are left fencing against operations that do not exist. The ordering is encoded but has nothing to enforce.
+So the measured difference comes down to one instruction versus another: `ldadd` against `ldaddal`. The ordering is right there in the `al` suffix. Why no measured difference? Because of what the ordering acts on. The acquire stops *later* memory operations from being reordered before the RMW; the release stops *earlier* ones from being reordered after it. In a tight loop whose entire body is one `fetch_add`, there are no surrounding loads or stores to hold back, and the atomic add must make its result globally visible to complete regardless of ordering, which is the part that costs. The ordering is encoded but has nothing left to enforce.
 
 The lesson is not "memory ordering is free on ARM." It is "memory ordering is free for a *read-modify-write with nothing around it*." The difference reappears the instant you use standalone loads and stores instead of an RMW. The same probe shows it plainly ([Compiler Explorer](https://godbolt.org/z/j57eWPnx8)):
 
