@@ -9,7 +9,7 @@ description: >-
   costs nothing for RMW, and the disassembly explains why. Real numbers, real hardware.
 ---
 
-How much does `std::mutex` actually cost? The textbook says "a syscall," the folklore says "atomics are always faster," and the conference talk you half-remember said something about lock-free. None of those is a number. I wanted the number, in nanoseconds, on real hardware.
+Everyone knows a mutex is slower than an atomic. That part is not in question. What I never had was the actual number: how many nanoseconds the difference costs, and whether it holds up once threads start fighting over the same line or the architecture changes underneath. So I decided to see for myself.
 
 I built four concurrent counter variants in C++17, added three more in C++20, and measured them across thread counts on an Intel Xeon Gold 6130 and an ARM Neoverse-N1. The results challenged several things I thought I knew about locking, memory ordering, and false sharing. One of them sent me into the disassembler to figure out why a difference I was certain I would see simply was not there.
 
@@ -17,7 +17,7 @@ The companion repo is [on GitHub](https://github.com/Shubhankar-Gambhir/concurre
 
 ## The Setup
 
-A concurrent counter is the simplest possible shared mutable state: multiple threads call `increment()`, and after they all finish, `get()` returns the total. Two methods, one integer, no surrounding data structure. That simplicity is the whole point. Whatever you measure is the synchronization mechanism, not the workload.
+A concurrent counter is the simplest possible shared mutable state: multiple threads call `increment()`, and after they all finish, `get()` returns the total. Two methods over a single integer, with no surrounding data structure to muddy things, so whatever you measure is the synchronization mechanism rather than the workload.
 
 The four C++17 variants each pick a different strategy. The mutex version is the obvious baseline:
 
@@ -83,7 +83,7 @@ At one thread there is zero contention. This isolates the cost of the primitive 
 | AtomicSeqCstCounter | 8.6 | 5.1 |
 | AtomicRefCounter (C++20) | 8.6 | 4.9 |
 
-An uncontended `std::mutex` lock/unlock pair costs 26 ns on x86 and 21 ns on ARM. That is not a syscall. libstdc++ delegates to glibc's `pthread_mutex_lock`, whose fast path is a single compare-and-swap on the lock word in userspace; the kernel only gets involved when a thread actually has to sleep on contention. The 3x gap to a bare `fetch_add` is real, but 26 ns is still small. If your critical section does a hash lookup, copies a string, or touches the network, the lock is rounding error. Reach for lock-free only after you have measured the lock and found it wanting.
+An uncontended `std::mutex` lock/unlock pair costs 26 ns on x86 and 21 ns on ARM. That is not a syscall. libstdc++ delegates to glibc's `pthread_mutex_lock`, whose fast path is a single compare-and-swap on the lock word in userspace; the kernel only gets involved when a thread actually has to sleep on contention. The 3x gap to a bare `fetch_add` is real, but 26 ns is still small. If your critical section does any real work, say a hash lookup or a string copy, the lock overhead disappears into the noise. Reach for lock-free only after you have measured the lock and confirmed it is actually the bottleneck.
 
 ## The Contention Curve
 
@@ -176,7 +176,7 @@ On x86 the aligned striped counter sustains 2.5 billion increments per second at
 
 ARM's penalty is milder, 6x rather than 31x, and the reason is a nice detail. GCC 13 on the Neoverse-N1 reports `std::hardware_destructive_interference_size` as 256 bytes, four times the 64-byte cache line, because the core's prefetcher works on a wider spatial granularity. The unaligned cell still gets `alignof(int64_t)`, which is 8 bytes, so on x86 eight cells crowd into one 64-byte line and thrash, while on ARM the wider effective granularity spaces accesses out enough to soften the blow. One standard library constant quietly encodes a different architectural assumption, and the same source code inherits it.
 
-The flip side is the aligned scaling, which is close to linear. Each thread owns its line, so adding a core adds throughput with no cross-core traffic at all: 1,296M ops/sec at 16 threads, 2,459M at 32. Almost double, almost free. Stripe-and-pad is the single highest-leverage move in this whole post.
+The flip side is the aligned scaling, which is close to linear. Each thread owns its line, so adding a core adds throughput with no cross-core traffic at all: 1,296M ops/sec at 16 threads, 2,459M at 32. That is close to double, for the cost of some padding per cell. Of everything I tried, stripe-and-pad gave the biggest return for the least effort.
 
 ## C++20: What Is Worth the Upgrade
 
@@ -198,7 +198,7 @@ There is one ergonomic snag. `atomic_ref<T>` takes a non-const `T&`, so using it
 | WaitNotifyCounter | 59.7M ops/s | 81.8M ops/s |
 | **Overhead** | **48%** | **58%** |
 
-`notify_one` pokes the futex layer on every call, whether or not a waiter exists, and that roughly halves throughput. In a real producer-consumer you notify only when you have reason to think someone is blocked, or you batch notifications. Calling it unconditionally in a hot path is a self-inflicted wound.
+`notify_one` pokes the futex layer on every call, whether or not a waiter exists, and that roughly halves throughput. In a real producer-consumer you notify only when you have reason to think someone is blocked, or you batch notifications. Calling it unconditionally in a hot path costs you half your throughput for nothing in return.
 
 ### ModernStripedCounter: same speed, cleaner code
 
@@ -214,7 +214,7 @@ Same benchmark, three GCC versions, x86 only.
 | AtomicCounter | 30.5M | 29.1M | 29.0M |
 | Striped\<Atomic, aligned\> | 2,535M | 2,459M | 2,405M |
 
-The atomic and striped numbers sit within noise across every version, because the compiler emits the same `lock xadd` and there is nothing left to optimize. The mutex swings by half, from 4.6M on GCC 9 to 6.9M on GCC 11, and that is not codegen. It is the glibc bundled with each compiler's conda environment. The mutex fast path bottoms out in glibc's `__lll_lock_wait`, and glibc has tuned its spin-before-sleep heuristics over the years. For a mutex, the runtime you link against matters more than the compiler that built you.
+The atomic and striped numbers sit within noise across every version, because the compiler emits the same `lock xadd` and there is nothing left to optimize. The mutex swings by half, from 4.6M on GCC 9 to 6.9M on GCC 11, and that is not codegen. It is the glibc bundled with each compiler's conda environment. The mutex fast path bottoms out in glibc's `__lll_lock_wait`, and glibc has tuned its spin-before-sleep heuristics over the years. For a mutex, the glibc you link against matters more than the GCC version that compiled the code.
 
 ## What I Learned
 
