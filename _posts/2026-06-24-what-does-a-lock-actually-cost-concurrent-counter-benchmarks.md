@@ -7,6 +7,10 @@ description: >-
   Four concurrent counter implementations (mutex, atomic, and LongAdder-style striped)
   measured across thread counts on x86 and ARM. False sharing costs 31x. relaxed vs seq_cst
   costs nothing for RMW, and the disassembly explains why. Real numbers, real hardware.
+image:
+  path: /assets/img/og/what-does-a-lock-actually-cost-concurrent-counter-benchmarks.png
+  alt: "What Does a Lock Actually Cost? Benchmarking Concurrent Counters in C++"
+  hero: false
 ---
 
 Everyone knows a mutex is slower than an atomic. That part is not in question. What I never had was the actual number: how many nanoseconds the difference costs, and whether it holds up once threads start fighting over the same line or the architecture changes underneath. So I decided to see for myself.
