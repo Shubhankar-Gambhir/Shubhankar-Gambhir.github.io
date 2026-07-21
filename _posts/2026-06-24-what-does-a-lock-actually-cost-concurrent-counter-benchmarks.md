@@ -235,3 +235,5 @@ Companion repo: [github.com/Shubhankar-Gambhir/concurrent-data-structures-cpp](h
 Hardware: Intel Xeon Gold 6130 @ 2.10 GHz (2x16 cores, Skylake); ARM Neoverse-N1 (16 cores).
 Compilers: GCC 11.4.0 (x86), GCC 13.3.0 (ARM). Flags: `-O2`, `-march=skylake-avx512` (x86), C++17 and C++20.
 Methodology: 1M iterations per thread, 5 runs after warmup, median reported, synchronized start, post-run invariant check. Assembly captured with `-O2 -S`; ARM LSE forms shown with `-march=armv8.1-a`.
+
+Next: [A Deep Dive into Producer-Consumer Queues in C++]({% post_url 2026-07-07-a-deep-dive-into-producer-consumer-queues %})
