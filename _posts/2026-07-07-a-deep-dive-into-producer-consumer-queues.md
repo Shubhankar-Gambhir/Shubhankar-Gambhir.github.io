@@ -248,3 +248,4 @@ Compilers: GCC 13.4.0 (x86), GCC 13.3.0 (ARM). Flags: `-std=c++17 -O2 -Wall -Wex
 Methodology: 1M items per producer, 5 runs after warmup, median reported, each thread pinned to its own core by consecutive core id (which interleaves the Xeon's two NUMA nodes, so multi-thread runs span both sockets), synchronized start, post-run count and checksum invariant.
 
 Previous: [What Does a Lock Actually Cost? Benchmarking Concurrent Counters in C++]({% post_url 2026-06-24-what-does-a-lock-actually-cost-concurrent-counter-benchmarks %})
+Next: [Lock-Free Is Not Free: ABA, Tagged Pointers, and a Bounded Ring]({% post_url 2026-08-19-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %})
