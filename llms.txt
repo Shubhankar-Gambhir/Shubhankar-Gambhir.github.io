@@ -1,0 +1,37 @@
+---
+layout: null
+permalink: /llms.txt
+---
+{%- assign posts = site.posts | reverse -%}
+# {{ site.title }}
+
+> {{ site.description | normalize_whitespace }}
+
+Posts are benchmark-driven. Each one states its hardware, pinned compiler and stdlib versions, build flags, and methodology, and links a companion repository with the benchmark code. Within each section below, posts are listed oldest first; later posts build on earlier ones.
+
+## Dispatch and code alignment series
+{% for post in posts %}
+{%- if post.tags contains "dispatch" or post.tags contains "alignment" %}
+- [{{ post.title }}]({{ post.url | absolute_url }}): {{ post.description | strip_html | normalize_whitespace }}
+{%- endif %}
+{%- endfor %}
+
+## Concurrency series
+{% for post in posts %}
+{%- if post.tags contains "concurrency" %}
+- [{{ post.title }}]({{ post.url | absolute_url }}): {{ post.description | strip_html | normalize_whitespace }}
+{%- endif %}
+{%- endfor %}
+
+## Other posts
+{% for post in posts %}
+{%- unless post.tags contains "dispatch" or post.tags contains "alignment" or post.tags contains "concurrency" %}
+- [{{ post.title }}]({{ post.url | absolute_url }}): {{ post.description | strip_html | normalize_whitespace }}
+{%- endunless %}
+{%- endfor %}
+
+## Optional
+
+- [About]({{ "/about/" | absolute_url }}): who writes this blog and what they work on
+- [Speaking]({{ "/speaking/" | absolute_url }}): conference talks, past and upcoming
+- [Atom feed]({{ "/feed.xml" | absolute_url }}): every post with its date and summary
