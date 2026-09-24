@@ -54,7 +54,23 @@ WITH RTTI                                  WITHOUT RTTI
 +0x20   -> _ZN4Base1fEv
 ```
 
-You can confirm it at runtime. Read `vptr[-1]` on an object whose vtable came from a `-fno-rtti` translation unit and you get `(nil)`.
+You can watch it go null at runtime, and the way you read it is exactly the way the compiler does. A polymorphic object's first eight bytes are its vptr, and the vptr points at the first virtual function slot (`+0x10` above), not at the start of the vtable. So the typeinfo pointer lives one slot *before* where the vptr points:
+
+```cpp
+void* ti = (*reinterpret_cast<void***>(p))[-1];   // load the vptr, step back one slot
+```
+
+That is not legal C++. It is undefined behavior that happens to work because the Itanium ABI fixes the layout. Past a null check, it is also exactly what `typeid(*p)` compiles to ([Compiler Explorer](https://godbolt.org/z/f6sjnhqdb)):
+
+```nasm
+        testq   %rdi, %rdi          ; typeid(*nullptr) must throw bad_typeid...
+        je      .L2                 ; ...so that lives on a cold path
+        movq    (%rdi), %rax        ; load the vptr from the object's first 8 bytes
+        movq    -8(%rax), %rax      ; vptr[-1]: the std::type_info* for the dynamic type
+        ret                         ; return it
+```
+
+On an object whose vtable came from a `-fno-rtti` translation unit, that second load returns `(nil)`.
 
 None of this is a GCC 11 quirk, before anyone asks. The same probe on GCC 9.5, 10.4, 11.4, 12.4, 13.4, 14.3, 15.2 and Clang 22.1.4 gives a `0x28` vtable in every one of them, with the flag and without it, and zero surviving `_ZTI` symbols in every `-fno-rtti` object. The layout is pinned by the Itanium C++ ABI, not by a compiler release.
 
@@ -105,19 +121,21 @@ collect2: error: ld returned 1 exit status
 
 Fine. You find out immediately, and this is the case the GCC manual warns about.
 
-Direction B is `-frtti` code calling `typeid` or `dynamic_cast` on an object whose vtable came from an `-fno-rtti` TU:
+Direction B is `-frtti` code calling `typeid` on an object whose vtable came from an `-fno-rtti` TU:
 
 ```
 $ g++ lib_nortti.o app_rtti.o -o app_n     # links successfully, no diagnostic
 $ ./app_n
-vptr[1] (typeinfo slot) = (nil)
+vptr[-1] (typeinfo slot) = (nil)
 about to call typeid...
 Segmentation fault (core dumped)
 ```
 
-No linker diagnostic, no warning, just a null dereference inside `__dynamic_cast` at runtime in code that reads correctly. This is the preserved-but-null slot earning its keep: a clean crash instead of a wrong-function call. Better, certainly, but still a crash with no build-time signal.
+No linker diagnostic, no warning. `typeid(*p)` never names a typeinfo symbol at link time; it fetches one through the vtable, gets null, and faults in the inlined `std::type_info::name()` with `this=0x0`. This is the preserved-but-null slot earning its keep: a clean crash instead of a wrong-function call. Better, certainly, but still a crash with no build-time signal.
 
-Direction B is the one that will hurt you, and it is the one the manual does not mention. Ship a `-fno-rtti` library with public polymorphic types and every downstream consumer building with default flags is one `dynamic_cast` away from this. Whether a library is built `-fno-rtti` is part of its public API contract and belongs in its headers.
+`dynamic_cast` depends on where the class keeps its vtable. It passes the source and target typeinfo *by address*, so if the class has an out-of-line virtual function (its key function) compiled `-fno-rtti`, those symbols do not exist and you get a link error. If every virtual function is inline, the `-frtti` side emits the typeinfo itself, the link succeeds, and the program dies inside `__dynamic_cast` when it reads the null slot from the object's vtable.
+
+Direction B is the one that will hurt you, and it is the one the manual does not mention. Ship a `-fno-rtti` library with public polymorphic types and every downstream consumer building with default flags is one `typeid`, or one `dynamic_cast` on a header-only class, away from this. Whether a library is built `-fno-rtti` is part of its public API contract and belongs in its headers.
 
 ## What It Costs
 
@@ -177,27 +195,30 @@ template<typename T> inline T* barrier_set_cast(BarrierSet* bs) {
 
 A `G1BarrierSet` ends up carrying `_tag_set = 0b0111`: its own bit, plus `CardTableBarrierSet`, plus `ModRef`. Asking whether it is a `CardTableBarrierSet` is one mask against a constant.
 
-Here is the whole argument in three disassemblies, from a product build compiled `-frtti` so all three forms are available side by side ([Compiler Explorer](https://godbolt.org/z/zYfbPfxK1)):
+Here is the whole argument in three disassemblies, from a product build compiled `-frtti` so all three forms are available side by side ([Compiler Explorer](https://godbolt.org/z/aMdn83jjY)):
 
-```asm
-; barrier_set_cast<CardTableBarrierSet>(bs) -- what HotSpot ships
-    mov    %rdi,%rax          ; return the pointer unchanged
-    ret                       ; the assert is gone under NDEBUG
+```nasm
+; via_fake_rtti: barrier_set_cast<CardTableBarrierSet>(bs), what HotSpot ships
+        movq    %rdi, %rax          ; return the pointer unchanged
+        ret                         ; the assert is gone under NDEBUG
 
-; bs->is_a(BarrierSet::CardTableBarrierSet) -- the checked form
-    xor    %edx,%edx          ; edx = 0, the null result
-    mov    %rdi,%rax          ; rax = bs
-    testb  $0x2,0x8(%rdi)     ; 1 << CardTableBarrierSet, against _tag_set
-    cmove  %rdx,%rax          ; branchless: zero rax if the bit was clear
-    ret
+; via_is_a: bs->is_a(BarrierSet::CardTableBarrierSet), the checked form
+        xorl    %edx, %edx          ; edx = 0, the null result
+        movq    %rdi, %rax          ; rax = bs
+        testb   $2, 8(%rdi)         ; bit 1 (CardTableBarrierSet) of _tag_set
+        cmove   %rdx, %rax          ; branchless: zero rax if the bit was clear
+        ret                         ; return rax
 
-; dynamic_cast<CardTableBarrierSet*>(bs)
-    test   %rdi,%rdi
-    je     ...                ; null in, null out
-    xor    %ecx,%ecx          ; hint = 0, no statically known offset
-    lea    0x0(%rip),%rdx     ; &typeinfo for CardTableBarrierSet
-    lea    0x0(%rip),%rsi     ; &typeinfo for BarrierSet
-    jmp    ...                ; tail-call __dynamic_cast, out of line
+; via_dynamic_cast: dynamic_cast<CardTableBarrierSet*>(bs)
+        testq   %rdi, %rdi          ; null in...
+        je      .L6                 ; ...skip the runtime entirely
+        xorl    %ecx, %ecx          ; hint = 0: no statically known offset
+        movl    $_ZTI19CardTableBarrierSet, %edx   ; &typeinfo for the target type
+        movl    $_ZTI10BarrierSet, %esi            ; &typeinfo for the source type
+        jmp     __dynamic_cast      ; tail-call into libstdc++, out of line
+.L6:
+        xorl    %eax, %eax          ; ...null out
+        ret                         ; return nullptr
 ```
 
 Timing them against a single `BarrierSet*` whose dynamic type is `G1BarrierSet`, which is the default JVM's hot path:
