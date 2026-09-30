@@ -14,7 +14,7 @@ image:
   hero: false
 ---
 
-I spent the week of September 15th in Aurora, Colorado for CppCon 2026, out of the Gaylord Rockies. Azul picked up the workshop fee, and since I was speaking, CppCon covered my travel and lodging. This is not the deep technical dive most posts here are. It is a recap: the keynotes, what I presented, what I sat through, and a few things that stuck past the flight home.
+I spent the week of September 15th in Aurora, Colorado for CppCon 2026, out of the Gaylord Rockies. I was there as a speaker, thanks to the conference's sponsors covering my travel and lodging, and spent a day before the show in [Fedor Pikus's High-Performance Concurrency](https://cppcon.org/class-2026-high-perf-concurrency/) workshop, thanks to Azul picking up the fee. This is not the deep technical dive most posts here are. It is a recap: the keynotes, what I presented, what I sat through, and a few things that stuck past the flight home.
 
 ![Outside the Gaylord Rockies during CppCon 2026](/assets/img/a-week-in-aurora-cppcon-2026-venue.jpg)
 _Outside the Gaylord Rockies._
@@ -36,7 +36,7 @@ _Mid-talk, Homestead 3/4._
 
 ## The Workshop
 
-I spent a day in the [High-Performance Concurrency](https://cppcon.org/class-2026-high-perf-concurrency/) workshop before the main conference started: branchless programming, branch prediction, TLB behavior, and how much copying disappears once you actually use move semantics instead of writing code that happens to compile with them.
+I spent a day in [Fedor Pikus's High-Performance Concurrency](https://cppcon.org/class-2026-high-perf-concurrency/) workshop before the main conference started: branchless programming, branch prediction, TLB behavior, and how much copying disappears once you actually use move semantics instead of writing code that happens to compile with them.
 
 The part that stuck with me was the instructor's insistence that undefined behavior sometimes *improves* measured performance, not just that it fails to punish you. That is an uncomfortable thing to say out loud in a room full of people who have spent a week hearing why UB is dangerous, and the workshop did not back away from it: a UB-reliant optimization can beat the well-defined alternative on a given compiler and target, right up until it doesn't, on the next compiler release or the next architecture. The point wasn't "UB is fine." It was that the danger and the performance win come from the same source, the compiler assuming something you didn't actually guarantee, and pretending otherwise is worse than just knowing it.
 
