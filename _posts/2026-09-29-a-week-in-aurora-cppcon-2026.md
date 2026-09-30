@@ -13,7 +13,7 @@ image:
   hero: false
 ---
 
-Last year my company sent me to C++ on Sea (now ACCU on Sea) as an attendee, and I came home thinking I should try submitting a talk of my own. I gave one at [C++ Online](https://cpponline.uk/session/2026/zero-cost-abstractions-in-large-systems/) in March, remotely, and then CppCon said yes, so this time it was in person. I spent the week of September 15th in Aurora, Colorado for CppCon 2026, out of the Gaylord Rockies, there as a speaker thanks to the conference's sponsors covering my travel and lodging, and spent two days before the show in [Fedor Pikus's High-Performance Concurrency](https://cppcon.org/class-2026-high-perf-concurrency/) workshop, thanks to Azul picking up the fee.
+Last year my company sent me to C++ on Sea (now ACCU on Sea) as an attendee, and I came home thinking I should try submitting a talk of my own. I gave one at [C++ Online](https://cpponline.uk/session/2026/zero-cost-abstractions-in-large-systems/) in March, remotely, and then my abstract was accepted at CppCon, so this time it was in person. I spent the week of September 15th in Aurora, Colorado for CppCon 2026, out of the Gaylord Rockies, there as a speaker thanks to the conference's sponsors covering my travel and lodging, and spent two days before the show in [Fedor Pikus's High-Performance Concurrency](https://cppcon.org/class-2026-high-perf-concurrency/) workshop, thanks to Azul picking up the fee.
 
 ![Outside the Gaylord Rockies during CppCon 2026](/assets/img/a-week-in-aurora-cppcon-2026-venue.jpg)
 _Outside the Gaylord Rockies._
