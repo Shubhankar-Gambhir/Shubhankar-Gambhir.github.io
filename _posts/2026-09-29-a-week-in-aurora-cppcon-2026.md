@@ -21,6 +21,8 @@ _Outside the Gaylord Rockies._
 
 ## Keynotes
 
+CppCon ran five keynotes this year. Two of them are worth a section of their own.
+
 [*"Profiles for Simplicity and Guarantees"*](https://cppcon2026.sched.com/event/2RT2n/profiles-for-simplicity-and-guarantees) laid out where the C++ safety story is actually heading: opt-in static constraints a codebase can adopt incrementally, not a new dialect and not a Rust-style rewrite. You declare which profile you're building to, and the compiler enforces the memory and type safety guarantees that profile promises from there. It's a pragmatic answer to a question that's been hanging over the language for a few years now, how to close the safety gap without asking every existing codebase to start over.
 
 [*"The Address Is Not The Place: Object Residency in C++26"*](https://cppcon2026.sched.com/event/2RT2t/the-address-is-not-the-place-object-residency-in-c++26) covered proposed C++26 object model changes that decouple where memory is allocated from where an object lives, aimed at relocatable objects and better interop with dynamic memory and garbage-collected runtimes. Coming at this from the OpenJDK side, where the collector moves objects out from under running threads as a matter of routine, it's a strange feeling to watch C++ start reasoning carefully about a problem the JVM has had opinions about for two decades. Worth tracking if you work anywhere near an allocator.
@@ -42,7 +44,7 @@ The part that stuck with me was the instructor's insistence that undefined behav
 
 ## Talks Worth Remembering
 
-CppCon runs six tracks at once, so anyone's "best of" list is really a "what I happened to be in the room for" list. Four more stuck, on top of the two keynotes above.
+CppCon runs six tracks at once, so anyone's "best of" list is really a "what I happened to be in the room for" list. Four more stuck, on top of the two keynotes above, out of a schedule with many more sessions than any one person could sit through.
 
 [*"Concurrency for Modern CPUs: Lock-Free or Lock-Based?"*](https://cppcon2026.sched.com/event/2RT8G/concurrency-for-modern-cpus-lock-free-or-lock-based) argued that under real contention a well-tuned spinlock beats a lock-free CAS loop, and that the reasoning flips at low contention, because a spinlock's implicit synchronization is hostile to an out-of-order pipeline in a way a single CAS or XADD isn't. The talk built a dual-domain MPMC queue that routes each access pattern to whichever mechanism the hardware actually favors, benchmarked across Intel, an ARM server part, and an Apple M3. This is close enough to what I found benchmarking [lock-free structures against mutex-based ones]({% post_url 2026-08-19-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %}) that I sat up: lock-free underperforming outside specific fan-out shapes wasn't a quirk of my hardware or my benchmark harness, it's a pattern other people are independently finding and building production designs around.
 
