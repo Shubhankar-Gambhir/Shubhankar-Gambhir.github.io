@@ -62,6 +62,8 @@ The best conversation I had outside a session room was with an engineer at a tra
 
 ## Closing
 
+CppCon wrapped with a nice view, a rainbow right over the venue on the last day.
+
 ![Rainbow over the Gaylord Rockies on the last day of CppCon 2026](/assets/img/a-week-in-aurora-cppcon-2026-rainbow.jpg)
 _The view from the venue, last day._
 
