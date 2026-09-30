@@ -31,7 +31,7 @@ CppCon ran five keynotes this year. Two of them are worth a section of their own
 
 My talk was on Tuesday, in the Software Design track: ["*Compile-Time Polymorphism for Runtime-Flexible Systems: Lessons from OpenJDK*"](https://cppcon2026.sched.com/event/2RT5T/compile-time-polymorphism-for-runtime-flexible-systems-lessons-from-openjdk). Say your program picks a strategy at runtime, from a config flag or a command-line option, and then runs it on a hot path millions of times a second. Virtual dispatch charges you on every call. Templates are fast, but they lock the choice in at compile time. The talk builds up a way to get both, one step at a time, with OpenJDK's GC barriers as the running example; every collector needs its own mix of barriers, and they sit on one of the hottest paths in the JVM. If you've read the [dispatch series]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) here, a lot of it will look familiar.
 
-Somewhere between thirty and forty people came, mostly senior engineers. A lot of them stayed after the slides for questions, which went into type erasure and other ways to implement an interface without a vtable, some of it past what I'd prepared. The abstract promised no JVM knowledge was required, and judging by the questions, nobody needed any.
+Somewhere between thirty and forty people came, mostly senior engineers. A lot of them stayed after the slides for questions, which went into type erasure and other ways to implement an interface without a vtable, some of it past what I'd prepared.
 
 ![Session board showing the talk in progress](/assets/img/a-week-in-aurora-cppcon-2026-talk-screen.jpg)
 _Mid-talk, Homestead 3/4._
