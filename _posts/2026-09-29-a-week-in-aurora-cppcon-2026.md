@@ -14,7 +14,7 @@ image:
   hero: false
 ---
 
-I spent the week of September 15th in Aurora, Colorado for CppCon 2026, out of the Gaylord Rockies. I was there as a speaker, thanks to the conference's sponsors covering my travel and lodging, and spent a day before the show in [Fedor Pikus's High-Performance Concurrency](https://cppcon.org/class-2026-high-perf-concurrency/) workshop, thanks to Azul picking up the fee. This is not the deep technical dive most posts here are. It is a recap: the keynotes, what I presented, what I sat through, and a few things that stuck past the flight home.
+Last year I went to C++ on Sea (now ACCU on Sea) as an attendee and came home thinking I should try submitting a talk of my own somewhere. Luckily, CppCon said yes. I spent the week of September 15th in Aurora, Colorado for CppCon 2026, out of the Gaylord Rockies, there as a speaker thanks to the conference's sponsors covering my travel and lodging, and spent a day before the show in [Fedor Pikus's High-Performance Concurrency](https://cppcon.org/class-2026-high-perf-concurrency/) workshop, thanks to Azul picking up the fee. This is not the deep technical dive most posts here are. It is a recap: the keynotes, what I presented, what I sat through, and a few things that stuck past the flight home.
 
 ![Outside the Gaylord Rockies during CppCon 2026](/assets/img/a-week-in-aurora-cppcon-2026-venue.jpg)
 _Outside the Gaylord Rockies._
