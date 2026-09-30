@@ -15,6 +15,8 @@ image:
 
 Last year my company sent me to C++ on Sea (now ACCU on Sea) as an attendee, and I came home thinking I should try submitting a talk of my own. I gave one at [C++ Online](https://cpponline.uk/session/2026/zero-cost-abstractions-in-large-systems/) in March, remotely, and then my abstract was accepted at CppCon, so this time it was in person. I spent the week of September 15th in Aurora, Colorado for CppCon 2026, out of the Gaylord Rockies, there as a speaker thanks to the conference's sponsors covering my travel and lodging, and spent two days before the show in [Fedor Pikus's High-Performance Concurrency](https://cppcon.org/class-2026-high-perf-concurrency/) workshop, thanks to Azul picking up the fee.
 
+It was my first CppCon, and my first trip to the US. The Gaylord Rockies is a great hotel, and since the workshop meant getting there early, on the Friday before, I ended up with a room on a higher floor with a better view.
+
 ![Outside the Gaylord Rockies during CppCon 2026](/assets/img/a-week-in-aurora-cppcon-2026-venue.jpg)
 _Outside the Gaylord Rockies._
 
@@ -22,22 +24,26 @@ _Outside the Gaylord Rockies._
 
 CppCon ran five keynotes this year. These are the two I liked the most.
 
-It was nice to see Bjarne Stroustrup, the creator of C++, in person. Around the venue he was basically a celebrity. His keynote, ["*Profiles for Simplicity and Guarantees*"](https://cppcon2026.sched.com/event/2RT2n/profiles-for-simplicity-and-guarantees), laid out where the C++ safety story is actually heading: opt-in static constraints a codebase can adopt incrementally, not a new dialect and not a Rust-style rewrite. You declare which profile you're building to, and the compiler enforces the memory and type safety guarantees that profile promises from there. It's a pragmatic answer to a question that's been hanging over the language for a few years now, how to close the safety gap without asking every existing codebase to start over.
+1. ["*Profiles for Simplicity and Guarantees*"](https://cppcon2026.sched.com/event/2RT2n/profiles-for-simplicity-and-guarantees) by Bjarne Stroustrup
 
-Laurie Kirk's ["*The Address Is Not The Place: Object Residency in C++26*"](https://cppcon2026.sched.com/event/2RT2t/the-address-is-not-the-place-object-residency-in-c++26) covered proposed C++26 object model changes that decouple where memory is allocated from where an object lives, aimed at relocatable objects and better interop with dynamic memory and garbage-collected runtimes. Coming at this from the OpenJDK side, where the collector moves objects out from under running threads as a matter of routine, it's a strange feeling to watch C++ start reasoning carefully about a problem the JVM has had opinions about for two decades. Worth tracking if you work anywhere near an allocator.
+   It was nice to see the creator of C++ in person. Around the venue he was basically a celebrity. His keynote laid out where the C++ safety story is actually heading: opt-in static constraints a codebase can adopt incrementally, not a new dialect and not a Rust-style rewrite. You declare which profile you're building to, and the compiler enforces the memory and type safety guarantees that profile promises from there. It's a pragmatic answer to a question that's been hanging over the language for a few years now, how to close the safety gap without asking every existing codebase to start over.
+
+2. ["*The Address Is Not The Place: Object Residency in C++26*"](https://cppcon2026.sched.com/event/2RT2t/the-address-is-not-the-place-object-residency-in-c++26) by Laurie Kirk
+
+   Kirk's keynote covered proposed C++26 object model changes that decouple where memory is allocated from where an object lives, aimed at relocatable objects and better interop with dynamic memory and garbage-collected runtimes. I'd heard about her before the conference, and she's a great speaker, really enthusiastic about the material. Coming at this from the OpenJDK side, where the collector moves objects out from under running threads as a matter of routine, it's a strange feeling to watch C++ start reasoning carefully about a problem the JVM has had opinions about for two decades. Worth tracking if you work anywhere near an allocator.
 
 ## My Talk
 
 My talk was on Tuesday, in the Software Design track: ["*Compile-Time Polymorphism for Runtime-Flexible Systems: Lessons from OpenJDK*"](https://cppcon2026.sched.com/event/2RT5T/compile-time-polymorphism-for-runtime-flexible-systems-lessons-from-openjdk). Say your program picks a strategy at runtime, from a config flag or a command-line option, and then runs it on a hot path millions of times a second. Virtual dispatch charges you on every call. Templates are fast, but they lock the choice in at compile time. The talk builds up a way to get both, one step at a time, with OpenJDK's Access API as the running example. It's how the JVM picks the right GC barriers at runtime. Every collector needs its own mix of barriers, and they sit on one of the hottest paths in the VM. If you've read the [dispatch series]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) here, a lot of it will look familiar.
 
-Somewhere between thirty and forty people came, mostly senior engineers. A lot of them stayed after the slides for questions, which went into type erasure and other ways to implement an interface without a vtable, some of it past what I'd prepared.
+I'd given this talk before, but doing it at CppCon still made me nervous. Somewhere between thirty and forty people came, mostly senior engineers, and a lot of them stayed after the slides for questions. Those went into type erasure, interfaces without vtables, and the different ways to implement RTTI (the [-fno-rtti post]({% post_url 2026-08-26-the-null-slot-what-fno-rtti-actually-removes %}) touches on that last one), and some of it went past what I'd prepared.
 
 ![Session board showing the talk in progress](/assets/img/a-week-in-aurora-cppcon-2026-talk-screen.jpg)
 _Mid-talk, Homestead 3/4._
 
 ## The Workshop
 
-I spent two days in [Fedor Pikus's High-Performance Concurrency](https://cppcon.org/class-2026-high-perf-concurrency/) workshop before the main conference started: branchless programming, branch prediction, TLB behavior, and how much copying disappears once you actually use move semantics instead of writing code that happens to compile with them.
+I spent two days in [Fedor Pikus's High-Performance Concurrency](https://cppcon.org/class-2026-high-perf-concurrency/) workshop before the main conference started: branchless programming, branch prediction, TLB behavior, and how much copying disappears once you actually use move semantics instead of writing code that happens to compile with them. It was a small, hands-on class of fourteen or fifteen people, so you could talk to him one-on-one.
 
 The part that stuck with me was Pikus showing that undefined behavior can make code faster. The example was a loop indexing an array with a 32-bit counter on a 64-bit machine. If the counter is a signed `int`, overflow is undefined, so the compiler gets to assume it never happens and can treat the index as a plain 64-bit offset. Make it `unsigned` and wraparound is well-defined, so the compiler has to keep a separate 32-bit counter and widen it again on every iteration, which is a few extra instructions in the hottest part of the loop. The "safe" type is the slow one. ([This Stack Overflow question](https://stackoverflow.com/questions/49782609/performance-difference-of-signed-and-unsigned-integers-of-non-native-length) has the assembly for both.) You don't actually need the UB to get the fast version, since a `size_t` index is already pointer-sized and there's nothing to widen. Still, the speedup and the danger come from the same place: the compiler assuming something you never actually promised.
 
@@ -53,7 +59,7 @@ CppCon runs six tracks at once, so whatever you pick, you miss most of the sched
 
 2. ["*Are You Smarter Than A Branch Predictor?*"](https://cppcon2026.sched.com/event/2RT7J/are-you-smarter-than-a-branch-predictor) by Michelle D'Souza
 
-   This one was set up as a game show, and the room was very lively. Two C++ snippets go up on the screen, the audience votes on which one runs faster, and then you see what the hardware actually did. The snippets came from real production code, and right answers won erasers. It made me want to go back and check every `[[likely]]` I've ever written. Branch predictors are good enough now that a branchless rewrite or a hint added on a hunch can make things slower, unless you've profiled it and looked at the code the compiler actually generated.
+   This one was set up as a game show, and the room was very lively. Two C++ snippets go up on the screen, the audience votes on which one runs faster, and then you see what the hardware actually did. The snippets came from real production code, and right answers won erasers. I didn't answer any, so I went home without one. It made me want to go back and check every `[[likely]]` I've ever written. Branch predictors are good enough now that a branchless rewrite or a hint added on a hunch can make things slower, unless you've profiled it and looked at the code the compiler actually generated.
 
 3. ["*Processor Design and C++ Memory Models*"](https://cppcon2026.sched.com/event/2RT4z/processor-design-and-c++-memory-models) by Ofek Shilon
 
@@ -61,13 +67,17 @@ CppCon runs six tracks at once, so whatever you pick, you miss most of the sched
 
 4. ["*Ensuring Code Quality in the Age of AI: More Code, Less Engineering*"](https://cppcon2026.sched.com/event/2RT4q/ensuring-code-quality-in-the-age-of-ai-more-code-less-engineering) by Peter Muldoon
 
-   Muldoon's point was that AI has made writing code fast, but it hasn't made reviewing it any faster, so the bottleneck just moves to review. A big AI-generated PR that gets approved without a proper read is still a problem; it's just a review problem now. His fixes were practical: better PR descriptions, spreading reviews across the team instead of leaving them to whoever is quickest, and checklists so reviewers don't have to rely on memory. None of it is new advice, but it matters more now that PRs keep getting bigger.
+   Muldoon's point was that AI has made writing code fast, but it hasn't made reviewing it any faster, so the bottleneck just moves to review. A big AI-generated PR that gets approved without a proper read is still a problem; it's just a review problem now. He had some interesting takes and the data to back them up, which answered a lot of the questions people keep asking about AI. His fixes were practical: better PR descriptions, spreading reviews across the team instead of leaving them to whoever is quickest, and checklists so reviewers don't have to rely on memory. None of it is new advice, but it matters more now that PRs keep getting bigger.
+
+## Outside the Talks
+
+I met a lot of people over the week. There were many different restaurants to try, and many of the sponsors ran their own events on top of that: a QRT lunch, HRT drinks, and SIG's meet-the-presenters banquet. At the banquet I got talking with Jan Wilczek, another speaker, whose [type erasure talk](https://cppcon2026.sched.com/event/2RT4k/using-type-erasure-to-extend-apis-you-dont-own-a-case-study-from-audio-plugin-development) was in the same room as mine, the slot right after. I also went to the two documentary screenings, *C++: The Documentary* and a preview of *Boost.Documentary*, and got a look at how WG21, the C++ standards committee, actually works.
+
+The booths were a good way to see what other companies are doing with C++. [Caterpillar](https://www.caterpillar.com), for example, has code that's limited by how much power it draws, so it doesn't overheat the machinery. I ran into the people from [Undo](https://undo.io) again, who I'd first met at C++ on Sea, and there were a lot of trading firms. One conversation with an engineer from one of them stuck with me, even though it only lasted a few minutes. Their code is all C++, but they still end up worrying about the JVM, because that's what runs at the exchanges.
 
 ## Conclusion
 
 Looking back, the thread for me was that performance rules have a shelf life. Ten years ago, "go lock-free" was close to a rule for contended code. Pikus's own abstract says that made sense on the hardware of the time, that he'd given several talks explaining how to do it, and then: "The hardware has changed." It's not often you watch someone update their own advice on stage. D'Souza's talk made the same point about branches, since predictors are now good enough that branchless tricks can make code slower. And Shilon showed how differently x86 and ARM can handle the same atomic, so what's cheap on one chip isn't necessarily cheap on another. The old advice wasn't wrong when it was written. The hardware moved on, and the only way to know what's true today is to measure on the machine you're actually running on.
-
-One conversation outside the session rooms stuck with me, even though it only lasted a few minutes. It was with an engineer at a trading firm. Their code is all C++, but they still end up worrying about the JVM, because that's what runs at the exchanges.
 
 CppCon wrapped with a nice view, a rainbow right over the venue on the last day.
 
