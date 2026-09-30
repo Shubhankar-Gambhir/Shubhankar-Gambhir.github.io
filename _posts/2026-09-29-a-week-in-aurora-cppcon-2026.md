@@ -69,12 +69,12 @@ Slides and a recording for my talk should show up once CppCon finishes processin
 
 ## Rocky Mountain Arsenal
 
-I stayed an extra day and spent a few hours hiking the Rocky Mountain Arsenal National Wildlife Refuge, roughly 15,000 acres of prairie and wetland just outside Denver that spent decades as a wartime manufacturing site before becoming one of the largest urban wildlife refuges in the country. We didn't have a car, so the bison herds, which you're only supposed to view from the Wildlife Drive, were off the table. On foot instead, we got lake after lake, each one dead calm and mirroring the sky back at itself.
+I stuck around an extra day and went for a hike at the Rocky Mountain Arsenal, this sprawling wildlife refuge just outside Denver that used to be a wartime manufacturing site before it got turned into one of the biggest urban nature preserves in the country. We didn't have a car, so the bison drive was off the table, but walking the trails more than made up for it: lake after lake, dead calm, mirroring the sky back at you.
 
 ![One of the lakes at Rocky Mountain Arsenal National Wildlife Refuge](/assets/img/a-week-in-aurora-cppcon-2026-rma-lake.jpg)
 _One of the refuge's lakes, the day after CppCon ended._
 
-A quiet way to close out the trip before the flight home.
+A pretty nice way to wind the trip down before flying home.
 
 ---
 
