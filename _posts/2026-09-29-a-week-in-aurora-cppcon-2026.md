@@ -20,7 +20,7 @@ _Outside the Gaylord Rockies._
 
 ## Keynotes
 
-CppCon ran five keynotes this year. Two of them are worth a section of their own.
+CppCon ran five keynotes this year. These are the two I liked the most.
 
 Bjarne Stroustrup's ["*Profiles for Simplicity and Guarantees*"](https://cppcon2026.sched.com/event/2RT2n/profiles-for-simplicity-and-guarantees) laid out where the C++ safety story is actually heading: opt-in static constraints a codebase can adopt incrementally, not a new dialect and not a Rust-style rewrite. You declare which profile you're building to, and the compiler enforces the memory and type safety guarantees that profile promises from there. It's a pragmatic answer to a question that's been hanging over the language for a few years now, how to close the safety gap without asking every existing codebase to start over.
 
