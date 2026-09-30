@@ -17,6 +17,8 @@ Last year my company sent me to C++ on Sea (now ACCU on Sea) as an attendee, and
 
 It was my first CppCon, and my first trip to the US. The Gaylord Rockies is a great hotel, and since the workshop meant getting there early, on the Friday before, I ended up with a room on a higher floor with a better view.
 
+Over a thousand people came to CppCon this year, and more than half of its twenty-one corporate sponsors were trading or quant firms. The six tracks were spread across the Colorado, Red Rock, Homestead, and Willow Lake meeting rooms, and even that didn't fill the hotel. Two other conferences were running there at the same time.
+
 ![Outside the Gaylord Rockies during CppCon 2026](/assets/img/a-week-in-aurora-cppcon-2026-venue.jpg)
 _Outside the Gaylord Rockies._
 
@@ -26,7 +28,7 @@ CppCon ran five keynotes this year. These are the two I liked the most.
 
 1. ["*Profiles for Simplicity and Guarantees*"](https://cppcon2026.sched.com/event/2RT2n/profiles-for-simplicity-and-guarantees) by Bjarne Stroustrup
 
-   It was nice to see the creator of C++ in person. Around the venue he was basically a celebrity. His keynote laid out where the C++ safety story is actually heading: opt-in static constraints a codebase can adopt incrementally, not a new dialect and not a Rust-style rewrite. You declare which profile you're building to, and the compiler enforces the memory and type safety guarantees that profile promises from there. It's a pragmatic answer to a question that's been hanging over the language for a few years now, how to close the safety gap without asking every existing codebase to start over.
+   It was nice to see the creator of C++ in person. Around the venue he was basically a celebrity. On Tuesday he was also on the [language designers panel](https://cppcon2026.sched.com/event/2RT2q/language-designers-panel) with Guido van Rossum and C#'s lead designer Mads Torgersen, billed as the first time he and van Rossum had ever shared a stage. His keynote laid out where the C++ safety story is actually heading: opt-in static constraints a codebase can adopt incrementally, not a new dialect and not a Rust-style rewrite. You declare which profile you're building to, and the compiler enforces the memory and type safety guarantees that profile promises from there. It's a pragmatic answer to a question that's been hanging over the language for a few years now, how to close the safety gap without asking every existing codebase to start over.
 
 2. ["*The Address Is Not The Place: Object Residency in C++26*"](https://cppcon2026.sched.com/event/2RT2t/the-address-is-not-the-place-object-residency-in-c++26) by Laurie Kirk
 
@@ -49,13 +51,20 @@ The part that stuck with me was Pikus showing that undefined behavior can make c
 
 ## Talks Worth Remembering
 
-CppCon runs six tracks at once, so whatever you pick, you miss most of the schedule. Besides the keynotes, these are the four talks I'm still thinking about.
+CppCon runs six tracks at once, so whatever you pick, you miss most of the schedule. The bar for this list was that a talk had to change something I'd actually do differently, in code or in code review. Besides the keynotes, these are the four talks I'm still thinking about.
 
 1. ["*Concurrency for Modern CPUs: Lock-Free or Lock-Based?*"](https://cppcon2026.sched.com/event/2RT8G/concurrency-for-modern-cpus-lock-free-or-lock-based) by Fedor Pikus
 
    Pikus gave this one on Friday, and his answer to the title question basically came down to contention. When a lot of threads are fighting over the same data, a well-written spinlock beats a CAS loop. The trick is backoff. Losing threads wait their turn instead of retrying right away, so the cache line changes hands in batches instead of bouncing around on every failed attempt. When contention is low, it goes the other way. Even an uncontended spinlock isn't free, because its synchronization gets in the way of the out-of-order pipeline, and he had hardware counters to show it. A single XADD or CAS doesn't have that problem. So his MPMC queue uses both, a lock on the contended path and atomics on the uncontended one, with benchmarks on Intel, ARM servers (Graviton and Grace), and an Apple M3.
 
    I recognized a lot of this from my own benchmarks. In the [lock-free pool post]({% post_url 2026-08-19-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %}), the CAS-based free list lost to the mutex version on the two-socket Xeon in every mix except fan-out. My explanation back then was that a CAS loop has no way to stand down, while a contended mutex puts the losing thread to sleep. Pikus's spinlock never sleeps and still beats the CAS loop, so I think sleeping was just one way of standing down. He also said "ARM vs x86" is the wrong way to compare chips, and that matched what I saw. The same CAS loop won all nine mixes on a single-node Neoverse-N1, and I'd put the difference down to the Xeon's two sockets, not its instruction set. Lock-free isn't going away, though. Anything that needs real progress guarantees, like deadlock freedom or signal-handler safety, still needs it. As he put it, lock-free "is not dead. It has simply relocated."
+
+   The concrete takeaways:
+
+   - Heavy contention: a spinlock with backoff beats a CAS loop, because the cache line changes hands in batches.
+   - Low contention: a single XADD or CAS beats a lock, even an uncontended one.
+   - Both in one structure: split the contended path from the uncontended one, the way his MPMC queue does.
+   - Lock-free is still the answer when you need progress guarantees, like deadlock freedom or signal-handler safety.
 
 2. ["*Are You Smarter Than A Branch Predictor?*"](https://cppcon2026.sched.com/event/2RT7J/are-you-smarter-than-a-branch-predictor) by Michelle D'Souza
 
@@ -68,6 +77,13 @@ CppCon runs six tracks at once, so whatever you pick, you miss most of the sched
 4. ["*Ensuring Code Quality in the Age of AI: More Code, Less Engineering*"](https://cppcon2026.sched.com/event/2RT4q/ensuring-code-quality-in-the-age-of-ai-more-code-less-engineering) by Peter Muldoon
 
    Muldoon's point was that AI has made writing code fast, but it hasn't made reviewing it any faster, so the bottleneck just moves to review. A big AI-generated PR that gets approved without a proper read is still a problem; it's just a review problem now. He had some interesting takes and the data to back them up, which answered a lot of the questions people keep asking about AI. His fixes were practical: better PR descriptions, spreading reviews across the team instead of leaving them to whoever is quickest, and checklists so reviewers don't have to rely on memory. None of it is new advice, but it matters more now that PRs keep getting bigger.
+
+   The concrete takeaways:
+
+   - Budget for review: AI speeds up writing code, not reviewing it.
+   - Write better PR descriptions, especially for big generated changes.
+   - Spread reviews across the team instead of leaving them to whoever is quickest.
+   - Give reviewers checklists so they don't have to rely on memory.
 
 ## Outside the Talks
 
