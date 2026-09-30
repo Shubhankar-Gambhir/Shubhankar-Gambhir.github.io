@@ -4,10 +4,9 @@ date: 2026-09-29
 categories: [C++, Conferences]
 tags: [cppcon, conference, concurrency, branch-prediction, c++26, memory-safety, openjdk, ai-assisted-development]
 description: >-
-  A recap of CppCon 2026 at the Gaylord Rockies: a talk on OpenJDK's compile-time
-  dispatch patterns, two keynotes on C++ safety and the C++26 object model, and
-  the sessions on hardware performance and AI-assisted code quality that stuck
-  past the flight home.
+  A recap of CppCon 2026 at the Gaylord Rockies: my talk on OpenJDK's Access API
+  and the sessions on hardware performance and AI-assisted code quality that
+  stuck past the flight home.
 image:
   path: /assets/img/og/a-week-in-aurora-cppcon-2026.png
   alt: "A Week in Aurora: CppCon 2026"
