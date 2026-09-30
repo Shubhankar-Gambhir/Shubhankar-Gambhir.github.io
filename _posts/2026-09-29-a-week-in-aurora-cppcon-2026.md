@@ -14,8 +14,6 @@ image:
   hero: false
 ---
 
-The best sign a talk landed is when the Q&A refuses to end on schedule. Mine did, and that is the detail from CppCon 2026 I keep coming back to.
-
 I spent the week of September 15th in Aurora, Colorado for CppCon 2026, out of the Gaylord Rockies. Azul picked up the workshop fee, and since I was speaking, CppCon covered my travel and lodging. This is not the deep technical dive most posts here are. It is a recap: the keynotes, what I presented, what I sat through, and a few things that stuck past the flight home.
 
 ![Outside the Gaylord Rockies during CppCon 2026](/assets/img/a-week-in-aurora-cppcon-2026-venue.jpg)
