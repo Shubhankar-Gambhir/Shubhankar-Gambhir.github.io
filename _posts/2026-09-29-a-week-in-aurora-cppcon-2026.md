@@ -16,7 +16,7 @@ image:
 
 The best sign a talk landed is when the Q&A refuses to end on schedule. Mine did, and that is the detail from CppCon 2026 I keep coming back to.
 
-Azul sent me to Aurora, Colorado for the week of September 15th to present at CppCon 2026, out of the Gaylord Rockies. This is not the deep technical dive most posts here are. It is a recap: the keynotes, what I presented, what I sat through, and a few things that stuck past the flight home.
+Azul paid for the workshop, and CppCon covered travel and lodging since I was speaking, which is how I ended up in Aurora, Colorado for the week of September 15th, out of the Gaylord Rockies. This is not the deep technical dive most posts here are. It is a recap: the keynotes, what I presented, what I sat through, and a few things that stuck past the flight home.
 
 ![Outside the Gaylord Rockies during CppCon 2026](/assets/img/a-week-in-aurora-cppcon-2026-venue.jpg)
 _Outside the Gaylord Rockies._
@@ -57,8 +57,6 @@ CppCon runs six tracks at once, so anyone's "best of" list is really a "what I h
 ## What Tied It Together
 
 The comfortable defaults kept needing correction this year. A spinlock isn't automatically worse than lock-free, it depends on contention, and the fastest designs route each access pattern to whichever mechanism the hardware favors that day. ARM versus x86 is usually the wrong question; what matters is the target chip's microarchitecture, not its instruction set. C++'s answer to memory safety is turning out to be opt-in static constraints layered onto existing code, not a wholesale rewrite. Even the AI-quality talk landed on the same shape of correction from a different angle: a tool that changes how fast you produce something doesn't change how much judgment the result still needs. Check the assumption instead of repeating it, whether the assumption is about hardware, the language, or the process you just automated.
-
-## Networking
 
 The best conversation I had outside a session room was with an engineer at a trading firm, most of whose stack is C++, and it turned into a good half hour on why HFT shops stay wary of the JVM even when they don't run it themselves. The exchanges they trade against often do run on Java, so JVM pause behavior and GC tuning are something they end up reasoning about secondhand, whether or not a line of Java ever ships in their own systems. It's an odd kind of dependency: caring deeply about a runtime you didn't choose and can't tune, because the other side of your order book did.
 
