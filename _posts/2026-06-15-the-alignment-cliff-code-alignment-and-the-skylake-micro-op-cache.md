@@ -312,6 +312,8 @@ The benchmark source, sweep scripts, and result CSVs are in the [companion repo]
 
 *Benchmarks run on Intel Xeon Gold 6130 @ 2.10 GHz, single core via `taskset -c 0`. GCC 15.2.0 and Clang 22.1.4 (conda-forge, micromamba). GCC 15 linked with `-static` due to glibc version mismatch on the benchmark host (host: glibc 2.28; conda env: glibc 2.34). Compile flags: `-O2 -march=skylake-avx512 -fcf-protection -falign-functions=1` for the work object (alignment disabled); harness compiled with `-falign-functions=64 -falign-loops=64`. Offsets achieved and verified with `nm` before each measurement. 100M iterations, 1M warmup, best of 3 runs. `perf stat` on Linux 4.18.0, perf 4.18. Perf events: `idq.dsb_uops`, `dsb2mite_switches.penalty_cycles`, `idq_uops_not_delivered.core`, `icache_16b.ifdata_stall`. 4 GP events + 2 fixed counters (instructions, cycles): no multiplexing on Skylake.*
 
-*Series: [Four Ways to Dispatch a Runtime-Selected Strategy in C++]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %})*
+**Series start:** [Four Ways to Dispatch a Runtime-Selected Strategy in C++]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %})
 
-*Previously: [The 0.48 ns Ghost: How Code Alignment Broke Our Dispatch Benchmarks]({% post_url 2026-06-10-the-048-ns-ghost-how-code-alignment-broke-our-dispatch-benchmarks %})*
+**Previously:** [The 0.48 ns Ghost: How Code Alignment Broke Our Dispatch Benchmarks]({% post_url 2026-06-10-the-048-ns-ghost-how-code-alignment-broke-our-dispatch-benchmarks %})
+
+**Next:** [What Does a Lock Actually Cost? Benchmarking Concurrent Counters in C++]({% post_url 2026-06-24-what-does-a-lock-actually-cost-concurrent-counter-benchmarks %}). The dispatch series ends here; the next post moves from dispatch to concurrency.

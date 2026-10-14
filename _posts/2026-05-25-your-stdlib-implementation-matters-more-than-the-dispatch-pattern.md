@@ -139,7 +139,7 @@ The switch optimization didn't appear everywhere at once. Each major standard li
 
 ## The Michael Park Paradox
 
-Michael Park [wrote libc++'s variant implementation](https://github.com/llvm/llvm-project/commit/6169a59c51) in 2016. He then created the standalone [mpark::variant](https://github.com/mpark/variant) library as a C++11/14 backport, where he implemented *both* dispatch strategies (table and switch) and benchmarked them head-to-head.
+Michael Park [wrote libc++'s variant implementation](https://github.com/llvm/llvm-project/commit/0d3d8de014f1012dd0b2c2c077099cf6face44e5) in 2016. He then created the standalone [mpark::variant](https://github.com/mpark/variant) library as a C++11/14 backport, where he implemented *both* dispatch strategies (table and switch) and benchmarked them head-to-head.
 
 His [January 2019 results](https://mpark.github.io/programming/2019/01/22/variant-visitation-v2/) were unambiguous:
 
@@ -173,18 +173,18 @@ The dispatch problem doesn't go away, but moving it from library to language put
 
 5. **These results assume monomorphic call sites.** Every benchmark in Parts 1 through 4 dispatches to a single plugin type for the entire run. The branch predictor sees the same indirect call target every iteration and predicts perfectly. In real systems, you often dispatch to different types in the same loop. [Part 5]({% post_url 2026-06-02-when-dispatch-mechanism-choice-stops-mattering %}) measures what happens when you mix plugin types per iteration, and the ranking shifts.
 
+## Why the Alignment Flags?
+
+You might have noticed `-falign-functions=64 -falign-loops=64` in the benchmark methodology. Without those flags, virtual dispatch measured anywhere from 2.39 ns to 2.87 ns depending on the GCC version, not because the compiler generated better code, but because the linker happened to place the called function across a cache line boundary in some builds. A 0.48 ns ghost that looked like a compiler improvement but was pure binary layout noise. [Part 6]({% post_url 2026-06-10-the-048-ns-ghost-how-code-alignment-broke-our-dispatch-benchmarks %}) traces how we found it, why it matters, and what it means for every C++ microbenchmark you've ever read.
+
 ---
 
 *All benchmarks and source code are in the [companion repository](https://github.com/Shubhankar-Gambhir/cpp-dispatch-benchmark). Measured on Intel Xeon Gold 6130, `-O2 -march=skylake-avx512 -fcf-protection -falign-functions=64 -falign-loops=64`, pinned to a single core with `taskset -c 0`. GCC versions: 9.5.0, 10.4.0, 11.4.0, 12.4.0, 13.4.0, 14.3.0 (all via conda-forge); 15.2 conda-forge binary, statically linked (Xeon host glibc 2.28 predates GCC 15's glibc 2.34 requirement). Best of 3 runs reported. Stdlib source: [libstdc++ 12.4 `<variant>`](https://gcc.gnu.org/git/?p=gcc.git;a=blob;f=libstdc%2B%2B-v3/include/std/variant;hb=releases/gcc-12.4.0).*
 
 ---
 
-**Previously:** [Why std::visit May Be Slower Than a Vtable]({% post_url 2026-05-19-why-std-visit-may-be-slower-than-a-vtable %}). The assembly-level explanation of where the overhead comes from on GCC 11.
-
 **Series start:** [Four Ways to Dispatch a Runtime-Selected Strategy in C++]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}). The head-to-head comparison that started this investigation.
 
-## Why the Alignment Flags?
-
-You might have noticed `-falign-functions=64 -falign-loops=64` in the benchmark methodology. Without those flags, virtual dispatch measured anywhere from 2.39 ns to 2.87 ns depending on the GCC version, not because the compiler generated better code, but because the linker happened to place the called function across a cache line boundary in some builds. A 0.48 ns ghost that looked like a compiler improvement but was pure binary layout noise. I plan to write a separate post tracing how we found it, why it matters, and what it means for every C++ microbenchmark you've ever read.
+**Previously:** [Why std::visit May Be Slower Than a Vtable]({% post_url 2026-05-19-why-std-visit-may-be-slower-than-a-vtable %}). The assembly-level explanation of where the overhead comes from on GCC 11.
 
 **Next:** [When Dispatch Mechanism Choice Stops Mattering]({% post_url 2026-06-02-when-dispatch-mechanism-choice-stops-mattering %}). What happens when you mix multiple plugin types in the same hot loop, and which dispatch mechanism degrades most gracefully.

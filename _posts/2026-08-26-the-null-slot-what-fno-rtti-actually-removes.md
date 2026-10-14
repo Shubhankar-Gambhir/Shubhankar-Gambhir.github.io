@@ -400,5 +400,6 @@ Compilers: GCC 9.5.0, 10.4.0, 11.4.0, 12.4.0, 13.4.0, 14.3.0, 15.2.0 and Clang 2
 Methodology: the cast microbenchmark is 30M iterations after a 2M warmup, 5 runs, median reported, with an inline asm barrier to stop the optimiser hoisting a loop-invariant cast. Size and relocation figures are static ELF accounting and exactly reproducible. Compile wall time is best of 5 at `-j64`; the compile CPU rows are user CPU time for compiling each group of files serially, median of 5. `dlopen` figures are the median of 400 loads, with private-dirty pages read from `/proc/self/smaps` after the final load. The construct matrix, compiler matrix and Clang vtable experiments are `make constructs`, `make compilers` and `make future`.
 JVM figures come from a stock OpenJDK 17.0.0.1 build (`nm -a`, `readelf -rW`); `make jvm` runs the same census against any JDK you point it at. Source citations are pinned to jdk-17+35 and jdk-25+36.
 
-Previously: [Lock-Free Is Not Free: ABA, Tagged Pointers, and a Bounded Ring]({% post_url 2026-08-19-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %})
-Next: [A Week in Aurora: CppCon 2026]({% post_url 2026-09-29-a-week-in-aurora-cppcon-2026 %})
+**Previously:** [Lock-Free Is Not Free: ABA, Tagged Pointers, and a Bounded Ring]({% post_url 2026-08-19-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %})
+
+**Next:** [A Week in Aurora: CppCon 2026]({% post_url 2026-09-29-a-week-in-aurora-cppcon-2026 %})

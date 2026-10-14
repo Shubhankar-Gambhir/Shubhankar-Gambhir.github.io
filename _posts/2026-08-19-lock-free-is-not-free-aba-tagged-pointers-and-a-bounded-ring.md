@@ -296,5 +296,6 @@ Compilers: GCC 13.4.0 (x86), GCC 13.3.0 (ARM). Flags: `-std=c++17 -O2 -Wall -Wex
 Methodology: 1M items per producer, 5 runs after warmup, median reported, each thread pinned to its own core by consecutive core id (which interleaves the Xeon's two NUMA nodes, so multi-thread runs span both sockets), synchronized start, post-run count and checksum invariant.
 ABA rates: 20 trials per mix at 100k items per producer, reported as absolute deviation from the expected item count. The third machine cited is a 64-core AMD EPYC (Rome) VM running GCC 11.4.0, a different compiler from the other two, so treat its higher corruption rate as one more data point rather than a controlled comparison.
 
-Previous: [A Deep Dive into Producer-Consumer Queues in C++]({% post_url 2026-07-07-a-deep-dive-into-producer-consumer-queues %})
-Next: [The Null Slot: What -fno-rtti Removes, Costs, and Buys]({% post_url 2026-08-26-the-null-slot-what-fno-rtti-actually-removes %})
+**Previously:** [A Deep Dive into Producer-Consumer Queues in C++]({% post_url 2026-07-07-a-deep-dive-into-producer-consumer-queues %})
+
+**Next:** [The Null Slot: What -fno-rtti Removes, Costs, and Buys]({% post_url 2026-08-26-the-null-slot-what-fno-rtti-actually-removes %})

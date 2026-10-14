@@ -303,3 +303,6 @@ flowchart TD
 
 *This series grew out of my [C++ Online 2026 talk](https://www.youtube.com/watch?v=4aMaSaFW5Qo) on how OpenJDK's barrier system uses these patterns in production.*
 
+---
+
+**Next:** [Lazy Resolution: Resolve Once, Dispatch Forever]({% post_url 2026-05-12-lazy-resolution-resolve-once-dispatch-forever %}). How the decoupled CRTP resolver works, and how it stays type-safe without RTTI.

@@ -223,8 +223,8 @@ Next time: a standalone deep-dive that isolates the alignment effect with a mini
 
 *Benchmarks run on Intel Xeon Gold 6130 @ 2.10 GHz, single core via `taskset -c 0`. GCC 11.4.0, 13.4.0, 15.2.0 (conda-forge). GCC 15 required `-static` due to glibc version mismatch on the benchmark host. Baseline: `-O2 -march=skylake-avx512 -fcf-protection`; alignment flags varied as the experimental variable. Function offsets within each binary are deterministic; what changes across compiler versions and alignment flags is the relative placement chosen by the linker, not run-to-run randomization from ASLR. 100M iterations, 1M warmup, best of 3 runs. `perf stat` on Linux 5.15, perf 5.15. Benchmark source: [cpp-dispatch-benchmark](https://github.com/Shubhankar-Gambhir/cpp-dispatch-benchmark).*
 
-*Series start: [Four Ways to Dispatch a Runtime-Selected Strategy in C++]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %})*
+**Series start:** [Four Ways to Dispatch a Runtime-Selected Strategy in C++]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %})
 
-*Previously: [When Dispatch Mechanism Choice Stops Mattering]({% post_url 2026-06-02-when-dispatch-mechanism-choice-stops-mattering %})*
+**Previously:** [When Dispatch Mechanism Choice Stops Mattering]({% post_url 2026-06-02-when-dispatch-mechanism-choice-stops-mattering %})
 
-*Next: [The Alignment Cliff: Tracing a 0.478 ns Penalty to Skylake's Micro-Op Cache]({% post_url 2026-06-15-the-alignment-cliff-code-alignment-and-the-skylake-micro-op-cache %})*
+**Next:** [The Alignment Cliff: Tracing a 0.478 ns Penalty to Skylake's Micro-Op Cache]({% post_url 2026-06-15-the-alignment-cliff-code-alignment-and-the-skylake-micro-op-cache %})
