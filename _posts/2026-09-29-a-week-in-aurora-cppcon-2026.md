@@ -17,6 +17,9 @@ Last year my company sent me to C++ on Sea (now ACCU on Sea) as an attendee, and
 
 It was my first CppCon, and my first trip to the US. The Gaylord Rockies is a great hotel, and since the workshop meant getting there early, on the Friday before, I ended up with a room on a higher floor with a better view.
 
+![Night view from a high floor of the Gaylord Rockies, over the lit grounds and parking lots toward the city lights on the horizon](/assets/img/a-week-in-aurora-cppcon-2026-night-view.jpg)
+_The view from my room at night._
+
 Over a thousand people came to CppCon this year, and more than half of its twenty-one corporate sponsors were trading or quant firms. The six tracks were spread across the Colorado, Red Rock, Homestead, and Willow Lake meeting rooms, and even that didn't fill the hotel. Two other conferences were running there at the same time.
 
 ![Outside the Gaylord Rockies during CppCon 2026](/assets/img/a-week-in-aurora-cppcon-2026-venue.jpg)
@@ -90,6 +93,9 @@ CppCon runs six tracks at once, so whatever you pick, you miss most of the sched
 I met a lot of people over the week. There were many different restaurants to try, and many of the sponsors ran their own events on top of that: a QRT lunch, HRT drinks, and SIG's meet-the-presenters banquet. At the banquet I got talking with Jan Wilczek, another speaker, whose [type erasure talk](https://cppcon2026.sched.com/event/2RT4k/using-type-erasure-to-extend-apis-you-dont-own-a-case-study-from-audio-plugin-development) was in the same room as mine, the slot right after. I also went to the two documentary screenings, *C++: The Documentary* and a preview of *Boost.Documentary*, and got a look at how WG21, the C++ standards committee, actually works.
 
 The booths were a good way to see what other companies are doing with C++. [Caterpillar](https://www.caterpillar.com), for example, has code that's limited by how much power it draws, so it doesn't overheat the machinery. I ran into the people from [Undo](https://undo.io) again, who I'd first met at C++ on Sea, and there were a lot of trading firms. One conversation with an engineer from one of them stuck with me, even though it only lasted a few minutes. Their code is all C++, but they still end up worrying about the JVM, because that's what runs at the exchanges.
+
+![Conference swag laid out on a hotel bed: a QRT tote bag, a Monochrome bottle, two shirts, Boost card packs, and stickers and flyers from Akuna, Citadel Securities, Jump Trading, and Caterpillar](/assets/img/a-week-in-aurora-cppcon-2026-swag.jpg)
+_What the booths sent me home with._
 
 ## Conclusion
 
