@@ -145,3 +145,12 @@ After the Xeon sweep (all 21 payload configurations), stop and show the user the
 - **Runtime.** About 35 billion items on the Xeon (5 variants x 21 payload configurations x 9 mixes x 6 runs x up to 16M items). Time one N=4096 configuration first and report the full-sweep estimate before launching it.
 - **ARM variance** (Part 2's lesson): two instances, large gaps only.
 - **ARM RAM** is not recorded anywhere; read it from the instance before the ARM sweep.
+
+## Checkpoint decisions (2026-11-03, user)
+
+Xeon sweep findings (`results/diagnostics-heap-trim.md` in the companion repo): copy location is a real but modest effect (TwoLockQueueDeferred vs TwoLockQueue, 4 consumers: 1.2x at 512 B, 1.4x at 1 KB, 1.25x at 2 KB and 1.5x at 4 KB with heap trimming off, zero for `std::string`). The large gaps at N >= 2048 come from glibc heap trimming (bimodal, ~1 page fault per item in the slow mode, dependent on which variants ran earlier in the same process) and, in fan-in, from backlog page faults. The ring wins every mix above 8 bytes because it never allocates.
+
+- **Headline:** "We blamed the copy. It was the allocator, again." Thesis B stays as the honest-sized copy-location effect (TwoLock vs Deferred, with `std::string` as the control); the headline result is the allocator mechanism and the allocation-free ring. Echoes Part 1.
+- **Re-run before drafting (Xeon):** N = 1024, 2048, 4096, all three payload configurations, one process per variant, twice: default glibc and with heap trimming off (`GLIBC_TUNABLES=glibc.malloc.trim_threshold=17179869184:glibc.malloc.top_pad=1073741824`). These replace the original sweep's cells at those sizes in the post; N <= 512 cells stay from the original sweep.
+- **-O3 spot check:** 4x4 and 15x1 at N = 8, 512, 4096, one process per variant, compared to -O2 run the same way; reported in one methodology sentence.
+- ARM still waits until the re-run is reviewed.
