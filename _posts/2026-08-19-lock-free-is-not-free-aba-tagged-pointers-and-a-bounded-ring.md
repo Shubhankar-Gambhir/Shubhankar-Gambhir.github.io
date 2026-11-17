@@ -55,7 +55,7 @@ void freeNode(Node<T>* n) {
 
 The queue around it is unchanged from the previous post: separate head and tail mutexes, an atomic `next` link with release on publish and acquire on read. Only the free list changed.
 
-I built it, ran `make test-queue`, and got twenty-seven passes out of twenty-seven. Single-threaded FIFO, balanced four-by-four, fan-out, fan-in, count and checksum invariants, all green.
+I built it on a 64-core AMD EPYC (Rome) VM, ran `make test-queue`, and got twenty-seven passes out of twenty-seven. Single-threaded FIFO, balanced four-by-four, fan-out, fan-in, count and checksum invariants, all green.
 
 Then I ran the same binary forty more times.
 
@@ -95,9 +95,9 @@ What does trigger it is fan-in, and the reason is the depth of the free list. Wi
 
 ## The Same Bug, Different Odds
 
-Line up the three machines I ran this on and the numbers refuse to agree. At 8P x 1C the Xeon corrupts 4 trials in 20 and ARM corrupts 11, while a 64-core AMD EPYC (Rome) virtual machine corrupts every one. That EPYC box is where I first hit this, and where the same binary failed forty runs out of forty. The balanced 8P x 8C mix is spotless on the Xeon across 20 trials, breaks once on ARM, and breaks 3 times in 20 on the EPYC. Totalled across all seven mixes: 13 of 140, 19 of 140, 46 of 140.
+Line up the three machines I ran this on and the numbers refuse to agree. At 8P x 1C the Xeon corrupts 4 trials in 20 and ARM corrupts 11, while the EPYC VM where I first hit this corrupts every one. The balanced 8P x 8C mix is spotless on the Xeon across 20 trials, breaks once on ARM, and breaks 3 times in 20 on the EPYC. Totalled across all seven mixes: 13 of 140, 19 of 140, 46 of 140.
 
-One source file, one bug, and the odds of catching it swing by a factor of three with nothing but the hardware. "Our test suite is green on CI" would have been a statement about the CI machine's core count and memory system rather than about the code. That is the failure mode to internalize: a stress test samples a probability distribution that moves when you change machines, and it samples it a handful of times. The Xeon's clean 8P x 8C row is not evidence that balanced workloads are safe, only evidence that this Xeon did not happen to hit the window in twenty tries.
+One source file, one bug, and the odds of catching it swing by a factor of three with nothing but the hardware. "Our test suite is green on CI" would have been a statement about the CI machine's core count and memory system rather than about the code. A stress test samples a probability distribution a handful of times, and the distribution moves when you change machines. The Xeon's clean 8P x 8C row is not evidence that balanced workloads are safe, only evidence that this Xeon did not happen to hit the window in twenty tries.
 
 The broken variant is still in the repo, marked as broken and excluded from the test suite, because a reproducer for ABA that fails on demand turns out to be hard to find and useful to have.
 
@@ -141,7 +141,7 @@ Both `getNode` and `freeNode` bump the version, so any observer that read the ol
 
 That assert is not decoration. "Pointers are 48 bits" describes a default, not the architecture: x86-64 with [5-level paging](https://docs.kernel.org/arch/x86/x86_64/5level-paging.html) supports 57-bit addresses, and AArch64 with LVA supports 52-bit ones. Linux keeps allocations below the 47-bit boundary on both unless a program explicitly asks for more via an `mmap` hint, largely so that pointer-tagging code like this keeps working. Request a high address anywhere in the process and the packing corrupts silently, which is why the check runs on every node instead of living in a comment.
 
-Being honest about what this buys: sixteen bits of version wraps every 65,536 modifications, so ABA is not eliminated, only made astronomically unlikely. An interfering thread would have to perform an exact multiple of 65,536 free-list operations inside another thread's compare-exchange window. A 128-bit tagged pointer removes the wrap; hazard pointers or epoch-based reclamation remove the whole class of problem by making it safe to touch a node that might have been recycled. The repo implements none of those, and if you need a guarantee rather than a probability you should reach for one of them instead of this. What I have survives thirty consecutive runs of the full test suite on both benchmark machines and forty on the EPYC box, which is enough to benchmark with and is not a proof.
+Sixteen bits of version wraps every 65,536 modifications, so ABA is not eliminated, only made astronomically unlikely. An interfering thread would have to perform an exact multiple of 65,536 free-list operations inside another thread's compare-exchange window. A 128-bit tagged pointer removes the wrap; hazard pointers or epoch-based reclamation remove the whole class of problem by making it safe to touch a node that might have been recycled. The repo implements none of those, and if you need a guarantee rather than a probability you should reach for one of them instead of this. What I have survives thirty consecutive runs of the full test suite on both benchmark machines and forty on the EPYC box, which is enough to benchmark with and is not a proof.
 
 ## Removing the Mutex Made It Slower, On One Machine
 
@@ -161,7 +161,9 @@ With a correct lock-free pool in hand, the original question finally gets an ans
 
 Read the last two columns against each other and the shape is clean. The lock-free pool beats the mutex pool under fan-out by 30 to 36 percent, and loses to it everywhere else, by 4 to 57 percent when balanced and by 24 to 33 percent under fan-in.
 
-Fan-out is exactly the case where one producer owns the pop side, so its compare-exchange never contends and it pays a single uncontended atomic instead of a mutex acquire and release. That is lock-free working as advertised. Everything else is the other half of the bargain. When fifteen threads hammer one word, a compare-exchange loop has no way to stand down: each failed attempt reloads the cache line, computes a new candidate, and fires again, and every one of those retries is coherence traffic that slows down the thread that is actually going to win. A contended mutex does the opposite. It parks the loser in the kernel and stops it generating traffic at all. Under heavy contention, going to sleep is a feature.
+Fan-out is exactly the case where one producer owns the pop side, so its compare-exchange never contends and it pays a single uncontended atomic instead of a mutex acquire and release. That is lock-free working as advertised. Everything else is the other half of the bargain. When fifteen threads hammer one word, a compare-exchange loop has no way to stand down: each failed attempt reloads the cache line, computes a new candidate, and fires again, and every one of those retries is coherence traffic that slows down the thread that is actually going to win. A contended mutex does the opposite. It parks the loser in the kernel and stops it generating traffic at all.
+
+*Update, November 2026: after Fedor Pikus's CppCon talk I'd put this differently. His spinlock with backoff never sleeps and still beats a CAS loop under contention, so sleeping is just one way of standing down. More in the [CppCon trip report]({% post_url 2026-09-29-a-week-in-aurora-cppcon-2026 %}).*
 
 Then I ran the same code on the ARM box, and the column flipped:
 
@@ -179,11 +181,9 @@ Then I ran the same code on the ARM box, and the column flipped:
 
 On the Xeon the lock-free pool beat the single-mutex pool in two mixes out of nine. On ARM it beats it in all nine, by 3 to 28 percent. Nothing about the code changed. The same compare-exchange loop that was a liability on a two-socket Skylake is an asset on a single-NUMA-node Neoverse-N1, and this is the same divergence [Part 1]({% post_url 2026-07-07-a-deep-dive-into-producer-consumer-queues %}) kept running into: the Xeon interleaves its two NUMA nodes by core id, so every contended line in a multi-thread run crosses the socket interconnect to move. Retry loops pay that toll once per failed attempt. On a machine where the line never leaves the node, retrying is cheap enough that never entering the kernel wins.
 
-The honest caveat is that beating one mutex is a low bar, and I already had sixteen. Put the lock-free pool against the sharded pool from Part 1 and it loses seven of nine mixes on ARM, winning only 16P x 16C and 1P x 8C. Sixteen aligned mutexes spread the traffic well enough that going lock-free on top of that buys nothing on this machine. (The 16P x 16C row on ARM is 32 threads on 16 cores, so every variant there is paying scheduler overhead, not just cache traffic.)
+Beating one mutex is a low bar, though, and I already had sixteen. Put the lock-free pool against the sharded pool from Part 1 and it loses seven of nine mixes on ARM, winning only 16P x 16C and 1P x 8C. Sixteen aligned mutexes spread the traffic well enough that going lock-free on top of that buys nothing on this machine. (The 16P x 16C row on ARM is 32 threads on 16 cores, so every variant there is paying scheduler overhead, not just cache traffic.)
 
 The comparison that matters more is the first column against the other three, and there the two machines mostly agree. Three pool designs (one mutex, sixteen sharded mutexes, and no mutex at all), and plain `new`/`delete` beats every one of them in all nine mixes on ARM, and in five of nine on the Xeon. Part 1's diagnosis was that glibc's [per-thread arenas](https://sourceware.org/glibc/wiki/MallocInternals) already do the sharding a hand-rolled pool is trying to reinvent. Removing the lock does not change that, because the lock was never the whole problem: the pool is a single shared structure that every thread on both ends of the queue must touch, and the allocator is not.
-
-Pooling was a dead end on both architectures. The lock was a symptom.
 
 ## Not Allocating At All
 
@@ -275,15 +275,11 @@ Third, and this is the one I would raise if I were reading someone else's post: 
 
 Re-running the Part 1 variants to get these ARM numbers cost that post one of its conclusions. Part 1 argued that the two-lock queue's fan-in penalty was a property of the two-socket Xeon, citing an ARM run where the two-lock queue beat the single-lock linked list at 15P x 1C, 321 nanoseconds against 378. On this ARM machine the ordering is reversed: 345 for the single-lock linked queue against 448 for the two-lock. Same CPU model, same core count, same GCC 13.3.0, same flags, different rented instance, opposite result.
 
-I do not know which run is representative, and I am not going to guess. The honest reading is that this particular comparison sits inside the noise floor of a setup where I control neither placement nor neighbors, which makes Part 1's "solid and repeatable" too strong for that one claim. What I would still defend are the results with large margins and a mechanism behind them: fan-out favoring the split lock by 3.7x or more, the deque winning uncontended, every pool variant losing to the allocator on ARM. A 15 percent gap between two linked variants on a cloud instance is not one of those.
+I do not know which run is representative. My best reading is that this particular comparison sits inside the noise floor of a setup where I control neither placement nor neighbors, which makes Part 1's "solid and repeatable" too strong for that one claim. What I would still defend are the results with large margins and a mechanism behind them: fan-out favoring the split lock by 3.7x or more, the deque winning uncontended, every pool variant losing to the allocator on ARM. A 15 percent gap between two linked variants on a cloud instance is not one of those.
 
-## What I Learned
+## Where That Leaves the Pool
 
-Removing a mutex is not an optimization. It is a change of failure mode. The Treiber stack was shorter than the mutex version, contained no lock, matched every reference implementation I could find, and silently destroyed 83 percent of the data flowing through it. The test suite passed on the first run. What eventually caught it was running the same binary forty more times, and what explained it was a program that measures the failure rate per thread mix instead of asserting once and hoping.
-
-The performance lesson is smaller and less romantic than the correctness one. A compare-exchange loop cannot stand down and a mutex can, so the retry loop's value depends entirely on what a failed retry costs on your machine. On the two-socket Xeon, where every failure drags a cache line back across the interconnect, the lock-free pool won two mixes out of nine, both fan-out. On the single-node ARM box, where it does not, the same code won all nine. Neither number is the truth about lock-free pools. Both are facts about a memory system, and I would not have known that from one machine.
-
-What actually won was not lock-freedom on either box. It was deleting the work. Every pool variant, locked or not, lost to plain `new`/`delete` in most mixes; the ring wins because it does not allocate at all. Three attempts to make allocation cheaper, and the answer was to arrange not to allocate.
+Three attempts to make allocation cheaper, and the thing that won on both machines was the ring, which doesn't allocate.
 
 There is one more thread to pull. Every queue here moves an `int64_t`, which is the friendliest possible payload: it fits in a register, copies for free, and makes the synchronization the entire cost. That is what I wanted for measuring locks, but it flatters the linked variants, which hand around pointers to nodes, and penalizes the ring, which copies values into cells. A payload that costs real money to copy should move the ranking, possibly a lot. That is the next thing to measure.
 
@@ -294,7 +290,7 @@ Companion repo: [github.com/Shubhankar-Gambhir/concurrent-data-structures-cpp](h
 Hardware: Intel Xeon Gold 6130 @ 2.10 GHz (2x16 cores, Skylake, two NUMA nodes); ARM Neoverse-N1 (16 cores, single NUMA node). Note that 16P x 16C is 32 threads on both, which fits the Xeon's 32 cores and oversubscribes ARM's 16.
 Compilers: GCC 13.4.0 (x86), GCC 13.3.0 (ARM). Flags: `-std=c++17 -O2 -Wall -Wextra -pthread`, identical on both architectures (no `-march`) for a clean cross-architecture comparison.
 Methodology: 1M items per producer, 5 runs after warmup, median reported, each thread pinned to its own core by consecutive core id (which interleaves the Xeon's two NUMA nodes, so multi-thread runs span both sockets), synchronized start, post-run count and checksum invariant.
-ABA rates: 20 trials per mix at 100k items per producer, reported as absolute deviation from the expected item count. The third machine cited is a 64-core AMD EPYC (Rome) VM running GCC 11.4.0, a different compiler from the other two, so treat its higher corruption rate as one more data point rather than a controlled comparison.
+ABA rates: 20 trials per mix at 100k items per producer, reported as absolute deviation from the expected item count. The third machine cited is a 64-core AMD EPYC (Rome) VM running GCC 11.4.0, a different compiler from the other two, so its higher corruption rate is an extra data point and not a controlled comparison.
 
 **Previously:** [A Deep Dive into Producer-Consumer Queues in C++]({% post_url 2026-07-07-a-deep-dive-into-producer-consumer-queues %})
 

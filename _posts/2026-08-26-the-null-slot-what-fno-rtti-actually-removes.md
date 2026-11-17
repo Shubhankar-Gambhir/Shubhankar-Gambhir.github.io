@@ -19,7 +19,7 @@ Everyone describes `-fno-rtti` the same way: it disables `dynamic_cast` and `typ
 
 The part that surprised me is that the vtable does not get any smaller. Compile a polymorphic class with the flag and the typeinfo pointer is still there, still occupying its eight bytes, just holding null. That one detail explains the flag's nastiest failure mode, and a good deal of what follows.
 
-I went looking because OpenJDK builds `libjvm.so` with it and I wanted to know what that buys. This post is the long answer: what the flag is, why so many large codebases use it and whether you should, what it saves and costs, what has changed underneath it across compilers and runtime libraries, what is coming next, and how OpenJDK and its peers live without `dynamic_cast`. Everything reproduces from [the companion repo](https://github.com/Shubhankar-Gambhir/fno-rtti-bench) with `make`.
+I went looking because OpenJDK builds `libjvm.so` with it and I wanted to know what that buys. Everything reproduces from [the companion repo](https://github.com/Shubhankar-Gambhir/fno-rtti-bench) with `make`.
 
 *Revised 1 October 2026. This version is reorganised and expanded, adds measurements across GCC 9 to 15, Clang 22 and libc++, and corrects several claims the first version got wrong, chiefly about where its build-time savings came from and which runtime produced its `dynamic_cast` timings.*
 
@@ -77,7 +77,7 @@ That is undefined behavior that happens to work because the Itanium C++ ABI fixe
 
 On an object whose vtable came from a `-fno-rtti` translation unit, that second load returns `(nil)`. The same probe on GCC 9.5.0, 10.4.0, 11.4.0, 12.4.0, 13.4.0, 14.3.0, 15.2.0 and Clang 22.1.4 gives a `0x28` vtable every time, with the flag and without it. The ABI pins the layout, and no release has moved it.
 
-So the flag changes content, not shape. Virtual function slots sit at the same offsets, objects are the same size, and virtual calls compile to identical code. That is deliberate. Had the flag reclaimed the eight bytes, every `-fno-rtti` object file would be silently incompatible with every `-frtti` one, and the symptom would be calls landing on the wrong function. Keeping the slot trades eight bytes per class for a null dereference you can debug.
+The layout survives the flag. Virtual function slots sit at the same offsets, objects are the same size, and virtual calls compile to identical code. That is deliberate. Had the flag reclaimed the eight bytes, every `-fno-rtti` object file would be silently incompatible with every `-frtti` one, and the symptom would be calls landing on the wrong function.
 
 What the flag rejects barely varies. I compiled eleven one-line constructs under `-fno-rtti` with all eight of those compilers:
 
@@ -139,7 +139,7 @@ Then there is the standard library. libstdc++ and libc++ both remove `std::any::
 
 Sanitizers notice too. With `-fsanitize=undefined`, GCC 15.2.0 and Clang 22.1.4 both silently drop the `vptr` check, which needs the typeinfo you just deleted. Clang rejects an explicit `-fsanitize=vptr`; GCC drops even that without a word. Chromium turns RTTI back on for exactly those sanitizer builds, and Firefox re-enables it for one directory because "ICU requires RTTI".
 
-So who should use it? You should if you already avoid `dynamic_cast` and `typeid`, if you control the whole link or will document the contract, and if you are switching off exceptions in the same change. You probably should not if you ship polymorphic types to consumers you do not control, or if your only reason is size.
+If you already avoid `dynamic_cast` and `typeid`, control the whole link (or will document the contract), and are switching off exceptions in the same change, the flag is a reasonable thing to adopt. If you ship polymorphic types to consumers you don't control, or your only reason is size, I'd leave it alone.
 
 ## Impact: Size, Load Time, Build Time, Speed
 
@@ -264,7 +264,7 @@ The companion benchmark times the same forms on a hierarchy of exactly this shap
 | `dynamic_cast<Rectangle*>`, hit on the immediate base | 30.20 | 15.8x |
 | `dynamic_cast<Circle*>`, miss | 55.72 | 29.2x |
 
-Don't read much into the top four rows. At 2.10 GHz one cycle is 0.476 ns, and those numbers are 1, 5, 1 and 4 cycles exactly; they quantize, and they shuffle between builds for reasons unrelated to the cast. It is [the same quantization behind a phantom 20 percent swing in an earlier benchmark]({% post_url 2026-06-10-the-048-ns-ghost-how-code-alignment-broke-our-dispatch-benchmarks %}). The honest summary is that the release-build cast, `is_a` and doing nothing sit within a couple of cycles of each other.
+Don't read much into the top four rows. At 2.10 GHz one cycle is 0.476 ns, and those numbers are 1, 5, 1 and 4 cycles exactly; they quantize, and they shuffle between builds for reasons unrelated to the cast. It is [the same quantization behind a phantom 20 percent swing in an earlier benchmark]({% post_url 2026-06-10-the-048-ns-ghost-how-code-alignment-broke-our-dispatch-benchmarks %}). In practice the release-build cast, `is_a` and doing nothing sit within a couple of cycles of each other.
 
 The `dynamic_cast` rows are far enough out to mean something, and what they mean is that its cost depends on the answer. An exact-type match takes the fast path. Casting to the immediate base costs five times that, because the runtime has to walk the hierarchy to find it, and a miss costs ten times it, because the runtime must exhaust the hierarchy before it can return null. A failing `dynamic_cast` runs 23 times a virtual call, in a codebase where [virtual dispatch itself gets scrutinised]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}). `is_a()` is flat whatever you ask it.
 
@@ -324,8 +324,6 @@ The compilers also disagree about where the flag's boundary sits. MSVC's `/GR-` 
 
 ## What's Coming
 
-Three things are changing the picture, and only one of them has shipped in a standard.
-
 Clang 18 added `-fexperimental-omit-vtable-rtti` ([f45f1c3585e6](https://github.com/llvm/llvm-project/commit/f45f1c3585e6)), which finally deletes the null slot. It is a front-end-only flag, so you pass it as `-Xclang -fexperimental-omit-vtable-rtti`, and it refuses to run without `-fno-rtti`, with an error message that reads, typo included, "call only be used with -fno-rtti". It breaks the ABI in exactly the way plain `-fno-rtti` was designed not to, which is why it is experimental. Fuchsia already uses it for its kernel.
 
 Relative vtables go further. `-fexperimental-relative-c++-abi-vtables` stores each slot as a 32-bit offset from the vtable instead of a 64-bit absolute pointer, which halves the vtable and removes the load-time relocations entirely. Clang makes it [the default when targeting Fuchsia](https://github.com/llvm/llvm-project/blob/llvmorg-22.1.4/clang/include/clang/Basic/TargetCXXABI.h#L67-L69). Here is what both do to the same 1800-class corpus, built with Clang 22.1.4:
@@ -340,7 +338,7 @@ Relative vtables go further. `-fexperimental-relative-c++-abi-vtables` stores ea
 
 Omitting the slot saves exactly 8 bytes times 1,801 vtables and not a single relocation, since a null slot never had one; the vtables pack into fewer pages, which accounts for the smaller dirty footprint. With no relocation work removed, I would not trust its faster `dlopen`. Relative vtables are the dramatic column: private-dirty memory falls from 104 KB to 8 KB because there is almost nothing left for the loader to patch. Combining the two gets the vtables down to 43,224 bytes. The catch is that the whole program must agree, C++ runtime included. Linked against an ordinary libstdc++, a relative-vtable build crashes as soon as it catches a `std::exception&` and calls `what()`. That is fine for an operating system that builds everything from source, and a non-starter for anyone else.
 
-The third change comes from the language. C++26 adopted static reflection, [P2996](https://wg21.link/P2996), in June 2025, and GCC 16 ships it behind `-std=c++26 -freflection`; upstream Clang does not have it yet. Reflection happens at compile time and needs no typeinfo, so it works under `-fno-rtti`. On GCC 16.1 this compiles with the flag and prints the type's name:
+Only one change on the horizon has made it into a standard, and it comes from the language rather than the ABI. C++26 adopted static reflection, [P2996](https://wg21.link/P2996), in June 2025, and GCC 16 ships it behind `-std=c++26 -freflection`; upstream Clang does not have it yet. Reflection happens at compile time and needs no typeinfo, so it works under `-fno-rtti`. On GCC 16.1 this compiles with the flag and prints the type's name:
 
 ```cpp
 const char* static_name(Base* p) {
@@ -389,7 +387,7 @@ Qt went the other way. It dropped its Windows `-no-rtti` configure option in 5.9
 
 Add it up and size is the weakest argument in the pile. Two and a half percent of a real binary, a single megabyte in OpenJDK's Windows attempt, weighed against losing `dynamic_cast`, a standard library with holes in it, sanitizers that quietly check less, and a mixing failure that links clean and crashes later. If size is all you want, `-ffunction-sections -Wl,--gc-sections` is the first thing to try, and it costs nothing socially. Relative vtables save more than `-fno-rtti` does, if you control every byte of the program.
 
-What the flag actually buys is an invariant the compiler enforces: no run-time type introspection anywhere in this binary. The projects that use it all made that design decision first, built their own cheap, predictable type checks, and then used the flag to keep it true. That is the right order. Reach for `-fno-rtti` to ratify a decision you have already made, not to force one onto a mature codebase for two percent.
+What the flag actually buys is an invariant the compiler enforces: no run-time type introspection anywhere in this binary. The projects that use it all made that design decision first, built their own cheap, predictable type checks, and then used the flag to keep it true.
 
 ---
 

@@ -4,19 +4,19 @@ date: 2026-06-15
 categories: [C++, Performance]
 tags: [alignment, skylake, dsb, micro-op-cache, cache-line, perf-stat, front-end, uops-not-delivered]
 description: >-
-  Part 6 found a step function: 2.392 ns below some offset threshold, 2.870 ns above it.
-  This post builds a controlled single-function experiment to find the exact threshold,
-  instruments it with Skylake PMU counters, and traces the 0.478 ns cliff to a 38-byte
-  function body crossing a 32-byte DSB window boundary.
+  Part 6 blamed code alignment for a phantom swing in the dispatch benchmarks. Placing a
+  single function at every offset in a cache line turns up a step function: 2.392 ns below
+  a threshold, 2.870 ns above it. Skylake PMU counters trace the 0.478 ns cliff to a 38-byte
+  function body crossing a 32-byte DSB window boundary, and rule out Part 6's explanation.
 image:
   path: /assets/img/og/the-alignment-cliff-code-alignment-and-the-skylake-micro-op-cache.png
   alt: "The Alignment Cliff: Tracing a 0.478 ns Penalty to Skylake's Micro-Op Cache"
   hero: false
 ---
 
-[Part 6]({% post_url 2026-06-10-the-048-ns-ghost-how-code-alignment-broke-our-dispatch-benchmarks %}) ended with an observation and a promise. After controlling alignment artifacts in the dispatch benchmarks, I ran a sanity sweep: placed a single function at every offset within a 64-byte cache line and measured call latency. The result was a perfect step function: 2.392 ns from offset 0 through offset 24, then 2.870 ns from offset 32 through offset 56. The threshold was somewhere between 24 and 28.
+[Part 6]({% post_url 2026-06-10-the-048-ns-ghost-how-code-alignment-broke-our-dispatch-benchmarks %}) traced a 20% swing in the dispatch benchmarks to code alignment and ended by promising a minimal, single-function benchmark that isolates the effect. I started with a sanity sweep: one function placed at every 8-byte offset within a 64-byte cache line. The result was a perfect step function, 2.392 ns from offset 0 through offset 24 and 2.870 ns from offset 32 through offset 56.
 
-This post is the full investigation. You will see the exact threshold (between byte 24 and byte 28), the Skylake PMU counters that identify the cause, and the geometric reason the cliff lands exactly where it does.
+Part 6 also offered a cause: misaligned code falling out of the micro-op cache onto the legacy decoder. The counters below say that's wrong, and point at something else.
 
 ## The Experiment
 
@@ -79,7 +79,7 @@ The first sweep samples every 8 bytes across one 64-byte cache line (GCC 15.2.0,
 | 48     | 2.8705  |
 | 56     | 2.8700  |
 
-The cliff falls somewhere between offset 24 and offset 32. Everything on the left side clusters within 0.0003 ns of each other; everything on the right side within 0.0007 ns. This is not noise. It is a genuine binary switch.
+The cliff falls somewhere between offset 24 and offset 32. Everything on the left side clusters within 0.0003 ns of each other; everything on the right side within 0.0007 ns.
 
 ### 4-Step Fine Pass
 
@@ -127,11 +127,11 @@ gcc15_fine
   off 60   2.87 ns | ############################################
 ```
 
-No gradual degradation as the offset increases. The function runs at exactly one of two speeds, which already constrains the mechanism: whatever is happening, it is a threshold effect, not a proportional one.
+There's no gradual degradation as the offset increases. The function runs at one of two speeds, which already rules out anything that scales with the offset; something crosses a boundary between byte 24 and byte 28.
 
 ## The PMU Investigation
 
-To identify the mechanism, I ran `perf stat` with four Skylake PMU events on two pre-built binaries: the fast case (offset 0) and the slow case (offset 32). The event set was chosen to distinguish between three hypotheses: DSB-to-MITE fallback, instruction cache miss, and instruction delivery rate reduction.
+I ran `perf stat` with four Skylake PMU events on two pre-built binaries: the fast case (offset 0) and the slow case (offset 32). I picked events that could separate three suspects: DSB-to-MITE fallback (Part 6's explanation), instruction cache misses, and a lower uop delivery rate.
 
 ```bash
 taskset -c 0 perf stat \
@@ -154,15 +154,9 @@ Results (100M iterations, GCC 15.2.0, perf 4.18.0, Linux 4.18):
 | **IPC** | **3.19** | **2.66** |
 | **ns/call** | **2.392** | **2.870** |
 
-The table rules out two hypotheses immediately.
+Part 6's suspect goes first. If misaligned code were falling out of the micro-op cache, `idq.dsb_uops` would drop and `dsb2mite_switches.penalty_cycles` would climb. Neither moves: the DSB delivers 1.617 billion uops in the fast case and 1.616 billion in the slow one, and the switch penalty is 31K versus 24K cycles, effectively zero over 100 million iterations. So the fallback explanation in Part 6 was wrong. Instruction cache misses don't move either; `icache_16b.ifdata_stall` is 90K versus 93K, noise over 100M iterations, and both binaries stay warm in L1i. What does move is `idq_uops_not_delivered.core`, which counts uop delivery slots the front end left empty while the back end was ready for work. It doubles, from 406 million empty slots over 507 million cycles (about 0.80 per cycle) to 810 million over 608 million cycles (about 1.33 per cycle). The micro-op cache is still serving the uops; it just fills the IDQ (Instruction Decode Queue) less often per cycle.
 
-**DSB-to-MITE fallback is not the cause.** `idq.dsb_uops` is flat: 1.617 billion uops from the DSB in the fast case, 1.616 billion in the slow case. The micro-op cache is delivering essentially all the uops in both runs. `dsb2mite_switches.penalty_cycles` is 31K versus 24K, effectively zero over 100 million iterations. The micro-op cache never falls back to the legacy decoder in a meaningful way.
-
-**Instruction cache misses are not the cause.** `icache_16b.ifdata_stall` is 90K versus 93K. A 3K difference across 100M iterations is noise. Both binaries fit comfortably in L1i; the cache lines are warm throughout the run.
-
-**The signal is `idq_uops_not_delivered.core`.** This event counts uop delivery slots that the front-end left empty when the back-end was ready to accept work. In the fast case: 406 million missed slots over 507 million cycles, about 0.80 per cycle. In the slow case: 810 million missed slots over 608 million cycles, about 1.33 per cycle. The front-end is delivering uops to the IDQ (Instruction Decode Queue) at a lower rate in the slow case: not zero, not occasionally, but consistently across every one of 100 million iterations.
-
-The IPC numbers confirm the bottleneck is entirely in the front-end. At offset 0, the back-end executes 3.19 uops per cycle. At offset 32, 2.66. The 0.53 uop/cycle shortfall matches the increase in uops_not_delivered (1.33 - 0.80 = 0.53) almost exactly. The back-end executes every uop the front-end delivers, with nothing left idle. The slowdown is one extra cycle per call where the front-end cannot fill the IDQ.
+The IPC numbers line up with this, but they aren't independent evidence. `instructions` and `idq.dsb_uops` are both 1.617 billion, so instructions and uops are interchangeable here, and Skylake's front end can hand over four uops per cycle. Delivered uops plus empty slots should therefore come to about four: 3.19 + 0.80 = 3.99 at offset 0, and 2.66 + 1.33 = 3.99 at offset 32. The 0.53 drop in IPC and the 0.53 rise in empty slots are the same fact counted twice. What the sum does tell you is that the back end almost never stalled, because `idq_uops_not_delivered.core` only counts slots the back end could have taken, so a back-end stall would show up as a total below four. The cost is all front end: 100 million extra cycles over 100 million calls, one cycle per call.
 
 ## The Geometry
 
@@ -201,7 +195,7 @@ For `work()` at entry offset 28:
 - **DSB window 1** (A+32 to A+63): contains work() bytes 4-35 (32 bytes)
 - **DSB window 2** (A+64 to A+95): contains work() bytes 36-37: the last byte of `imul` and `retq`
 
-Three DSB windows. Two transitions per call. One extra window switch that was not there at offset 0.
+Three DSB windows. Two transitions per call, one more than at offset 0.
 
 The transition from window 1 to window 2 is also a cache line boundary transition: window 1 ends at A+63, window 2 starts at A+64. The processor must issue an L1i fetch request for the second cache line to complete the function. Even with both lines warm in L1i, the pipeline appears unable to overlap the two fetch requests. The extra cache line fetch serializes with the first, and that extra cycle is what `uops_not_delivered.core` records.
 
@@ -209,7 +203,7 @@ The threshold at offset 27 falls directly out of the arithmetic: a 38-byte funct
 
 The same geometry explains why the cliff is also a DSB window boundary: at offset 26, bytes 26-31 fill window 0 and bytes 32-63 fill window 1, with the function ending at byte 63 (the last byte of both window 1 and the cache line). At offset 27, the `retq` lands at byte 64, the start of window 2. Cache line boundary and DSB window boundary coincide because 64 and 32 share the factor 32, and 64 - 38 = 26 is the exact capacity of two DSB windows for this function.
 
-These parameters are Skylake-specific. AMD Zen 2+ organizes its uop cache in 64-byte aligned chunks with a different capacity model, so the cliff point will differ. The general mechanism (DSB window boundary crossing raising `uops_not_delivered`) is shared across modern x86 designs, but you would need to re-run the sweep on each microarchitecture to find its specific threshold.
+These parameters are Skylake-specific. AMD Zen 2+ organizes its uop cache in 64-byte aligned chunks with a different capacity model, so the cliff point will differ. The general mechanism (DSB window boundary crossing raising `uops_not_delivered`) is shared across modern x86 designs, but you'd need to re-run the sweep on each microarchitecture to find its specific threshold.
 
 ## Cross-Compiler Validation
 
@@ -248,7 +242,7 @@ clang
   off 56   2.87 ns | ############################################
 ```
 
-2.3919 ns vs 2.3924 ns. 2.8703 ns vs 2.8703 ns. The cliff is 0.478 ns on both compilers, with zero meaningful difference in either regime. This is a hardware effect. The compiler version has nothing to say about it.
+2.3919 ns vs 2.3924 ns. 2.8703 ns vs 2.8703 ns. Both compilers emit a 38-byte body, and both hit a 0.478 ns cliff at the same offsets.
 
 ## Controlling the Effect
 
@@ -277,7 +271,7 @@ Both flags were verified empirically on the benchmark host: with either flag, th
 
 ### MSVC
 
-There is no command-line equivalent to `-falign-functions=N` for per-function code alignment on MSVC. `__declspec(align(N))` aligns data, not function code. The available levers are coarser:
+There's no command-line equivalent to `-falign-functions=N` for per-function code alignment on MSVC. `__declspec(align(N))` aligns data, not function code. The available levers are coarser:
 
 - `/Gy` enables function-level linking (COMDAT), giving the linker more freedom to place functions, but no alignment guarantee.
 - Linker `/ALIGN:n` sets section alignment, not per-function alignment.
@@ -287,7 +281,7 @@ Readers on MSVC who observe alignment-induced regressions should verify on their
 
 ### Benchmark Methodology Checklist
 
-If you are writing a microbenchmark that measures a call in the 1-3 ns range:
+If you're writing a microbenchmark that measures a call in the 1-3 ns range:
 
 - Always include `-falign-functions=64 -falign-loops=64` in the compile flags.
 - Verify the achieved alignment with `nm binary | awk '$3 == "function_name" { print $1 }'` and compute `address % 64`.
@@ -296,11 +290,11 @@ If you are writing a microbenchmark that measures a call in the 1-3 ns range:
 
 A benchmark that omits alignment flags is measuring function placement as much as it is measuring the code. Placement changes when you change the compiler version, link order, or even add an unrelated `#include` that shifts everything downstream.
 
-## What This Means in Practice
+## Where the Penalty Applies
 
 The 0.478 ns penalty applies when the tight inner loop calls a small callee through an indirect pointer. Virtual dispatch, function pointers, and `std::function` are all in scope. A callee that is large relative to the cache line size is less affected because the penalty is amortized over more work per call.
 
-In dispatch benchmarks, where the function body is intentionally minimal to isolate the dispatch cost, the penalty is proportionally large. That is why the [alignment matrix in Part 6]({% post_url 2026-06-10-the-048-ns-ghost-how-code-alignment-broke-our-dispatch-benchmarks %}) showed swings of 0.47-0.96 ns across GCC versions for small dispatch shims, while larger functions showed smaller swings. The smaller the function, the higher the fraction of call overhead that the alignment penalty represents.
+In dispatch benchmarks, where the function body is intentionally minimal to isolate the dispatch cost, the penalty is proportionally large. That's why the [alignment matrix in Part 6]({% post_url 2026-06-10-the-048-ns-ghost-how-code-alignment-broke-our-dispatch-benchmarks %}) showed swings of 0.47-0.96 ns across GCC versions for small dispatch shims, while larger functions showed smaller swings.
 
 For production hot paths, measuring and fixing alignment should follow profiling, not precede it. If `perf stat` shows `idq_uops_not_delivered.core` is high and `idq.dsb_uops` is flat, alignment is a candidate; check function addresses with `nm` and add `__attribute__((aligned(64)))` to the specific hot callee. Applying `-falign-functions=64` globally wastes up to 63 bytes per function in NOP padding, which increases I-cache footprint and can hurt more than it helps in code-size-sensitive paths.
 

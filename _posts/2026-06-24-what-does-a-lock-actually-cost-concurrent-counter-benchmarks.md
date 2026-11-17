@@ -15,7 +15,7 @@ image:
 
 Everyone knows a mutex is slower than an atomic. That part is not in question. What I never had was the actual number: how many nanoseconds the difference costs, and whether it holds up once threads start fighting over the same line or the architecture changes underneath. So I decided to see for myself.
 
-I built four concurrent counter variants in C++17, added three more in C++20, and measured them across thread counts on an Intel Xeon Gold 6130 and an ARM Neoverse-N1. The results challenged several things I thought I knew about locking, memory ordering, and false sharing. One of them sent me into the disassembler to figure out why a difference I was certain I would see simply was not there.
+I built four concurrent counter variants in C++17, added three more in C++20, and measured them across thread counts on an Intel Xeon Gold 6130 and an ARM Neoverse-N1. I was sure seq_cst would cost something on ARM. It didn't, and working out why sent me into the disassembler.
 
 The companion repo is [on GitHub](https://github.com/Shubhankar-Gambhir/concurrent-data-structures-cpp). Everything here is reproducible with `make bench`.
 
@@ -145,9 +145,9 @@ f_relax:    ldadd    x1, x1, [x0]     # atomic add, no ordering
 f_seq_cst:  ldaddal  x1, x1, [x0]     # atomic add, acquire (a) + release (l)
 ```
 
-So the measured difference comes down to one instruction versus another: `ldadd` against `ldaddal`. The ordering is right there in the `al` suffix. Why no measured difference? Because of what the ordering acts on. The acquire stops *later* memory operations from being reordered before the RMW; the release stops *earlier* ones from being reordered after it. In a tight loop whose entire body is one `fetch_add`, there are no surrounding loads or stores to hold back, and the atomic add must make its result globally visible to complete regardless of ordering, which is the part that costs. The ordering is encoded but has nothing left to enforce.
+So the measured difference comes down to one instruction versus another: `ldadd` against `ldaddal`. The ordering is right there in the `al` suffix. Why no measured difference? Because of what the ordering acts on. The acquire stops *later* memory operations from being reordered before the RMW; the release stops *earlier* ones from being reordered after it. In a tight loop whose entire body is one `fetch_add`, there are no surrounding loads or stores to hold back, and the atomic add must make its result globally visible to complete regardless of ordering, which is the part that costs.
 
-The lesson is not "memory ordering is free on ARM." It is "memory ordering is free for a *read-modify-write with nothing around it*." The difference reappears the instant you use standalone loads and stores instead of an RMW. The same probe shows it plainly ([Compiler Explorer](https://godbolt.org/z/j57eWPnx8)):
+This only holds for an RMW with nothing around it. The difference reappears the instant you use standalone loads and stores instead of an RMW. The same probe shows it plainly ([Compiler Explorer](https://godbolt.org/z/j57eWPnx8)):
 
 ```nasm
 store relaxed:  str   x0, [x1]    # plain store
@@ -178,7 +178,7 @@ The striped counter exists to dodge the contention curve: give each thread its o
 
 On x86 the aligned striped counter sustains 2.5 billion increments per second at 32 threads. The unaligned version, byte-for-byte the same logic minus the `alignas(64)` on the cell, collapses to 79 million. A 31x cliff, and the only thing that changed is where the cells land in memory.
 
-ARM's penalty is milder, 6x rather than 31x, and the reason is a nice detail. GCC 13 on the Neoverse-N1 reports `std::hardware_destructive_interference_size` as 256 bytes, four times the 64-byte cache line, because the core's prefetcher works on a wider spatial granularity. The unaligned cell still gets `alignof(int64_t)`, which is 8 bytes, so on x86 eight cells crowd into one 64-byte line and thrash, while on ARM the wider effective granularity spaces accesses out enough to soften the blow. One standard library constant quietly encodes a different architectural assumption, and the same source code inherits it.
+ARM's penalty is milder, 6x rather than 31x, and I didn't measure why. The unaligned cell gets `alignof(int64_t)`, 8 bytes, on both machines, so eight cells share each 64-byte line either way. (GCC 13 on the Neoverse-N1 reports `std::hardware_destructive_interference_size` as 256 bytes, which changes the *aligned* layout only; it can't explain the unaligned case.) My best guess is topology. The Xeon's 32 threads span both sockets, so a contended line regularly crosses the socket interconnect, while the Neoverse-N1 is a single 16-core node, and 32 threads on 16 cores means fewer of them are fighting over a line at any instant. I haven't run the Xeon pinned to one socket to check.
 
 The flip side is the aligned scaling, which is close to linear. Each thread owns its line, so adding a core adds throughput with no cross-core traffic at all: 1,296M ops/sec at 16 threads, 2,459M at 32. That is close to double, for the cost of some padding per cell. Of everything I tried, stripe-and-pad gave the biggest return for the least effort.
 
@@ -220,13 +220,11 @@ Same benchmark, three GCC versions, x86 only.
 
 The atomic and striped numbers sit within noise across every version, because the compiler emits the same `lock xadd` and there is nothing left to optimize. The mutex swings by half, from 4.6M on GCC 9 to 6.9M on GCC 11, and that is not codegen. It is the glibc bundled with each compiler's conda environment. The mutex fast path bottoms out in glibc's `__lll_lock_wait`, and glibc has tuned its spin-before-sleep heuristics over the years. For a mutex, the glibc you link against matters more than the GCC version that compiled the code.
 
-## What I Learned
+## The Number I'd Keep
 
-The counter is the first data structure in a synchronization benchmark lab I am building, and it set the priors for everything that follows.
+The counter is the first data structure in a synchronization benchmark lab I am building. If I had to keep one number from it, it's the 31x from a missing `alignas`. The compiler says nothing about it, and the slow result looks exactly like ordinary contention.
 
-The uncontended lock is cheap, around 26 ns, so if the critical section does real work the lock is not your bottleneck. False sharing is the silent killer: a 31x drop from one missing `alignas`, with no warning and no error, just a slow number that masquerades as ordinary contention, so any per-thread array gets cache-line padding. Memory ordering, for a read-modify-write with nothing around it, is free on both x86 and ARM, and the disassembly says why; the cost only appears once standalone loads and stores enter the picture, which is the next experiment. `std::atomic_ref` is genuinely free and worth using wherever it cleans up the code. And `notify_one` is not free, costing roughly half your throughput when fired into an empty room, so it belongs only where a waiter might actually be listening.
-
-Next up in the lab: a concurrent queue, where the contention is not on a single integer but on the head and tail of a shared structure, and where lock-free finally has something to prove.
+Next up: a concurrent queue, where the contention is not on a single integer but on the head and tail of a shared structure, and where lock-free finally has something to prove.
 
 ---
 

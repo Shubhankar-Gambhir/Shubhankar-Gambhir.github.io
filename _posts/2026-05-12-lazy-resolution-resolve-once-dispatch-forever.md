@@ -18,8 +18,6 @@ What if a function pointer could resolve itself on first use, then dispatch at z
 
 In a [previous post]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}), I compared four approaches to runtime dispatch in C++: virtual functions, function pointers, `std::variant`, and a template-based technique called decoupled CRTP. The template approach matched raw function pointers in steady-state performance, but I glossed over the interesting part: how it resolves the right implementation at runtime without paying for it on every call.
 
-This post takes that mechanism apart.
-
 ## Every Call Pays a Tax
 
 You have a set of concrete implementations compiled at build time. Templates give you composition and inlining within each implementation. But the user picks which one to use at runtime, via a flag or config file.
@@ -30,11 +28,9 @@ The obvious solutions each have a cost on every call:
 - **Switch/if-else**: a branch on every invocation
 - **`std::variant` + `std::visit`**: depending on your stdlib, this can compile down to its own function pointer table with per-call overhead for the lambda capture
 
-What if you could decide once and never pay again?
-
 ## A Self-Patching Function Pointer
 
-The idea is simple. You have a function pointer that starts pointing at a resolver stub. The first call runs the resolver, which figures out the right implementation, patches the pointer to point directly at it, and forwards the call. Every subsequent call goes through the patched pointer, which is now a direct function call. No vtable, no branch, no switch.
+The idea is simple. You have a function pointer that starts pointing at a resolver stub. The first call runs the resolver, which figures out the right implementation, patches the pointer to point directly at it, and forwards the call. Every subsequent call goes through the patched pointer, which is now a direct function call.
 
 A note on terminology: "GC barriers" are bookkeeping hooks a runtime inserts around heap stores (e.g. marking a card dirty), unrelated to CPU memory barriers or `std::atomic_thread_fence`. Different GC algorithms need different hooks: some none, some post-store only, some pre-and-post. The exact semantics don't matter here; what matters is that the choice is fixed at startup.
 
@@ -105,7 +101,7 @@ jmp   *_store_func(%rip)       ; tail-call through global function pointer
 ```
 [See it on Compiler Explorer →](https://godbolt.org/z/Y7voz9Ynx)
 
-That's it. One instruction. The pointer lives at a fixed RIP-relative address, so there's no object dereference, no vptr load, no vtable indexing. Just a jump through a global.
+A single jump. The pointer lives at a fixed RIP-relative address, so there's no object to dereference and no vptr to load first.
 
 Compare that to virtual dispatch:
 
@@ -143,7 +139,7 @@ All measurements on the same hardware as the previous post (Intel Xeon Gold 6130
 
 The "Direct function pointer" column is a plain function pointer assigned once at startup (no lazy resolution machinery), called from the same global-pointer path. The "Difference" column is the steady-state cost of lazy resolution minus the direct function pointer: effectively zero.
 
-The resolution cost is about 43-69 ns and it happens exactly once. That cost is dominated by the indirect branch through the unresolved pointer (a cold branch target the predictor hasn't seen) plus the switch and string comparison in the resolver. After patching, the branch predictor learns the target and subsequent calls are indistinguishable from a direct function pointer. At 100M iterations, the one-time cost amortizes to well under 0.001 ns per call.
+The resolution cost is about 43-69 ns and it happens exactly once. Treat those numbers as approximate, since a first call only happens once per run. Where the time goes is an estimate from the code path, with no counters behind it; the likely contributors are the indirect branch through the unresolved pointer (a cold target the predictor hasn't seen) and the switch and string comparison in the resolver. After patching, the branch predictor learns the target and subsequent calls are indistinguishable from a direct function pointer. At 100M iterations, the one-time cost amortizes to well under 0.001 ns per call.
 
 For context, here's how it stacks up against all four approaches from the [previous post]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) (G1 barriers, same machine):
 
@@ -157,13 +153,11 @@ For context, here's how it stacks up against all four approaches from the [previ
 
 Lazy resolution matches function pointers in steady state, but it also gives you the composition that function pointers lack. (Note: the variant number above reflects GCC 11's function-pointer-table `std::visit`. [Part 4]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %}) shows that GCC 12 added a switch optimization that drops variant to 1.44 ns, making it the fastest mechanism on newer compilers.)
 
-That covers the fast path. Two things can still go wrong: concurrent resolution and type mismatches.
-
 ## Thread Safety
 
 In OpenJDK, this resolution happens during VM initialization, before any application threads start. The JVM is single-threaded at that point, so no synchronization is needed.
 
-But what if your application isn't single-threaded at initialization time? Two threads could call `store()` simultaneously, both seeing the unresolved pointer, both entering `store_init`. On x86, aligned pointer-sized writes are atomic at the hardware level, so you won't get a torn pointer. But the C++ memory model doesn't guarantee this.
+If your application already has several threads running at initialization time, two of them could call `store()` simultaneously, both seeing the unresolved pointer, both entering `store_init`. On x86, aligned pointer-sized writes are atomic at the hardware level, so you won't get a torn pointer. But the C++ memory model doesn't guarantee this.
 
 The safe portable approach is `std::atomic<StoreFn>` with `memory_order_relaxed`:
 
@@ -187,7 +181,7 @@ This only works when the resolver is **idempotent**: the same inputs must always
 
 ## Type Safety Without RTTI
 
-In the [previous post]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}), I flagged a correctness concern with decoupled CRTP: the `static_cast` targets a global singleton whose concrete type is a runtime decision. If the resolver pairs the wrong type with the wrong `AccessBarrier` specialization, you get undefined behavior. How does the resolver know the type?
+In the [previous post]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}), I flagged a correctness concern with decoupled CRTP: the `static_cast` targets a global singleton whose concrete type is a runtime decision. If the resolver pairs the wrong type with the wrong `AccessBarrier` specialization, you get undefined behavior.
 
 C++ RTTI (`dynamic_cast`) would work, but OpenJDK avoids it entirely. Instead, each `BarrierSet` carries a lightweight type identity based on a bitset:
 
@@ -261,27 +255,13 @@ This is cheaper than `dynamic_cast` (one AND vs. walking the type hierarchy) and
 
 ## When to Use This
 
-Lazy resolution works well when:
+Lazy resolution fits when the choice is made once and never changes (GC selection, a logging backend) and the call sits on a hot path. At 100M calls per second, one indirect call versus two dependent loads shows up in the numbers; at one call per request, use virtual dispatch and move on. Its edge over a plain function pointer is composition: the resolved function can be the end of a template inheritance chain that layers concerns at compile time.
 
-- **The choice is made once and never changes.** GC selection, logging backend, rendering pipeline. If the strategy could change mid-execution, you need something else.
-- **The call is on a hot path.** If you're calling this 100M times per second, the difference between one indirect call and two dependent loads (virtual dispatch) matters. If you're calling it once per request, use virtual dispatch.
-- **You want composition.** This is what separates it from raw function pointers. The resolved function can be the endpoint of a template inheritance chain that composes concerns at compile time.
-
-It's overkill when:
-
-- **You need per-object dispatch.** Lazy resolution works on globals/singletons. If different objects need different strategies, virtual dispatch is the right tool.
-- **The strategy set changes at runtime.** Plugin systems where users can load new strategies dynamically need a different pattern.
-- **Your call site is polymorphic.** If the hot loop dispatches to different plugin types per iteration, lazy resolution's "resolve once" advantage disappears: you end up with a function pointer array, identical to the function pointer approach. [Part 5]({% post_url 2026-06-02-when-dispatch-mechanism-choice-stops-mattering %}) measures this and confirms that CRTP and function pointer produce identical numbers under every polymorphic workload.
+It's the wrong tool when different objects need different strategies, since it works on globals and singletons, or when users can load new strategies while the program runs. It also loses its edge when the call site is polymorphic. If the hot loop dispatches to a different plugin type each iteration, you're back to an array of function pointers, and [Part 5]({% post_url 2026-06-02-when-dispatch-mechanism-choice-stops-mattering %}) measured CRTP and function pointers producing identical numbers under every polymorphic workload.
 
 ## If This Looks Familiar
 
-If you've worked with ELF binaries, you've already used this pattern. PLT (Procedure Linkage Table) stubs in ELF dynamic linking work the same way: the first call to a dynamically linked function goes through a stub that resolves the symbol and patches the GOT (Global Offset Table) entry. Every subsequent call goes through the patched GOT entry directly.
-
-## Key Takeaways
-
-After resolution, lazy dispatch is indistinguishable from a direct function pointer. The entire pattern is three moving parts: a function pointer, a resolver stub, and a patch. The resolver runs once and gets out of the way.
-
-What makes this compelling over raw function pointers is the combination with decoupled CRTP: you get both composition (template inheritance chains) and zero-overhead dispatch. OpenJDK has used exactly this since JDK 10 for GC barrier dispatch, with `FakeRtti` providing type-safe downcasts at the cost of a single bitwise AND.
+If you've worked with ELF binaries, you've already used this pattern. PLT (Procedure Linkage Table) stubs in ELF dynamic linking work the same way: the first call to a dynamically linked function goes through a stub that resolves the symbol and patches the GOT (Global Offset Table) entry. Every subsequent call goes through the patched GOT entry directly. Dynamic linkers have been doing this for decades; OpenJDK applies the same trick to GC barriers and lets templates do the composition.
 
 ---
 

@@ -16,7 +16,7 @@ image:
 
 You're building a system with pluggable strategies. The user picks one at startup via a config flag or command-line argument, and every call goes through that strategy millions of times per second. How do you dispatch it?
 
-This post compares four approaches to this problem using the same domain, the same API, and the same three plugins. We'll look at the generated assembly, measure dispatch overhead, and build a decision framework for picking the right one.
+This series grew out of my [C++ Online 2026 talk](https://www.youtube.com/watch?v=4aMaSaFW5Qo) on OpenJDK's barrier system. This post puts four answers on one example with three plugins, so the assembly and the timings line up.
 
 ## GC Barriers: One Hot Path, Three Strategies
 
@@ -59,7 +59,7 @@ auto bs = BarrierSet::create(argv[1]);  // "g1", "serial", "epsilon"
 bs->store(heap, 42);
 ```
 
-Every C++ developer has written this. But what does the compiler generate?
+Every C++ developer has written this. The call compiles to two instructions:
 
 ```nasm
 movq  (%rdi), %rax           ; LOAD 1: vptr from object
@@ -111,9 +111,7 @@ auto bs = create(argv[1]);
 std::visit([&](auto& b) { b.store(addr, value); }, bs);
 ```
 
-There's no base class and no vtable, and the compiler can see all the types. So what does it generate?
-
-Here's what libstdc++ (GCC 11) actually produces:
+There's no base class and no vtable, and the compiler can see all the types, so you might expect it to beat a virtual call. Here's what libstdc++ (GCC 11) produces:
 
 ```nasm
 movq  %rbp, 16(%rsp)        ; STORE 1: spill to lambda capture
@@ -123,9 +121,9 @@ call  *(%r14,%rax,8)        ; indexed indirect call into _S_vtable
 ```
 [See it on Compiler Explorer →](https://godbolt.org/z/f1T14Pdbx)
 
-libstdc++ generates **its own function pointer table** (`_S_vtable`), essentially a vtable. On top of that, there are two stack stores per call to build the lambda capture struct that the visited function reads back.
+libstdc++ generates its own function pointer table (`_S_vtable`), essentially a vtable. On top of that, there are two stack stores per call to build the lambda capture struct that the visited function reads back.
 
-It's a vtable with extra steps. More overhead than virtual dispatch, not less.
+It's a vtable with extra steps.
 
 > **Caveat:** This is a libstdc++ implementation quality issue. libc++ or MSVC may generate different code. Always measure with your toolchain.
 
@@ -146,7 +144,7 @@ class BarrierSet {
 class G1BarrierSet : public BarrierSet<G1BarrierSet> { ... };
 ```
 
-This gives you static dispatch - no vtable, but it has two fundamental problems. First, the base class must know the derived type at compile time. When the user picks the GC at runtime, you can't write `BarrierSet<???>`. Second, you can't have a static or global `BarrierSet*` singleton without baking the derived type into the base. The type parameter infects everything. Conventional CRTP is out.
+This gives you static dispatch with no vtable, but it has two fundamental problems. First, the base class must know the derived type at compile time. When the user picks the GC at runtime, you can't write `BarrierSet<???>`. Second, you can't have a static or global `BarrierSet*` singleton without baking the derived type into the base. The type parameter infects everything. Conventional CRTP is out.
 
 ### Decoupled CRTP: Flip the Relationship
 
@@ -170,9 +168,9 @@ Notice that the base class compiles without knowing any concrete GC type. It can
 
 The template machinery generates code for *all* derived types at compile time: `G1BarrierSet::AccessBarrier<>::store`, `SerialBarrierSet::AccessBarrier<>::store`, `EpsilonBarrierSet::AccessBarrier<>::store` all exist in the binary. Lazy resolution then picks the correct one at runtime based on the user's flag, caches a function pointer to it, and every subsequent call goes direct.
 
-The net effect: **we replace the vtable overhead on every call with a one-time initialization cost.** After that first resolution, the dispatch path is identical to a direct function pointer.
+So the per-call vtable overhead becomes a one-time initialization cost, and after that first resolution the dispatch path is identical to a direct function pointer.
 
-This is what [OpenJDK](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/gc/shared/barrierSet.hpp) actually uses. Here's what it looks like with real barrier composition, where each GC subclass provides its own `AccessBarrier` that layers one concern on top:
+This is what [OpenJDK](https://github.com/openjdk/jdk/blob/master/src/hotspot/share/gc/shared/barrierSet.hpp) uses. Here's what it looks like with real barrier composition, where each GC subclass provides its own `AccessBarrier` that layers one concern on top:
 
 ```cpp
 // Layer 0: raw write - the base concern
@@ -208,7 +206,7 @@ class G1BarrierSet : public CardTableBarrierSet {
 
 Each GC only adds its own concern, no duplication. The compiler sees through the template chain and generates the same code as if you'd hand-written each barrier combination; the templates don't exist at runtime.
 
-So now we have all the concrete implementations compiled and ready: `G1BarrierSet::AccessBarrier<>::store`, `SerialBarrierSet::AccessBarrier<>::store`, `EpsilonBarrierSet::AccessBarrier<>::store`. The last piece: how do we pick the right one when the user passes a flag at startup?
+So now we have all the concrete implementations compiled and ready: `G1BarrierSet::AccessBarrier<>::store`, `SerialBarrierSet::AccessBarrier<>::store`, `EpsilonBarrierSet::AccessBarrier<>::store`. What's left is picking the right one when the user passes a flag at startup.
 
 ### Lazy Resolution (Resolve Once, Dispatch Forever)
 
@@ -243,9 +241,9 @@ call  *_store_func(%rip)     ; indirect call through global
 ```
 [See it on Compiler Explorer →](https://godbolt.org/z/Y7voz9Ynx)
 
-Same dispatch cost as a function pointer, but the target function is composed. Each barrier concern is layered, not duplicated.
+Same dispatch cost as a function pointer, but the target function is composed from layered barriers.
 
-One caveat worth noting: conventional CRTP also uses `static_cast`, but it casts `this`, which is always the correct derived type by construction. In decoupled CRTP, the cast targets a global singleton (`_barrier_set`) whose concrete type is a runtime decision. If the resolution switch pairs the wrong type with the wrong `AccessBarrier` instantiation, you get undefined behavior. The resolution logic must get this right. OpenJDK solves this with a lightweight type identity mechanism (`FakeRtti`) that avoids C++ RTTI entirely. The [follow-up post]({% post_url 2026-05-12-lazy-resolution-resolve-once-dispatch-forever %}) covers this along with the full lazy resolution mechanism.
+Conventional CRTP also uses `static_cast`, but it casts `this`, which is always the correct derived type by construction. In decoupled CRTP, the cast targets a global singleton (`_barrier_set`) whose concrete type is a runtime decision. If the resolution switch pairs the wrong type with the wrong `AccessBarrier` instantiation, you get undefined behavior. The resolution logic must get this right. OpenJDK solves this with a lightweight type identity mechanism (`FakeRtti`) that avoids C++ RTTI entirely. The [follow-up post]({% post_url 2026-05-12-lazy-resolution-resolve-once-dispatch-forever %}) covers this along with the full lazy resolution mechanism.
 
 ## Comparison
 
@@ -269,7 +267,7 @@ Variant is the slowest despite having no vtable. The overhead comes from libstdc
 
 Virtual dispatch sits in the middle on almost every dimension. Most debuggable, easiest to understand, and the ~0.5 ns extra over a function pointer is rarely the bottleneck. For most codebases, this is the right default.
 
-CRTP (0.29s) actually compiles faster than virtual (0.38s) despite 5x more code: virtual needs full class definitions visible at every call site for vtable layout, while CRTP templates only instantiate what each translation unit needs. Function pointer is fastest (0.25s) with no class hierarchy and no templates.
+CRTP (0.29s) compiles faster than virtual (0.38s) despite 5x more code: virtual needs full class definitions visible at every call site for vtable layout, while CRTP templates only instantiate what each translation unit needs. Function pointer is fastest (0.25s) with no class hierarchy and no templates.
 
 ## Decision Framework
 
@@ -289,13 +287,9 @@ flowchart TD
     G -- No --> I[Virtual dispatch]
 ```
 
-## Key Takeaways
+The flowchart asks about extension and composition before it asks about speed. The spread between the fastest and slowest mechanism in the table above is about 1.3 ns per call, and if you're on GCC 12 or later even the order changes.
 
-1. **All four work.** Pick based on constraints, not microbenchmark deltas.
-2. **`std::variant + std::visit` is NOT always faster than virtual**. Check your stdlib implementation.
-3. **The right question isn't "which is fastest?"** It's: do I need to extend with new types or new operations? Do I need composable layers? Then pick the simplest approach that satisfies those.
-
-4. **These benchmarks are monomorphic.** Every measurement above dispatches to a single plugin type for the entire run. The branch predictor sees the same target on every iteration and predicts perfectly. If your hot loop dispatches to different types per iteration, the ranking changes and the branch predictor becomes the dominant cost. [Part 5]({% post_url 2026-06-02-when-dispatch-mechanism-choice-stops-mattering %}) measures three polymorphic workloads and updates the decision framework.
+One thing it leaves out is that every number in this post is monomorphic. Each run dispatches to a single plugin type, so the branch predictor sees the same target on every iteration and gets it right every time. If your hot loop switches types per call, the predictor becomes the dominant cost and the ranking changes. [Part 5]({% post_url 2026-06-02-when-dispatch-mechanism-choice-stops-mattering %}) measures three polymorphic workloads and redraws the flowchart.
 
 ---
 

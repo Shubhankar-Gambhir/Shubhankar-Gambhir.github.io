@@ -16,7 +16,7 @@ image:
 
 The [counter post]({% post_url 2026-06-24-what-does-a-lock-actually-cost-concurrent-counter-benchmarks %}) ended with a promise: next up is a queue, where the contention is no longer a single integer but the head and tail of a shared structure. This is that post. I built six multi-producer multi-consumer queues in C++17, from a mutex wrapped around `std::queue` to a Michael-Scott two-lock design with a sharded node pool, and measured every one across nine producer/consumer mixes on an Intel Xeon Gold 6130 and a 16-core ARM machine.
 
-Three results are worth the price of admission. Splitting a queue's single lock into separate head and tail locks makes fan-out 6.8x faster and fan-in slower. A deque-backed queue is 5x faster than a linked list when uncontended and the worst of the six under fan-out. And the object pool I added to eliminate per-node `malloc` made the queue slower on both machines, for a reason that says something uncomfortable about hand-rolled pools.
+Splitting a queue's single lock into separate head and tail locks makes fan-out 6.8x faster and fan-in slower. A deque-backed queue is 5x faster than a linked list when uncontended and the worst of the six under fan-out. And the object pool I added to eliminate per-node `malloc` made the queue slower on both machines, for a reason that says something uncomfortable about hand-rolled pools.
 
 The companion repo is [on GitHub](https://github.com/Shubhankar-Gambhir/concurrent-data-structures-cpp). Everything here reproduces with `make bench-queue`.
 
@@ -102,7 +102,7 @@ Both hold one lock. The only difference is the container underneath. Uncontended
 | MutexQueue (deque)     | 186 | 221 |
 | MutexLinkedQueue       | 960 | 484 |
 
-Five times slower on x86, a bit over two times on ARM, and the code paths are otherwise identical. The linked list pays a `malloc` and a `free` on every single item, and it chases a pointer to a node that lives wherever the allocator put it, which is rarely next to the last one. The deque amortizes allocation across a whole chunk and keeps those elements in a row, so the CPU prefetcher actually helps. I am bundling two effects here, allocation cost and cache locality, and I did not separate them; treat the gap as motivation, not a controlled attribution. The motivation matters because it is exactly the observation that makes a reasonable engineer reach for an object pool later in this post.
+Five times slower on x86, a bit over two times on ARM, and the code paths are otherwise identical. The linked list pays a `malloc` and a `free` on every single item, and it chases a pointer to a node that lives wherever the allocator put it, which is rarely next to the last one. The deque amortizes allocation across a whole chunk and keeps those elements in a row, so the CPU prefetcher actually helps. I am bundling two effects here, allocation cost and cache locality, and I did not separate them, so the gap is motivation rather than a controlled attribution. It matters anyway, because it is exactly the observation that makes a reasonable engineer reach for an object pool later in this post.
 
 Hold the deque result, though, because it does not survive contact with a crowd.
 
@@ -143,8 +143,6 @@ public:
 
 The design leans on a permanent dummy node: `head` always points at a node whose `value` is stale, and the real front is `head->next`. That indirection is what lets the two locks stay independent. A producer only ever touches `tail`; a consumer only ever touches `head`; they meet at exactly one place, the `next` pointer of the node at the boundary when the queue is nearly empty. That single shared field is why `next` is a `std::atomic` with a release store in `push` and an acquire load in `pop`. The release-acquire pair is the handoff: it guarantees that when a consumer reads a newly published `next`, it also sees the fully constructed node behind it. The single-lock linked list needs none of this, because one lock already orders every access, which is why its node uses a plain pointer.
 
-That is the theory. Two locks, two ends, less waiting. The measurement is more interesting than the theory.
-
 ## The Measurement
 
 Here is the two-lock queue against the single-lock linked list, same data structure, differing only in lock count, on the Xeon:
@@ -157,13 +155,13 @@ Here is the two-lock queue against the single-lock linked list, same data struct
 | 8P x 1C (fan-in)   | 592 ns  | 1107 ns | 0.5x |
 | 15P x 1C (fan-in)  | 612 ns  | 1130 ns | 0.5x |
 
-The two-lock design is a rout under fan-out and a liability under fan-in. That asymmetry is the whole lesson, so both halves deserve a look.
+The two-lock design is a rout under fan-out and a liability under fan-in.
 
 Fan-out is where the split earns its keep. One producer, many consumers, and the queue lives near empty because the consumers drain it faster than the single producer can fill it. With one lock, every consumer that wants to check for work must take that lock, find the queue empty, and release it, and there are eight or fifteen of them doing this in a tight loop. The lone producer, trying to enqueue, has to win the same lock against that entire mob of failing pops. It is starved by contention over a lock it should never have been fighting for. Split the lock and the consumers pile up on `_h`, where they can fail to their hearts' content, while the producer owns `_t` outright and enqueues at full speed. Throughput stops being bound by lock contention and starts being bound by the producer, which is now free to run. Hence the 6.8x.
 
-Fan-in is where it backfires, and the reason is that the two-lock design's benefit and its cost come due at different times. Its benefit is decoupling: keeping the consumers from starving the producer. Under fan-in there is no starvation to prevent, because the lone consumer always finds work and the many producers serialize on `_t` exactly as they would on a single lock. So the benefit is close to zero. The cost, though, is always present: a second lock on its own cache line plus the atomic `next` handoff, extra coordination that has to move between threads on every operation. Pay a cost with no matching benefit and you get the 0.5x.
+Fan-in is where it backfires, and the reason is that the two-lock design's benefit and its cost come due at different times. Its benefit is decoupling: keeping the consumers from starving the producer. Under fan-in there is no starvation to prevent, because the lone consumer always finds work and the many producers serialize on `_t` exactly as they would on a single lock. So the benefit is close to zero. The cost, though, is always present: a second lock on its own cache line plus the atomic `next` handoff, extra coordination that has to move between threads on every operation.
 
-The cross-architecture data tells you that cost is the socket crossing. On the single-NUMA-node ARM machine, the two-lock queue wins fan-in too (321 ns versus 378 ns at 15P x 1C), because moving a lock line between cores within one node is cheap. The fan-in penalty appears only on the two-socket Xeon, where every contended line has to cross the interconnect between NUMA nodes. It is the same machinery in both cases; only the price of moving it differs. I did not confirm this with performance counters, so treat the socket-crossing account as the reading the ARM control points to rather than a proven one; the throughput numbers themselves are solid and repeatable.
+The cross-architecture data tells you that cost is the socket crossing. On the single-NUMA-node ARM machine, the two-lock queue wins fan-in too (321 ns versus 378 ns at 15P x 1C), because moving a lock line between cores within one node is cheap. The fan-in penalty appears only on the two-socket Xeon, where every contended line has to cross the interconnect between NUMA nodes. It is the same machinery in both cases; only the price of moving it differs. I did not confirm this with performance counters; the socket-crossing account is an inference from the ARM control. The throughput numbers themselves are solid and repeatable.
 
 The deque baseline makes the same point from the other direction. Remember it was 5x faster than everything uncontended. Under fan-out it collapses:
 
@@ -229,13 +227,11 @@ If the diagnosis is right, then splitting the free list should recover the loss,
 
 Every case improves. Reduce contention on the free-list lock and the penalty shrinks, which is as direct a confirmation as this dataset offers that the lock was the problem all along. But note the destination: even the sharded pool at 370 ns still loses to the plain `new`/`delete` two-lock queue at 282 ns. Sharding a free list sixteen ways to beat the allocator is reinventing, badly, the per-thread arenas the allocator already gave you for free, and then paying a hash and an indirection on top.
 
-On the Xeon the pooling picture is muddier, because the two-socket NUMA behavior dominates everything and the clean contention signature washes out. The penalty is still there in the fan-out and low-contention mixes (873 ns to 1062 ns at 1P x 15C, a 22 percent tax), but sharding on x86 ranges from neutral to actively harmful, since spreading sixteen aligned shards across two sockets invites exactly the cross-socket traffic the padding was meant to prevent. That divergence is a result in itself: the same optimization, helpful on a single-NUMA-node ARM machine and a wash on a two-socket x86 one, which is a good reminder that "cache-friendly" is a claim about a specific memory hierarchy, not a universal property.
+On the Xeon the pooling picture is muddier, because the two-socket NUMA behavior dominates everything and the clean contention signature washes out. The penalty is still there in the fan-out and low-contention mixes (873 ns to 1062 ns at 1P x 15C, a 22 percent tax), but sharding on x86 ranges from neutral to actively harmful, since spreading sixteen aligned shards across two sockets invites exactly the cross-socket traffic the padding was meant to prevent.
 
-## What I Learned
+## One Suspect Left
 
-The queue moved the contention from a single integer to the two ends of a structure, and almost everything I expected to be a scalar tradeoff turned out to depend on the traffic pattern instead.
-
-Lock granularity is not a dial you turn toward "more." Two locks won fan-out by nearly 7x and lost fan-in by half, on the same code, because splitting a lock only helps when the two halves are genuinely independent bottlenecks; when one side was never contended, the extra coordination is a tax. The data structure is a separate decision from the locking: the deque was the fastest thing in the lab uncontended and the slowest under fan-out, and neither fact predicts the other. And the object pool, the most reflexive of the optimizations here, was the one that backfired hardest, because a shared free list under a lock is a worse concurrency structure than a modern allocator's per-thread arenas, and no amount of sharding quite claws that back.
+Almost everything I expected to be a scalar tradeoff in this post turned out to depend on the traffic pattern, and the pool, the most reflexive optimization of the lot, backfired hardest.
 
 There is one suspect left standing. If a shared, locked free list loses to `malloc`, and a sharded, locked one still loses, the question is whether the lock is the only problem or whether pooling itself is a dead end for this workload. The way to find out is to take the lock away entirely: a lock-free free list built on a compare-and-swap loop, and then a bounded ring buffer that does no allocation at all in steady state and holds no lock on the hot path. That is the next post, where lock-free finally has something to prove.
 
