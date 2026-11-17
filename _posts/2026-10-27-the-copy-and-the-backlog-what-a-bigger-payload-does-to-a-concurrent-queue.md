@@ -1,5 +1,6 @@
 ---
 title: "The Copy and the Backlog: What a Bigger Payload Does to a Concurrent Queue"
+date: 2026-10-27
 categories: [C++, Performance]
 tags: [concurrency, queue, payload, memcpy, glibc, malloc, page-faults, ring-buffer, benchmarks, arm]
 description: >-
@@ -7,6 +8,10 @@ description: >-
   opposite. Every queue in the lab copies the payload twice; where those copies sit
   decides whether consumers keep up, and the allocator decides what falling behind
   costs, up to a sevenfold slowdown on one glibc and an out-of-memory kill on another.
+image:
+  path: /assets/img/og/the-copy-and-the-backlog-what-a-bigger-payload-does-to-a-concurrent-queue.png
+  alt: "The Copy and the Backlog: What a Bigger Payload Does to a Concurrent Queue"
+  hero: false
 ---
 
 At sixteen producers, sixteen consumers and 4 KB items, one of the queues in this post reached 64.6 GB of resident memory in 38 seconds before the kernel's OOM killer took it. It started with a much smaller question.

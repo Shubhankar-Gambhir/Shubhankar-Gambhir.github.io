@@ -281,7 +281,7 @@ I do not know which run is representative. My best reading is that this particul
 
 Three attempts to make allocation cheaper, and the thing that won on both machines was the ring, which doesn't allocate.
 
-There is one more thread to pull. Every queue here moves an `int64_t`, which is the friendliest possible payload: it fits in a register, copies for free, and makes the synchronization the entire cost. That is what I wanted for measuring locks, but it flatters the linked variants, which hand around pointers to nodes, and penalizes the ring, which copies values into cells. A payload that costs real money to copy should move the ranking, possibly a lot. That is the next thing to measure.
+There is one more thread to pull. Every queue here moves an `int64_t`, which is the friendliest possible payload: it fits in a register, copies for free, and makes the synchronization the entire cost. That is what I wanted for measuring locks, but it flatters the linked variants, which hand around pointers to nodes, and penalizes the ring, which copies values into cells. A payload that costs real money to copy should move the ranking, possibly a lot. That is the next thing to measure. (It did move the ranking, though not the way I predicted here: see [The Copy and the Backlog]({% post_url 2026-10-27-the-copy-and-the-backlog-what-a-bigger-payload-does-to-a-concurrent-queue %}).)
 
 ---
 
