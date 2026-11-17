@@ -98,8 +98,6 @@ Queues now live on the heap (a 4 KB-payload ring is 4 MB), and everything else m
 
 At 4 KB and four consumers, the first sweep had `TwoLockQueue` at 6,507 ns and the deferred variant at 1,273, a 5.1x gap; at sixteen consumers it was 7.2x.
 
-<!-- AUTHOR: What did you believe when you saw 5.1x? Had you started writing around it before the rerun? One or two true sentences here. -->
-
 Then I ran the deferred variant on its own, in a shorter run, and got 6,874 ns.
 
 On its own, the variant that had just won by 5x was as slow as the one it beat. With glibc's default settings, freed memory at the top of a heap is handed back to the kernel once it passes a threshold that starts at 128 KB and [adjusts itself to the program](https://sourceware.org/glibc/manual/2.28/html_node/Memory-Allocation-Tunables.html), and the next allocation faults it back in. At 4 KB per node that costs about one page fault per item. Whether a run settles into that pattern is not a property of the variant: it shifted with whatever had run earlier in the same process, and, as it turned out, it varies from one process to the next even when a variant runs alone.
@@ -118,7 +116,7 @@ So I reran every cell from 1 KB up twice, each variant in its own process: once 
 
 The string rows are the giveaway. A pointer swap inside a lock cannot cost 4x, and with trimming off it does not: 1,444 against 1,295. Most of the 5x was the allocator. Default glibc on this machine is bimodal at large payloads. Each process lands in a fast mode around 1 to 2 microseconds or a slow one around 5 to 10, so the same variant can win in one process and lose by 7x in another, as `TwoLockQueue` at 15P x 1C does above. The page-fault counters agree: 1.04 to 1.08 faults per item for the linked queues in the slow mode at 4 KB, and under 0.001 for the ring.
 
-The last column holds the allocator still, which is why the next section uses it. The middle column is what you would actually see in production on glibc 2.28, which is to say a coin flip. I did not try jemalloc, tcmalloc or mimalloc; they make different trimming decisions, so the allocator's share may look very different under them.
+The last column holds the allocator still, which is why the next section uses it. The middle column is what you would actually see in production on glibc 2.28: either mode, decided per process. I did not try jemalloc, tcmalloc or mimalloc; they make different trimming decisions, so the allocator's share may look very different under them.
 
 ## Where the Copy Happens
 
@@ -138,7 +136,7 @@ Nanoseconds per item, Xeon, 4P x 4C.
 
 The deferred variant stays flat at 1.1 to 1.3 microseconds while `TwoLockQueue` climbs, and the gap opens with N, reaching 1.54x at 4 KB. At sixteen consumers it is 1.41x at 4 KB. The dip at 1 KB is the allocator, not the copy: `TwoLockQueue`'s node is exactly 1,032 bytes, the largest request glibc's per-thread cache (tcache) will hold, and the deferred node's extra reference count makes it 1,040. With tcache disabled for both, the 1 KB gap is 1.28x at four and at eight consumers, in line with its neighbors. `MutexQueue`, which does both copies inside its one lock, gets worse from the very first size step: going from 8 to 64 bytes roughly doubles its cost, because every extra byte lengthens the only critical section in the queue.
 
-Two controls say this is about the copy and not about the deferred variant being generally quicker. With one consumer there is nobody else waiting on the head lock, and the two variants come out even through 2 KB (1.04x, 0.97x). At 4 KB the deferred variant is actually slower with one consumer, 1,449 ns against 1,015. I profiled it: both spend over half their cycles in the kernel's futex path, with the fifteen producers fighting over the tail lock, and the deferred variant takes about 20 percent more context switches. I haven't found the cause.
+Two controls say this is about the copy and not about the deferred variant being generally quicker. With one consumer there is nobody else waiting on the head lock, and the two variants come out even through 2 KB (1.04x at 1 KB, 0.97x at 2 KB). At 4 KB the deferred variant is actually slower with one consumer, 1,449 ns against 1,015. I profiled it: both spend over half their cycles in the kernel's futex path, with the fifteen producers fighting over the tail lock, and the deferred variant takes about 20 percent more context switches. I haven't found the cause.
 
 The second control is `std::string`. Its move is a pointer swap of about 32 bytes regardless of length, so moving it out of the lock should buy nothing, and from 1 KB up, where every variant ran in its own process, it buys between 0.96x and 1.11x. The string also lets you move the push-side cost instead. With a `push(T&&)` overload the producer hands its buffer to the queue instead of the queue allocating and copying a new one, and the effect depends entirely on where that copy used to sit:
 
@@ -201,11 +199,9 @@ The ARM machines run Ubuntu 24.04 with glibc 2.39, and there the coin flip is mo
 | 8P x 8C (instance 1 / 2) | 1.34x / 1.32x | 2.22x / 1.91x |
 | 15P x 1C at 2 KB (instance 1 / 2) | 1.12x / 1.01x | 1.04x / 1.11x |
 
-Some of the ARM gap is present at 8 bytes already (1.41x and 1.18x at 4P x 4C on the two instances), so not all of it is the copy, but the part that grows with N is. I cannot tell you whether the difference between the two machines comes from the architecture or from glibc 2.28 against 2.39; they changed together, and I did not separate them.
+Some of the ARM gap is present at 8 bytes already (1.41x and 1.18x at 4P x 4C on the two instances), so not all of it is the copy. The growth with N shows up with trimming off, where 4P x 4C goes from 1.41x at 8 bytes to 2.64x at 4 KB on instance 1; under default glibc, instance 1's 4 KB ratio (1.42x) is no bigger than its 8-byte one. I cannot tell you whether the difference between the two machines comes from the architecture or from glibc 2.28 against 2.39; they changed together, and I did not separate them.
 
-Then there is the cell that would not finish. At sixteen producers and sixteen consumers with 4 KB items and trimming off, `TwoLockQueue` never wrote a result on either ARM instance. Reproduced by hand, it reached 64.6 GB of resident memory in 38 seconds and the kernel's OOM killer took it. Sixteen consumers sharing sixteen cores with sixteen producers, each doing a 4 KB copy inside the one head lock, cannot drain as fast as producers can fill. When consumers are even slightly slower than producers, an unbounded queue has no steady state. It just grows. The deferred variant in the same cell on the same machine runs at 889 ns per item and fits in memory.
-
-<!-- AUTHOR: How did you find this one? What command did you reproduce it with, and what were you watching (top, /proc/<pid>/status, dmesg)? Was the missing result cell confusing at first? This is the best moment in the post; tell it as it happened. -->
+Then there is the cell that would not finish. At sixteen producers and sixteen consumers with 4 KB items and trimming off, `TwoLockQueue` never wrote a result on either ARM instance. That is the run from the top of this post: reproduced by hand, it was the OOM kill. Sixteen consumers sharing sixteen cores with sixteen producers, each doing a 4 KB copy inside the one head lock, cannot drain as fast as producers can fill. When consumers are even slightly slower than producers, an unbounded queue has no steady state. It just grows. The deferred variant in the same cell on the same machine runs at 889 ns per item and fits in memory.
 
 The same thing happens on the Xeon in fan-in, where one consumer faces fifteen producers. Peak memory for a single 15P x 1C run at 4 KB was 52 GB for `MutexQueue` and at least 57 GB for `MutexLinkedQueue` before I stopped measuring. That fits in the Xeon's 187 GB and does not fit in the ARM workers' 62 GB, which is why that one ARM cell is missing from the data. With default glibc the same `TwoLockQueue` cell finished on both instances, at 4.0 and 4.6 microseconds per item. My best explanation, which I have not measured, is that turning trimming off made the producers faster, because they stopped paying for page faults, and faster producers are exactly what turns "slow" into "killed." Bounding the queue removes this failure mode by making producers wait, which is the ring's whole trick.
 
@@ -219,9 +215,9 @@ The exception is the oversubscribed one. At 16P x 16C on 16 ARM cores the ring t
 
 ## Two Layers
 
-Counting copies told me nothing; every queue makes two. Where the copy sits decides whether the threads waiting on a lock pay for it, and at 4 KB, with the allocator held still, that is worth 1.4 to 2.6x. That is enough to decide whether an unbounded queue keeps up or grows until the kernel kills it, and it matches the idea I started with.
+Counting copies told me nothing; every queue makes two. Where the copy sits decides whether the threads waiting on a lock pay for it, and at 4 KB, with the allocator held still, that is worth 1.4 to 2.6x. That is enough to decide whether an unbounded queue keeps up or grows until the kernel kills it.
 
-Underneath it is the allocator, and on glibc 2.28 it was the bigger effect by far. It turned a 1.5x difference into 7x in one process and erased it in the next, depending on what an unrelated variant had done to the heap earlier in the same run. On glibc 2.39 it still costs 2.4 to 4.4x at 4 KB, but it lands on the same number every time, which is what lets the copy location show through on ARM. If you benchmark anything allocation-heavy on glibc, give each variant its own process, and look at page faults before you believe a gap at large sizes.
+Underneath it is the allocator, and on glibc 2.28 it was the bigger effect by far. It turned a 1.5x difference into 7x in one process and erased it in the next, even with each variant running alone. On glibc 2.39 it still costs 2.4 to 4.4x at 4 KB, but it lands on the same number every time, which is what lets the copy location show through on ARM. If you benchmark anything allocation-heavy on glibc, give each variant its own process, and look at page faults before you believe a gap at large sizes.
 
 ---
 
