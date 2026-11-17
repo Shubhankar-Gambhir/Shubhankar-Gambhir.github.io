@@ -154,3 +154,7 @@ Xeon sweep findings (`results/diagnostics-heap-trim.md` in the companion repo): 
 - **Re-run before drafting (Xeon):** N = 1024, 2048, 4096, all three payload configurations, one process per variant, twice: default glibc and with heap trimming off (`GLIBC_TUNABLES=glibc.malloc.trim_threshold=17179869184:glibc.malloc.top_pad=1073741824`). These replace the original sweep's cells at those sizes in the post; N <= 512 cells stay from the original sweep.
 - **-O3 spot check:** 4x4 and 15x1 at N = 8, 512, 4096, one process per variant, compared to -O2 run the same way; reported in one methodology sentence.
 - ARM still waits until the re-run is reviewed.
+
+## Headline after ARM (2026-11-17, user)
+
+"Two layers": where the copy happens decides whether consumers keep up; the allocator decides what falling behind costs. Copy location and the allocator get equal billing; the ARM 16x16 / 4 KB cell (TwoLockQueue runs out of memory, TwoLockQueueDeferred runs at 889 ns) is the centerpiece; the Xeon-vs-ARM difference is framed as glibc 2.28 vs 2.39 with the architecture confound stated. Supersedes the 2026-11-03 "allocator, again" headline.
