@@ -1,3 +1,4 @@
+import os
 import subprocess
 from pathlib import Path
 
@@ -34,10 +35,10 @@ int main() {
 """
 
 
-def check(tmp_path, src):
+def check(tmp_path, src, env=None):
     f = tmp_path / "s.cpp"
     f.write_text(src)
-    return subprocess.run([str(TOOL), str(f)], capture_output=True, text=True)
+    return subprocess.run([str(TOOL), str(f)], capture_output=True, text=True, env=env)
 
 
 def test_clean_sketch_passes(tmp_path):
@@ -55,3 +56,16 @@ def test_warning_fails(tmp_path):
     r = check(tmp_path, WARN)
     assert r.returncode != 0
     assert "FAIL werror" in r.stdout
+
+
+def test_werror_build_run_exit_nonzero_fails(tmp_path):
+    r = check(tmp_path, "int main() { return 1; }\n")
+    assert r.returncode != 0
+    assert "FAIL werror (run)" in r.stdout
+
+
+def test_hung_run_times_out(tmp_path):
+    src = "#include <chrono>\n#include <thread>\nint main() { std::this_thread::sleep_for(std::chrono::hours(1)); }\n"
+    r = check(tmp_path, src, env={**os.environ, "SKETCH_TIMEOUT": "2"})
+    assert r.returncode != 0
+    assert "FAIL werror (timeout" in r.stdout

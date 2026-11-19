@@ -162,3 +162,14 @@ def test_cpp_block_not_in_sketch_fails(env):
     assert bad.returncode == 1 and "cpp block" in bad.stdout
     nosketch = env.lint("```cpp\nint x;\n```\n")
     assert nosketch.returncode == 1 and "cpp block" in nosketch.stdout
+
+
+def test_forbidden_near_inside_backticks_still_matches(env):
+    sc = {"forbidden": [{"pattern": "(?i)\\bcrash", "near": "8391060", "why": "no field crash"}]}
+    r = env.lint("Commit `8391060` caused a crash.\n", sc)
+    assert r.returncode == 1 and "forbidden" in r.stdout
+
+
+def test_short_unlisted_six_word_quote_fails(env):
+    r = env.lint('He said "we do it all in C" once.\n')
+    assert r.returncode == 1 and "unlisted quote" in r.stdout

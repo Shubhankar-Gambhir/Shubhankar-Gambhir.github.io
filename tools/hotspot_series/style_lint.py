@@ -79,9 +79,12 @@ def lint(draft, sidecar):
     prose = "\n".join(lines)
     prose = re.sub(r"<!--.*?-->", " ", prose, flags=re.S)
     prose = "\n".join(l for l in prose.split("\n") if not l.lstrip().startswith("|"))
-    prose = re.sub(r"(`+)[^`\n]*?\1", " ", prose)
     prose = re.sub(r"\]\([^)]*\)", "]", prose)
     prose = prose.translate({0x201C: '"', 0x201D: '"', 0x2018: "'", 0x2019: "'"})
+    # Blank inline code with same-length spaces so offsets line up with prose_with_code,
+    # which `near` is checked against (hashes are usually written in backticks).
+    prose_with_code = prose
+    prose = re.sub(r"(`+)[^`\n]*?\1", lambda m: " " * len(m.group(0)), prose)
 
     words = len(prose.split())
     if not MIN_WORDS <= words <= MAX_WORDS:
@@ -109,7 +112,7 @@ def lint(draft, sidecar):
         if len(n.split()) >= 6 and not any(n in k for k in known):
             violations.append(f"unlisted quote ({kind}): {n[:70]}")
 
-    for m in re.finditer(r'"([^"]{20,})"', prose):
+    for m in re.finditer(r'"([^"]+)"', prose):
         check_quote(m.group(1), "quoted")
     para = []
     for line in prose.split("\n") + [""]:
@@ -122,7 +125,7 @@ def lint(draft, sidecar):
     for f in sc.get("forbidden") or []:
         for m in re.finditer(f["pattern"], prose):
             near = f.get("near")
-            if near and near not in prose[max(0, m.start() - 300): m.end() + 300]:
+            if near and near not in prose_with_code[max(0, m.start() - 300): m.end() + 300]:
                 continue
             violations.append(f"forbidden pattern {f['pattern']!r}: {f.get('why', '')}")
             break
