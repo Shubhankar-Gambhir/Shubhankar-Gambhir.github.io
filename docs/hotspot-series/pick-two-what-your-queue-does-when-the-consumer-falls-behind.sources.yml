@@ -29,6 +29,9 @@ quotes:
   - id: liu-implode
     text: "If writing to filesystem stalls infinitely, JVM may implode because of memory usage."
     url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2020-March/038495.html
+  - id: liu-gave-up-ring
+    text: "Indeed, I gave up ringbuffer design in previous version and turn to use a dynamic allocated linkedlist. If writing to filesystem stalls infinitely, JVM may implode because of memory usage."
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2020-March/038495.html
   - id: liu-drop-early
     text: "It will start dropping early messages of the FIFO if it has consumed too many free memories."
     url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2020-March/038495.html
@@ -75,6 +78,9 @@ quotes:
   - id: liu-ringbuffer
     text: "current policy simulates a RingBuffer"
     url: https://bugs.openjdk.org/browse/JDK-8264323
+  - id: holmes-user-choice
+    text: "it may be that the user needs to be able to decide which is better for them?"
+    url: https://bugs.openjdk.org/browse/JDK-8264323
   - id: liu-recent
     text: "I think recent logging messages are more relevant when AsyncLog flusher thread get blocked."
     url: https://bugs.openjdk.org/browse/JDK-8264323
@@ -107,13 +113,16 @@ quotes:
   - id: holmes-monitor-fix
     text: "replace two uses of Semaphore with one PlatformMonitor and so completely avoid any overflow issues"
     url: https://bugs.openjdk.org/browse/JDK-8269865
+  - id: holmes-serialization
+    text: "with so much activity it will be a serialization point"
+    url: https://bugs.openjdk.org/browse/JDK-8269865
+  - id: holmes-lockfree
+    text: "We may need to look at a lock-free technique for that (not as part of this bug fix)."
+    url: https://bugs.openjdk.org/browse/JDK-8269865
 
   # 2022: ping-pong buffers, mutex kept
   - id: pingpong-glibc
     text: "This implementation has impact on glibc/malloc."
-    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2022-August/057285.html
-  - id: pingpong-fragmentation
-    text: "This worsens fragmentation issue."
     url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2022-August/057285.html
   - id: pingpong-mutex
     text: "Please note this effort won't eliminate mutex lock."
@@ -206,6 +215,9 @@ quotes:
   - id: ct-throttle
     text: "The rationale is that by the time a method gets compiled it can become unused, so it doesn't make sense to put too much onto the queue."
     url: https://raw.githubusercontent.com/openjdk/jdk/2114527fec4758c483744322fbfb773d69ac754f/hotspot/src/share/vm/runtime/advancedThresholdPolicy.hpp
+  - id: ct-duplicate
+    text: "If this method is already in the compile queue"
+    url: https://raw.githubusercontent.com/openjdk/jdk/815ff4dc327fe17f2433c7d115a5a503af10f3c4/src/hotspot/share/compiler/compileBroker.cpp
   - id: ct-750k
     text: "may compile >750K methods in the first hour after startup with JDK 21. With JDK 25, it only compiles ~370K methods in the first hour."
     url: https://bugs.openjdk.org/browse/JDK-8368071
