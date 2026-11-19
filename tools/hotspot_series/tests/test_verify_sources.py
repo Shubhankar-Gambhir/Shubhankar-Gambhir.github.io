@@ -137,6 +137,26 @@ def test_html_tags_still_stripped(tmp_path):
     assert run_tool(sc, tmp_path).returncode == 0
 
 
+def test_html_escaped_angle_bracket_text_survives(tmp_path):
+    # Pipermail escapes a literal "<" in the mail body as &lt;. Unescaping before stripping
+    # tags turned "&lt;1ms ... &gt;<i>" into a fake tag and deleted the text in between.
+    url = page(
+        tmp_path,
+        "<pre>locking takes &lt;1ms under normal circumstances.\n\n"
+        "I deemed it very unlikely.\n\n&gt;<i> quoted line\n</I></pre>",
+    )
+    sc = write_sidecar(
+        tmp_path,
+        [
+            {"id": "lt", "text": "takes <1ms under normal circumstances.", "url": url},
+            {"id": "after", "text": "I deemed it very unlikely.", "url": url},
+            {"id": "gt", "text": "> quoted line", "url": url},
+        ],
+    )
+    r = run_tool(sc, tmp_path)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
 @pytest.fixture
 def repo(tmp_path):
     r = tmp_path / "repo"

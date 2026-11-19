@@ -47,14 +47,15 @@ def is_html(url):
 
 
 def normalize(text, html_mode=False):
-    """html_mode=True: unescape entities and strip tags (HTML pages only).
+    """html_mode=True: strip tags, then unescape entities (HTML pages only).
 
-    Otherwise only unescape if real entities are present, and never strip `<...>`.
-    Sidecar and draft text must always use html_mode=False.
+    Tags are stripped first so that an escaped "&lt;" in the page text cannot become
+    the start of a fake tag. Otherwise only unescape if real entities are present,
+    and never strip `<...>`. Sidecar and draft text must always use html_mode=False.
     """
     if html_mode:
-        text = html.unescape(text)
         text = re.sub(r"<[^>]*>", "", text)
+        text = html.unescape(text)
     text = text.translate({0x201C: '"', 0x201D: '"', 0x2018: "'", 0x2019: "'"})
     text = text.replace("*", "")
     return re.sub(r"\s+", " ", text).strip()
