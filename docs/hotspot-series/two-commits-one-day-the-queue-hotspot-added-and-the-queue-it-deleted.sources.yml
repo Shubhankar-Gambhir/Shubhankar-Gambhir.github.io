@@ -1,0 +1,321 @@
+post: _drafts/two-commits-one-day-the-queue-hotspot-added-and-the-queue-it-deleted.md
+sketch: tools/hotspot_series/sketches/two-commits-one-day-the-queue-hotspot-added-and-the-queue-it-deleted.cpp
+
+quotes:
+  # 2001: the starvation patch in the two-priority VM-operation queue
+  - id: starvation-2001
+    text: "A steady stream of high priority operations can lock out lower priority operations."
+    url: https://bugs.openjdk.org/browse/JDK-4390175
+  - id: starvation-date
+    text: "This needs to be solved in VMOperationQueue::remove_next(). hui.huang@Eng 2001-05-15"
+    url: https://bugs.openjdk.org/browse/JDK-4390175
+  - id: starvation-hang
+    text: "This steady stream of SafepointPriority operations effectively causes the lower priority VM_DeoptimizeFrame operation to be starved."
+    url: https://bugs.openjdk.org/browse/JDK-4390175
+  - id: starvation-2000
+    text: "chuck.rasbold@eng 2000-11-22"
+    url: https://bugs.openjdk.org/browse/JDK-4390175
+  - id: starvation-yield
+    text: "In os_linux.cpp, os::dont_yield() always returns true."
+    url: https://bugs.openjdk.org/browse/JDK-4390175
+  - id: starvation-fixed-in
+    text: "FIXED IN: merlin-beta2"
+    url: https://bugs.openjdk.org/browse/JDK-4390175
+  - id: starvation-counter-comment
+    text: "simple counter based scheduling to prevent starvation of lower priority"
+    url: https://raw.githubusercontent.com/openjdk/jdk/6bddeb709d1d263d0d753909cabce7e755e7e27d/src/hotspot/share/runtime/vmThread.cpp
+
+  # November 2019: fire-and-forget VM operations removed (8234086)
+  - id: jbs-8234086-stack
+    text: "This means all VM ops can be stack allocated and synchronous."
+    url: https://bugs.openjdk.org/browse/JDK-8234086
+  - id: cms-removed
+    text: "Now that CMS is removed we no longer have any use for them."
+    url: https://bugs.openjdk.org/browse/JDK-8234086
+  - id: hs-heap-op
+    text: "The VMThread will delete the op when completed."
+    url: https://raw.githubusercontent.com/openjdk/jdk/6230791e9ef5767745f14c46b51548c842ba6082/src/hotspot/share/runtime/synchronizer.cpp
+  - id: ehn-no-block
+    text: "(I did not want to block the thread here)"
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2019-November/037097.html
+  - id: holmes-not-simpler
+    text: "I'm not sure getting rid of async VM ops and replacing with a new way to directly wakeup the VMThread really amounts to a simplification."
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2019-November/037141.html
+  - id: holmes-watcher
+    text: "Potentially at least, forcing the WatcherThread to wait for the safepoint to be executed could interfere with executing other periodic tasks."
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2019-November/037173.html
+  - id: holmes-default-delay
+    text: "By default the WatcherThread won't be executing this code as the BiasedLockingStartupDelay is zero."
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2019-November/037173.html
+  - id: holmes-agrees-dan
+    text: "Your observations about the WatcherThread change in behaviour are also spot on."
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2019-November/037173.html
+  - id: barrett-cant-sync
+    text: "this is a place where we were using the async VMOp feature and still (according to the comment) can't do a synchronous safepoint here."
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2019-November/037130.html
+  - id: holmes-async-defence
+    text: "Perhaps the ability to execute an async-safepoint VM operation needs to remain, for simplicity (compared to working around the issues)."
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2019-November/037173.html
+  - id: ehn-10ms
+    text: "A periodic task have a minimum resolution of 10ms, while the safepoint for enabling biased locking takes <1ms under normal circumstances."
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2019-November/037175.html
+  - id: holmes-one-time
+    text: "To be quite upfront I don't think support for async VM ops really adds any complexity, whereas ensuring the existing async ops can safely become sync ops has been a bit of effort :) But it is a one-time effort so ..."
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2019-November/037234.html
+
+  # June 2020: coalescing deleted (8247179)
+  - id: osterlund-99
+    text: "In the 99.9% case, when we trigger a GC safepoint, the GC operation will run alone as the only operation in the safepoint."
+    url: https://bugs.openjdk.org/browse/JDK-8247179
+  - id: osterlund-blue-moon
+    text: "It's an optimization opportunity that almost never kicks in, especially after biased locking has been fixed to use handshakes (and soon removed). Yet it has caused several bugs over the years where assumptions break when operations are coalesced once in a blue moon."
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2020-June/040250.html
+  - id: holmes-2006
+    text: "I added that version of the coalescing code back in 2006"
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2020-June/040266.html
+  - id: holmes-ran-tests
+    text: "Just out of interest I ran some tests to see if we presently encounter an actual queue of safepoint VM operations. It does still happen but may be an artefact of the tests involved"
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2020-June/040266.html
+  - id: holmes-not-concern
+    text: "but neither of these are a concern."
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2020-June/040266.html
+
+  # September 2020: the queue becomes one slot (8212107)
+  - id: ehn-gc-only
+    text: "because we almost only need GC safepoint. That makes the queue not needed."
+    url: https://bugs.openjdk.org/browse/JDK-8212107
+  - id: holmes-why-remove
+    text: "Can you explain why it was necessary to remove the queue and exactly what it has been replaced with?"
+    url: https://mail.openjdk.org/pipermail/hotspot-dev/2020-September/043391.html
+  - id: ehn-rare
+    text: "VM operations now rare and when we do them they are now also faster compared to when the queue was introduced."
+    url: https://mail.openjdk.org/pipermail/hotspot-dev/2020-September/043402.html
+  - id: ehn-stack
+    text: "Any other safepoint requester will have their operation on their stack until they succeed to set it as"
+    url: https://mail.openjdk.org/pipermail/hotspot-dev/2020-September/043402.html
+  - id: phillimore-counter
+    text: "I was wondering if you should put some counter while the thread is waiting to install its operation for logging and debugging purposes?"
+    url: https://mail.openjdk.org/pipermail/hotspot-dev/2020-September/043527.html
+  - id: phillimore-supposition
+    text: "Since the supposition is that there are few operations that cause safepoints so there's never a long wait."
+    url: https://mail.openjdk.org/pipermail/hotspot-dev/2020-September/043527.html
+  - id: ehn-fixing
+    text: "Sounds like a good idea, fixing."
+    url: https://mail.openjdk.org/pipermail/hotspot-dev/2020-September/043545.html
+  - id: daugherty-woken
+    text: "It seems to me that the new algorithm means that the waiting thread will be woken up more often and then go back to wait()ing without progress."
+    url: https://mail.openjdk.org/pipermail/hotspot-dev/2020-September/043707.html
+  - id: holmes-rarely-1
+    text: "This is the whole premise of making this change: we no longer need a queue because we rarely have >1 VM-operations in-flight."
+    url: https://mail.openjdk.org/pipermail/hotspot-dev/2020-September/043716.html
+  - id: holmes-one-or-two
+    text: "is that at most one or two threads may be waiting."
+    url: https://mail.openjdk.org/pipermail/hotspot-dev/2020-September/043716.html
+  - id: ehn-twice
+    text: 'When I do stress test I have not been able to produce a thread printing "A VM operation already set, waiting" twice in a row.'
+    url: https://mail.openjdk.org/pipermail/hotspot-dev/2020-September/043740.html
+
+  # Current VM-operation slot, jdk-27-ga (815ff4dc)
+  - id: hs-already-set
+    text: "A VM operation already set, waiting"
+    url: https://raw.githubusercontent.com/openjdk/jdk/815ff4dc327fe17f2433c7d115a5a503af10f3c4/src/hotspot/share/runtime/vmThread.cpp
+  - id: hs-not-our-op
+    text: "We wait until _next_vm_operation is not our op."
+    url: https://raw.githubusercontent.com/openjdk/jdk/815ff4dc327fe17f2433c7d115a5a503af10f3c4/src/hotspot/share/runtime/vmThread.cpp
+  - id: hs-installing
+    text: "Installing VM operation"
+    url: https://raw.githubusercontent.com/openjdk/jdk/815ff4dc327fe17f2433c7d115a5a503af10f3c4/src/hotspot/share/runtime/vmThread.cpp
+
+  # September 2020, one commit earlier: two slots become a queue (8238761, PR #151)
+  - id: jbs-one-op
+    text: "Right now a JavaThread can only have one handshake operation so an asynchronous handshake would thus block all other handshakes."
+    url: https://bugs.openjdk.org/browse/JDK-8238761
+  - id: pr151-never-executed
+    text: "Asynchronous handshakes are target only executed, which they may never be executed. (target may block on socket for the rest of VM lifetime)"
+    url: https://mail.openjdk.org/pipermail/hotspot-dev/2020-September/043183.html
+  - id: pr151-very-rare
+    text: "we can have many handshake pending. (should be very rare)"
+    url: https://mail.openjdk.org/pipermail/hotspot-dev/2020-September/043183.html
+  - id: pr151-cas
+    text: "Inserts are done via CAS on first pointer, no lock needed. Pops are done while holding the per handshake state lock"
+    url: https://mail.openjdk.org/pipermail/hotspot-dev/2020-September/043183.html
+  - id: pr151-pop-and-execute
+    text: "The thread grabbing the handshake state lock for a JavaThread will pop and execute all handshake operations matching the filter."
+    url: https://mail.openjdk.org/pipermail/hotspot-dev/2020-September/043183.html
+  - id: pr151-out-of-order
+    text: "note that filtering causes handshake operation to be done out-order"
+    url: https://mail.openjdk.org/pipermail/hotspot-dev/2020-September/043183.html
+  - id: holmes-single-pop
+    text: "So IIUC this queue supports multiple concurrent add()s, but has to be restricted to a single pop() at a time"
+    url: https://mail.openjdk.org/pipermail/hotspot-dev/2020-September/043394.html
+  - id: holmes-hot
+    text: "Was the need for spinwaits identified through benchmarking? Do you really expect this to be hot?"
+    url: https://mail.openjdk.org/pipermail/hotspot-dev/2020-September/043394.html
+  - id: ehn-no-and-no
+    text: "No and no. It was added to guard against any pathologically case, such as the gtest stress-tests."
+    url: https://mail.openjdk.org/pipermail/hotspot-dev/2020-September/043433.html
+  - id: ehn-99
+    text: "Since 99% of the time the queue is empty, we get the correct answers without needing to lock the handshake state lock."
+    url: https://mail.openjdk.org/pipermail/hotspot-dev/2020-September/043826.html
+  - id: fq-skip
+    text: "The FilterQueue is FIFO with the ability to skip over queued items."
+    url: https://raw.githubusercontent.com/openjdk/jdk/815ff4dc327fe17f2433c7d115a5a503af10f3c4/src/hotspot/share/utilities/filterQueue.hpp
+  - id: fq-serialized
+    text: "It also supports lock free pushes, while popping (including contains())"
+    url: https://raw.githubusercontent.com/openjdk/jdk/815ff4dc327fe17f2433c7d115a5a503af10f3c4/src/hotspot/share/utilities/filterQueue.hpp
+
+  # May 2021: widening the filter (8267079, PR #4005, withdrawn)
+  - id: mancao-remote
+    text: "Currently an async handshake cannot be executed by a remote thread, which limits certain use cases of async handshakes."
+    url: https://bugs.openjdk.org/browse/JDK-8267079
+  - id: mancao-wontfix
+    text: "This is not on our current list of priorities."
+    url: https://bugs.openjdk.org/browse/JDK-8267079
+  - id: holmes-order-q
+    text: "I thought we had to preserve the order of handshake operations?"
+    url: https://mail.openjdk.org/pipermail/hotspot-dev/2021-May/052158.html
+  - id: mancao-order
+    text: "Currently without this change, if there are both async self-executed ops and synchronous non-self executable ops on the queue, it would not preserve the execution order."
+    url: https://mail.openjdk.org/pipermail/hotspot-dev/2021-May/052162.html
+  - id: holmes-order
+    text: "I had a mental model where order of ops was preserved. Introducing non-determinism in the order in which ops are executed seems potentially fragile"
+    url: https://mail.openjdk.org/pipermail/hotspot-dev/2021-May/052163.html
+  - id: holmes-coalesce
+    text: "if all epoch-sync operations are equivalent then you only need at most one to get enqueued."
+    url: https://mail.openjdk.org/pipermail/hotspot-dev/2021-May/052163.html
+  - id: ehn-without
+    text: "you basically trying to handshake without a handshake :)"
+    url: https://mail.openjdk.org/pipermail/hotspot-dev/2021-May/052225.html
+
+  # May-June 2021: pop-then-execute becomes peek, execute, remove (8266557)
+  - id: ehn-rfr-2021
+    text: "Fixed by leaving the handshakee being processed in queue until completed."
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2021-May/048299.html
+  - id: holmes-is-locked
+    text: "So any use of Mutex::is_locked() has to be treated with suspicion as it can return false when the Mutex actually is locked."
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2021-May/048393.html
+  - id: holmes-why-peek
+    text: "I still don't understand why we now do a peek here, and then do the pop below (in remove-op), instead of just doing the pop here?"
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2021-May/048522.html
+  - id: ehn-drain-loop
+    text: "It must be removed. Since we have concurrent adds."
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2021-May/048547.html
+  - id: has-operation-true
+    text: "If has_operation() returns false we continue out of the transition into an unsafe state. Thus has_operation() must return true until it is safe to do so."
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2021-May/048553.html
+  - id: patricio-fence
+    text: "Based on the root cause it seems another simpler solution would have been to add a fence between claim_handshake() and can_process_handshake() to make sure the target sees the write to _owner before we read a handshake safe state."
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2021-June/048849.html
+  - id: patricio-loop
+    text: "That way we could also keep the while loop in try_process() to process multiple operations at a time, and don't worry about the peek vs pop issue."
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2021-June/048849.html
+  - id: daugherty-confused
+    text: "I've stopped my review because I realized that I have gotten confused by the `peek()` operation that actually appears to be searching for a match rather than peeking at the head (or tail) of the queue."
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2021-June/048855.html
+  - id: ehn-tail-pointer
+    text: "To provide lock-free inserts the queue only have a tail pointer."
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2021-June/048913.html
+  - id: ehn-walk
+    text: "To get to the front of the queue we must always walk until the end."
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2021-June/048913.html
+  - id: ehn-generic-queue
+    text: "But that would be relying on implementation details of a generic queue."
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2021-June/049018.html
+  - id: ehn-remove-ordering
+    text: "If we are removing any ordering, we should remove it where it is not needed. (the CAS) Not the other way around!"
+    url: https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2021-June/049018.html
+  - id: hs-removed-after
+    text: "acquire, op removed after"
+    url: https://raw.githubusercontent.com/openjdk/jdk/815ff4dc327fe17f2433c7d115a5a503af10f3c4/src/hotspot/share/runtime/handshake.cpp
+
+  # Supporting case: the compile queue ranks under one lock
+  - id: ct-rate
+    text: "When getting an element off the queue we pick the one with the largest rate."
+    url: https://raw.githubusercontent.com/openjdk/jdk/815ff4dc327fe17f2433c7d115a5a503af10f3c4/src/hotspot/share/compiler/compilationPolicy.hpp
+  - id: ct-stale
+    text: "Maintaining the rate also allows us to remove stale methods"
+    url: https://raw.githubusercontent.com/openjdk/jdk/815ff4dc327fe17f2433c7d115a5a503af10f3c4/src/hotspot/share/compiler/compilationPolicy.hpp
+  - id: ct-iterate
+    text: "Iterate through the queue and find a method with a maximum rate."
+    url: https://raw.githubusercontent.com/openjdk/jdk/815ff4dc327fe17f2433c7d115a5a503af10f3c4/src/hotspot/share/compiler/compilationPolicy.cpp
+  - id: ct-rfr-2011
+    text: "This implements adaptive tiered compilation policy."
+    url: https://mail.openjdk.org/pipermail/hotspot-compiler-dev/2011-March/004826.html
+  - id: ct-good
+    text: "Good."
+    url: https://mail.openjdk.org/pipermail/hotspot-compiler-dev/2011-March/004828.html
+  - id: ct-contention
+    text: "As of now, all compile queue accesses are guarded by a single global lock"
+    url: https://bugs.openjdk.org/browse/JDK-8320283
+  - id: ct-warmup
+    text: "during application startup/warmup on large systems it's easy to run into contention"
+    url: https://bugs.openjdk.org/browse/JDK-8320283
+  - id: ct-lockfree-submit
+    text: "But for application threads it's better to submit compilation tasks in a lock-free manner."
+    url: https://bugs.openjdk.org/browse/JDK-8320283
+  - id: leyden-flag
+    text: "makes the test pass. I think there is a bug in UseLockFreeCompileQueues in leyden repo."
+    url: https://bugs.openjdk.org/browse/JDK-8348960
+  - id: leyden-hang
+    text: "because the queue is empty, the compilers are idle, and we never get to CompileQueue::purge_stale_tasks(), which would never notify whoever is waiting on the task that task is stale."
+    url: https://bugs.openjdk.org/browse/JDK-8348960
+
+  # Supporting case: JFR's PostBox (a reading of the code)
+  - id: postbox-same
+    text: "Some other thread just set exactly what this thread wanted"
+    url: https://raw.githubusercontent.com/openjdk/jdk/815ff4dc327fe17f2433c7d115a5a503af10f3c4/src/hotspot/share/jfr/recorder/service/jfrPostBox.cpp
+  - id: postbox-collect
+    text: "get pending and reset to 0"
+    url: https://raw.githubusercontent.com/openjdk/jdk/815ff4dc327fe17f2433c7d115a5a503af10f3c4/src/hotspot/share/jfr/recorder/service/jfrPostBox.cpp
+
+versions:
+  - id: two-commits-a
+    commit: 6bddeb709d1
+    expect_first_tag: jdk-16+18
+  - id: two-commits-b
+    commit: 431338bcb3c
+    expect_first_tag: jdk-16+18
+  - id: peek-fix
+    commit: 2bfd708e927
+    expect_first_tag: jdk-17+26
+  - id: async-ops-removed
+    commit: 3d7d54b1457
+    expect_first_tag: jdk-14+26
+  - id: coalescing-removed
+    commit: a10a9284c19
+    expect_first_tag: jdk-16+3
+  - id: import-2007
+    commit: 8153779ad32
+    expect_first_tag: jdk7-b24
+  - id: ct-policy-2011
+    commit: 2114527fec4
+    expect_first_tag: jdk7-b135
+  - id: handshakes-jdk10
+    commit: 104ecb2dd13
+    expect_first_tag: jdk-10+34
+  - id: postbox-initial
+    commit: a060be188df
+    expect_first_tag: jdk-11+14
+
+forbidden:
+  - pattern: "(?i)pop is not lock-free because"
+    why: "FilterQueue's locked-pop rationale is inference; phrase it as the author's reading"
+  - pattern: "(?i)design discussion"
+    near: "PostBox"
+    why: "JFR's PostBox has no public design record; label the section as a reading of the code"
+  - pattern: "(?i)\\bcrash"
+    near: "8348960"
+    why: "the Leyden test hung (stuck, compilers idle); no crash"
+  - pattern: "(?i)\\bcrash"
+    near: "8266557"
+    why: "8266557 was an assertion failure in testing; no field crash on record"
+  - pattern: "(?i)every (10th|tenth)"
+    why: "the counter serves the low-priority list first on every 11th pick (counter 0..9 high first, reset at 10)"
+  - pattern: "(?i)(in response|in answer|as she asked|as (Phillimore|she) requested)"
+    near: "Installing VM operation"
+    why: "whether the trace timer was added for Phillimore's request is not on record; state only that the shipped commit has it"
+  - pattern: "(?i)(ranked|ranking|rank) because"
+    near: "2011"
+    why: "the 2011 review of the ranked compile queue is just 'Good.'; the only rationale is the header comment"
+  - pattern: "(?i)leyden.{0,60}(shipped|mainline (has|uses))"
+    why: "the lock-free compile queue exists only in the Leyden prototype branch, never in mainline"
