@@ -28,19 +28,18 @@ def rewrite_url(url):
 
 
 PLAIN_TEXT_PREFIXES = ("https://bugs.openjdk.org/rest/", "https://raw.githubusercontent.com/")
-PLAIN_TEXT_EXTS = (".txt", ".patch", ".diff", ".java", ".cpp", ".hpp", ".h", ".c", ".cc")
 ENTITY = re.compile(r"&(#\d+|#x[0-9a-fA-F]+|[A-Za-z]+);")
 
 
 def is_html(url):
     """Decided from the URL alone so cached and fresh fetches behave identically.
 
-    Plain text: JBS REST JSON, raw.githubusercontent.com, source-file extensions, and
-    file:// fixtures without an .html/.htm extension. Everything else (pipermail, JEPs,
-    GitHub commit pages, .html) is treated as HTML.
+    Plain text: JBS REST JSON, raw.githubusercontent.com, and file:// fixtures without an
+    .html/.htm extension (including source files). Every other http(s) URL is HTML
+    whatever its extension (pipermail, JEPs, GitHub commit and blob pages).
     """
     path = url.split("?", 1)[0]
-    if url.startswith(PLAIN_TEXT_PREFIXES) or path.endswith(PLAIN_TEXT_EXTS):
+    if url.startswith(PLAIN_TEXT_PREFIXES):
         return False
     if url.startswith("file://"):
         return path.endswith((".html", ".htm"))

@@ -103,6 +103,21 @@ def test_jbs_rest_url_is_plain_text():
     assert verify_sources.is_html("https://openjdk.org/jeps/1")
 
 
+def test_github_blob_url_is_html():
+    import verify_sources
+
+    base = "/openjdk/jdk/jdk-27-ga/src/hotspot/share/runtime/atomic.hpp"
+    assert verify_sources.is_html("https://github.com/openjdk/jdk/blob/jdk-27-ga/src/hotspot/share/runtime/atomic.hpp")
+    assert not verify_sources.is_html("https://raw.githubusercontent.com" + base)
+
+
+def test_file_url_with_source_ext_is_plain():
+    import verify_sources
+
+    assert not verify_sources.is_html("file:///tmp/x.hpp")
+    assert verify_sources.is_html("file:///tmp/x.html")
+
+
 def test_raw_source_with_template_found(tmp_path):
     line = "Atomic<T> is used to declare a variable of type T with atomic access."
     f = tmp_path / "atomic.hpp.txt"
