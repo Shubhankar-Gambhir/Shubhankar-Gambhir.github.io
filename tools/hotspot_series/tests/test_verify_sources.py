@@ -1,3 +1,4 @@
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -74,8 +75,51 @@ def test_jbs_json_matches_description_and_comments():
         ' "comment": {"comments": [{"body": "first comment"}, {"body": "second one"}]}}}'
     )
     text = verify_sources.extract_text("https://bugs.openjdk.org/rest/api/2/issue/JDK-1?x", raw)
-    n = verify_sources.normalize(text)
-    assert "the desc" in n and "second one" in n
+    n = verify_sources.page_text("https://bugs.openjdk.org/rest/api/2/issue/JDK-1?x", raw)
+    assert "the <b>desc</b>" in n and "second one" in n
+
+
+def test_jbs_text_with_angle_brackets_found(tmp_path):
+    quote = "return; // <<--- invalid since the lock is not an RAII construct!"
+    body = json.dumps({"fields": {"description": "d", "comment": {"comments": [{"body": "x\n  " + quote + "\n y"}]}}})
+    f = tmp_path / "JDK-1"
+    f.write_text(body)
+    # file:// stand-in for the REST endpoint; the .json-ish extensionless fixture is plain text
+    sc = write_sidecar(tmp_path, [{"id": "j", "text": quote, "url": f.as_uri()}])
+    r = run_tool(sc, tmp_path)
+    assert r.returncode == 0, r.stdout + r.stderr
+    import verify_sources
+
+    n = verify_sources.page_text("https://bugs.openjdk.org/rest/api/2/issue/JDK-1?f", body)
+    assert verify_sources.normalize(quote) in n
+
+
+def test_jbs_rest_url_is_plain_text():
+    import verify_sources
+
+    assert not verify_sources.is_html("https://bugs.openjdk.org/rest/api/2/issue/JDK-1?fields=x")
+    assert not verify_sources.is_html("https://raw.githubusercontent.com/openjdk/jdk/jdk-27-ga/a.hpp")
+    assert verify_sources.is_html("https://mail.openjdk.org/pipermail/hotspot-dev/2021-March/050459.html")
+    assert verify_sources.is_html("https://openjdk.org/jeps/1")
+
+
+def test_raw_source_with_template_found(tmp_path):
+    line = "Atomic<T> is used to declare a variable of type T with atomic access."
+    f = tmp_path / "atomic.hpp.txt"
+    f.write_text("// " + line + "\n")
+    sc = write_sidecar(tmp_path, [{"id": "t", "text": line, "url": f.as_uri()}])
+    r = run_tool(sc, tmp_path)
+    assert r.returncode == 0, r.stdout + r.stderr
+    g = tmp_path / "plain"
+    g.write_text("// " + line + "\n")
+    sc = write_sidecar(tmp_path, [{"id": "t", "text": line, "url": g.as_uri()}])
+    assert run_tool(sc, tmp_path).returncode == 0
+
+
+def test_html_tags_still_stripped(tmp_path):
+    url = page(tmp_path, "<p>it is <b>non-blocking</b> now</p>")
+    sc = write_sidecar(tmp_path, [{"id": "h", "text": "non-blocking", "url": url}])
+    assert run_tool(sc, tmp_path).returncode == 0
 
 
 @pytest.fixture

@@ -27,9 +27,35 @@ def rewrite_url(url):
     return url
 
 
-def normalize(text):
-    text = html.unescape(text)
-    text = re.sub(r"<[^>]*>", "", text)
+PLAIN_TEXT_PREFIXES = ("https://bugs.openjdk.org/rest/", "https://raw.githubusercontent.com/")
+PLAIN_TEXT_EXTS = (".txt", ".patch", ".diff", ".java", ".cpp", ".hpp", ".h", ".c", ".cc")
+ENTITY = re.compile(r"&(#\d+|#x[0-9a-fA-F]+|[A-Za-z]+);")
+
+
+def is_html(url):
+    """Decided from the URL alone so cached and fresh fetches behave identically.
+
+    Plain text: JBS REST JSON, raw.githubusercontent.com, source-file extensions, and
+    file:// fixtures without an .html/.htm extension. Everything else (pipermail, JEPs,
+    GitHub commit pages, .html) is treated as HTML.
+    """
+    path = url.split("?", 1)[0]
+    if url.startswith(PLAIN_TEXT_PREFIXES) or path.endswith(PLAIN_TEXT_EXTS):
+        return False
+    if url.startswith("file://"):
+        return path.endswith((".html", ".htm"))
+    return True
+
+
+def normalize(text, html_mode=False):
+    """html_mode=True: unescape entities and strip tags (HTML pages only).
+
+    Otherwise only unescape if real entities are present, and never strip `<...>`.
+    Sidecar and draft text must always use html_mode=False.
+    """
+    if html_mode:
+        text = html.unescape(text)
+        text = re.sub(r"<[^>]*>", "", text)
     text = text.translate({0x201C: '"', 0x201D: '"', 0x2018: "'", 0x2019: "'"})
     text = text.replace("*", "")
     return re.sub(r"\s+", " ", text).strip()
@@ -43,6 +69,13 @@ def extract_text(url, raw):
         parts += [c.get("body") or "" for c in (fields.get("comment") or {}).get("comments", [])]
         return "\n".join(parts)
     return raw
+
+
+def page_text(url, raw):
+    text = extract_text(url, raw)
+    if is_html(url):
+        return normalize(text, html_mode=True)
+    return normalize(html.unescape(text) if ENTITY.search(text) else text)
 
 
 _last_fetch = [0.0]
@@ -104,7 +137,7 @@ def main():
     for q in data.get("quotes") or []:
         url = rewrite_url(q["url"])
         try:
-            page = normalize(extract_text(url, fetch(url, Path(args.cache), args.delay)))
+            page = page_text(url, fetch(url, Path(args.cache), args.delay))
         except Exception as e:
             print(f"MISSING {q['id']} (fetch failed: {e}) {q['url']}")
             ok = False
