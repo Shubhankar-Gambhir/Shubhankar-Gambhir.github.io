@@ -15,7 +15,7 @@ image:
   hero: false
 ---
 
-A `dynamic_cast` that misses costs 29 times the single bit test that HotSpot-style code uses in its place, and which C++ runtime answers the call can halve that.
+A `dynamic_cast` that misses costs 29 times the single bit test that HotSpot-style code uses in its place, and which C++ runtime answers the call can halve the miss itself.
 
 [The Null Slot: What -fno-rtti Actually Removes]({% post_url 2026-08-26-the-null-slot-what-fno-rtti-actually-removes %}) opened this three-part series on `-fno-rtti` by counting what the flag saves in a binary. This second post is about the type checks themselves.
 
