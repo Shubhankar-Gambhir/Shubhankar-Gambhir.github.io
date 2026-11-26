@@ -26,7 +26,7 @@ This post measures what happens when you take the four mechanisms from [Part 1](
 
 Same hardware as the rest of the series: Intel Xeon Gold 6130 @ 2.10 GHz. Two compilers: GCC 11.4.0 and GCC 15.2.0 (the bookends from [Part 4]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %})). Same flags: `-O2 -march=skylake-avx512 -fcf-protection -falign-functions=64 -falign-loops=64`.
 
-The series uses a GC barrier scenario with three plugin types as its running example, but the dispatch mechanics apply to any strategy pattern. Each benchmark pre-generates a pattern array of 1M plugin indices (Light=0, Medium=1, Heavy=2) before timing begins. The hot loop walks this array, dispatching to whichever plugin the index selects, for 100M total iterations. Here's the virtual dispatch version; the others are structurally identical:
+The series uses a GC barrier scenario with three plugin types as its running example. Each benchmark pre-generates a pattern array of 1M plugin indices (Light=0, Medium=1, Heavy=2) before timing begins. The hot loop walks this array, dispatching to whichever plugin the index selects, for 100M total iterations. Here's the virtual dispatch version; the others are structurally identical:
 
 ```cpp
 BarrierSet* plugins[3] = { &epsilon, &serial, &g1 };
@@ -64,17 +64,17 @@ For reference, here are the monomorphic baselines from Parts 1 and 4 (Heavy plug
 | std::variant + std::visit | 4.65 | 2.24 |
 | Decoupled CRTP | 2.87 | 2.88 |
 
-Round-robin is the gentlest polymorphic pattern. The target cycles through three values with perfect periodicity, and modern branch predictors handle repeating patterns well. The CPU can learn the sequence and predict each indirect branch correctly most of the time.
+Round-robin is the gentlest polymorphic pattern: modern branch predictors handle repeating patterns well and can predict each indirect branch correctly most of the time.
 
-CRTP and function pointer are identical: 2.87 vs 2.88 on GCC 11, 2.88 vs 2.88 on GCC 15. This is the design prediction from Part 2 playing out: after lazy resolution, decoupled CRTP collapses to a function pointer array. Under monomorphic dispatch, the two mechanisms looked similar but could have diverged due to code layout or alignment effects. Under polymorphic dispatch, they converge exactly. The function pointer *is* the dispatch mechanism in both cases; CRTP just gave you composability on top.
+CRTP and function pointer are identical: 2.87 vs 2.88 on GCC 11, 2.88 vs 2.88 on GCC 15. This is the design prediction from Part 2 playing out: after lazy resolution, decoupled CRTP collapses to a function pointer array. Under monomorphic dispatch, the two mechanisms looked similar but could have diverged due to code layout or alignment effects. Under polymorphic dispatch, they converge exactly.
 
-Variant on GCC 15 is the fastest indirect mechanism at 2.24 ns, faster than function pointer (2.88 ns) and faster than virtual (3.05 ns). The switch-based `std::visit` from GCC 12+ lowers to a jump table on the variant index, and the jump table targets are direct jumps within the same function, giving the optimizer more latitude than an opaque indirect `call` through a function pointer.
+Variant on GCC 15 is the fastest indirect mechanism at 2.24 ns. The switch-based `std::visit` from GCC 12+ lowers to a jump table on the variant index.
 
-Under monomorphic dispatch in Part 4, the compiler hoisted the switch out of the loop entirely: one check, then a tight loop body with no dispatch at all. Under round-robin, the switch executes on every iteration (the variant index changes), but it retains the structural advantage: a jump table `jmp` stays within the function, while a function pointer `call` pushes a return address and jumps to an external function. The 0.64 ns gap (2.88 vs 2.24) is consistent with saving that per-call overhead across 100M iterations.
+Under monomorphic dispatch in Part 4, the compiler hoisted the switch out of the loop entirely. Under round-robin, the switch executes on every iteration (the variant index changes), but it retains the structural advantage: a jump table `jmp` stays within the function, while a function pointer `call` pushes a return address and jumps to an external function. The 0.64 ns gap (2.88 vs 2.24) is consistent with saving that per-call overhead across 100M iterations.
 
-On GCC 11, variant is worst in class at 4.65 ns. The old function-pointer-table `std::visit` implementation stacks two overheads: the lambda capture round-trip from [Part 3]({% post_url 2026-05-19-why-std-visit-may-be-slower-than-a-vtable %}) and the new cost of cycling through three different dispatch targets. The vtable-style implementation was already slower for one target; now it's dispatching through three.
+On GCC 11, variant is worst in class at 4.65 ns. The old function-pointer-table `std::visit` implementation stacks two overheads: the lambda capture round-trip from [Part 3]({% post_url 2026-05-19-why-std-visit-may-be-slower-than-a-vtable %}) and the new cost of cycling through three different dispatch targets.
 
-Virtual dispatch shows a mild increase from its monomorphic baseline (2.90 to 3.05 on GCC 11), but not much. The assembly tells us why. Here's the monomorphic hot loop from Part 1 next to the polymorphic version, both GCC 15:
+Virtual dispatch shows a mild increase from its monomorphic baseline (2.90 to 3.05 on GCC 11). The assembly tells us why. Here's the monomorphic hot loop from Part 1 next to the polymorphic version, both GCC 15:
 
 ```nasm
 ; MONOMORPHIC (Part 1): one plugin, called 100M times
@@ -113,19 +113,17 @@ The vtable lookup is identical in both cases: load vptr, indirect call through v
 | std::variant + std::visit | 7.08 | 4.31 |
 | Decoupled CRTP | 4.65 | 4.63 |
 
-This is the workload that most resembles production. 90% of calls hit the heaviest plugin (the most work per dispatch), and 10% hit a lighter alternative. The distribution is random, seeded deterministically, so the branch predictor can't learn a repeating pattern. But it *can* learn the dominant target and take its chances.
+The 90/10 distribution is random, seeded deterministically, so the branch predictor can't learn a repeating pattern. But it *can* learn the dominant target and take its chances.
 
-The numbers are higher across the board. Virtual dispatch nearly doubled from its round-robin number (3.05 to 5.58 on GCC 15), and function pointer and CRTP jumped from 2.88 to 4.63. A predictor that bets on the dominant type is right 90% of the time; each of the other 10% costs a pipeline flush of roughly 15-20 cycles on Skylake ([Agner Fog's microarchitecture guide](https://www.agner.org/optimize/microarchitecture.pdf), Skylake chapter), or 7-10 ns at 2.1 GHz.
+Virtual dispatch nearly doubled from its round-robin number (3.05 to 5.58 on GCC 15), and function pointer and CRTP jumped from 2.88 to 4.63. A predictor that bets on the dominant type is right 90% of the time; each of the other 10% costs a pipeline flush of roughly 15-20 cycles on Skylake ([Agner Fog's microarchitecture guide](https://www.agner.org/optimize/microarchitecture.pdf), Skylake chapter), or 7-10 ns at 2.1 GHz.
 
 That accounts for less of the jump than it first appears. At one miss in ten, 7-10 ns per miss adds about 0.7-1.0 ns per call, while function pointer went up by 1.75 ns over round-robin. Part of the remainder is the mix itself: round-robin spends a third of its calls in the Heavy plugin, this workload spends 90% there. I didn't collect counters for this workload, so I can't split the rest more precisely than that.
 
-CRTP and function pointer stay locked together: 4.65 vs 4.67 on GCC 11, 4.63 vs 4.63 on GCC 15.
-
-Virtual dispatch pays a consistent premium over function pointer: about 1 ns on both compilers. The vtable indirection (two dependent loads instead of one indirect call) translates to one extra cache access per dispatch, and that cost persists regardless of misprediction rate. Under monomorphic dispatch this gap was smaller (0.47 ns on GCC 11) because perfect prediction hid some of the latency. Under polymorphic dispatch, the mispredictions amplify the structural cost.
+Virtual dispatch pays a consistent premium over function pointer: about 1 ns on both compilers. Under monomorphic dispatch this gap was smaller (0.47 ns on GCC 11) because perfect prediction hid some of the vtable's extra load latency.
 
 Variant on GCC 15 (4.31 ns) beats function pointer (4.63 ns) again, though the gap has narrowed from the round-robin case. The switch-based dispatch still gives the optimizer an edge, but random arrival order makes the jump table harder to predict than the repeating pattern did.
 
-Variant on GCC 11 (7.08 ns) is worst in class by a wide margin. It stacks the old `std::visit` overhead on top of the misprediction penalty. If you're on GCC 11 and your workload is polymorphic, variant is the wrong choice.
+Variant on GCC 11 (7.08 ns) is worst in class by a wide margin. If you're on GCC 11 and your workload is polymorphic, variant is the wrong choice.
 
 ## Uniform Random
 
@@ -136,7 +134,7 @@ Variant on GCC 11 (7.08 ns) is worst in class by a wide margin. It stacks the ol
 | std::variant + std::visit | 18.89 | 13.95 |
 | Decoupled CRTP | 14.11 | 14.15 |
 
-Every call is a three-way coin flip. There's no pattern to learn and no dominant target to bet on, so no predictor, however much history it tracks, can do better than chance: the indirect call should miss about two times in three.
+Every call is a three-way coin flip. There's no pattern to learn and no dominant target to bet on, so no predictor can do better than chance: the indirect call should miss about two times in three.
 
 Here are the hardware counters for the random pattern on GCC 15, alongside monomorphic baselines:
 
@@ -149,17 +147,15 @@ Here are the hardware counters for the random pattern on GCC 15, alongside monom
 | Virtual (mono) | 2.42 | 0.00% | 3.18 | 1.6B |
 | Variant (mono) | 1.47 | 0.01% | 3.00 | 0.9B |
 
-The branch miss rate is ~22% across all four mechanisms. That looks low for a coin flip until you remember `perf` divides by every branch, not just the indirect call. The store functions are branch-free, so the hot loop retires three branches per iteration: the indirect call, its return, and the loop back-edge. The return and the back-edge predict perfectly. Two misses in three on one branch out of three works out to 2/9, or 22%. IPC collapses from 3.0-3.2 (monomorphic) to 0.6 (random). The CPU spends most of its time waiting for mispredicted branches to resolve rather than executing useful work.
+The branch miss rate is ~22% across all four mechanisms. That looks low for a coin flip until you remember `perf` divides by every branch, not just the indirect call. The store functions are branch-free, so the hot loop retires three branches per iteration: the indirect call, its return, and the loop back-edge. The return and the back-edge predict perfectly. Two misses in three on one branch out of three works out to 2/9, or 22%. IPC collapses from 3.0-3.2 (monomorphic) to 0.6 (random).
 
 Function pointer went from 2.88 ns (round-robin) to 14.15 ns (random), a 4.9x increase. Virtual went from 3.05 to 17.57, a 5.8x increase. Most of each call is now misprediction recovery.
 
 But the relative order still matters.
 
-CRTP and function pointer are still identical: 14.11 and 14.11 on GCC 11, 14.15 and 14.15 on GCC 15.
-
 Virtual dispatch adds 3.4 ns over function pointer (17.57 vs 14.15 on GCC 15), up from about 1 ns in the weighted case.
 
-Variant on GCC 11 posts the worst number in the series, 18.89 ns, with the old vtable-based `std::visit` adding its own indirection on top of the mispredictions. On GCC 15 it drops to 13.95 ns, slightly ahead of function pointer at 14.15 ns.
+Variant on GCC 11 posts the worst number in the series, 18.89 ns; on GCC 15 it drops to 13.95 ns, slightly ahead of function pointer.
 
 When the CPU can't predict the branch, what matters is the depth of the dependency chain between the mispredicted branch and the correct target address.
 
@@ -169,7 +165,7 @@ Misprediction amplifies these differences. When the CPU discards speculative wor
 
 ## The Full Picture
 
-The tables above presented each workload separately to support the per-section analysis. Here they are consolidated. All values in ns/call.
+All values in ns/call.
 
 **GCC 11.4.0:**
 
@@ -191,11 +187,11 @@ The tables above presented each workload separately to support the per-section a
 
 *Degradation = Random / Monomorphic ratio.*
 
-The clearest finding is what happened to variant. The GCC 12+ switch optimization changes how it behaves under polymorphism too. On GCC 15, variant drops from 4.65 to 2.24 ns under round-robin (52% faster) and from 18.89 to 13.95 ns under random. It goes from worst-in-class on GCC 11 to best-in-class on GCC 15 at every workload.
+The clearest finding is what happened to variant: worst-in-class on GCC 11, best-in-class on GCC 15 at every workload (4.65 to 2.24 ns under round-robin, 52% faster; 18.89 to 13.95 ns under random).
 
-CRTP and function pointer land within 0.02 ns of each other in every measurement, across all three workloads and both compilers. Under polymorphic dispatch, [lazy resolution]({% post_url 2026-05-12-lazy-resolution-resolve-once-dispatch-forever %}) collapses to a function pointer array. If you don't need composable plugin layers, a raw function pointer gives you the same runtime performance with less code.
+CRTP and function pointer land within 0.02 ns of each other in every measurement, across all three workloads and both compilers. If you don't need composable plugin layers, a raw function pointer gives you the same runtime performance with less code.
 
-Virtual dispatch barely benefits from GCC 15. The vtable indirection is the bottleneck, and compiler upgrades can't optimize it away. Virtual went from 2.90 to 2.42 ns in the monomorphic case (alignment and codegen improvements), but under random dispatch the improvement vanishes: 17.61 vs 17.57.
+Virtual dispatch barely benefits from GCC 15: 2.90 to 2.42 ns in the monomorphic case (alignment and codegen improvements), but 17.61 vs 17.57 under random dispatch.
 
 All mechanisms see a 5-7x slowdown from monomorphic to random, except variant on GCC 15 at 9.5x (1.47 to 13.95). Its monomorphic number was flattered: the compiler [hoisted the switch out of the loop entirely]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %}), and under polymorphic dispatch that optimization has nothing to hoist.
 
@@ -213,13 +209,11 @@ flowchart TD
     E -->|No| G["Function pointer<br>or variant (GCC 15+)"]
 ```
 
-Reading the chart: if your call site is monomorphic (same target every time), the [Part 1 decision framework]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) still applies. If it's polymorphic, the first question is whether you can restructure to batch calls by type. If you can, each batch dispatches monomorphically and you recover most of the performance. If you can't, mechanism choice matters less because branch prediction dominates the cost. Pick decoupled CRTP if you need composable layers; otherwise function pointer or variant (GCC 15+) are roughly equivalent.
-
-If your hot loop always dispatches to the same type, the Part 1-4 framework holds and mechanism choice matters. If your loop mixes types, the gap between fastest and slowest shrinks from 2.5x (monomorphic, GCC 11) to 1.3x (random, GCC 15). The branch predictor dominates, and all four mechanisms degrade roughly together.
+If your call site is monomorphic (same target every time), the [Part 1 decision framework]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) still applies and mechanism choice matters. If it's polymorphic and you can batch calls by type, each batch dispatches monomorphically. If you can't, the branch predictor dominates and all four mechanisms degrade roughly together: the gap between fastest and slowest shrinks from 2.5x (monomorphic, GCC 11) to 1.3x (random, GCC 15).
 
 ### When You Can Restructure
 
-The biggest win for polymorphic dispatch is reducing how often the branch predictor has to guess. If your loop dispatches to different plugin types in an unpredictable order, consider sorting or grouping by type before dispatching:
+The biggest win for polymorphic dispatch is reducing how often the branch predictor has to guess. If your loop dispatches to plugin types in an unpredictable order, consider grouping by type first:
 
 ```cpp
 // Before: mixed dispatch, branch predictor thrashes
@@ -233,11 +227,11 @@ for (auto& item : items)
     plugins[item.type]->process(item);  // same target for long runs
 ```
 
-The sort costs O(N log N) once, but the inner loop now hits the same branch target for each batch of consecutive same-type items. For large N with a small number of types, this can recover most of the monomorphic performance. Whether the sort is worth it depends on your N, your type count, and how expensive each `process` call is relative to the sort overhead.
+The sort costs O(N log N) once. For large N with a small number of types, it can recover most of the monomorphic performance; whether it's worth it depends on your N, your type count, and how expensive each `process` call is relative to the sort.
 
 ### Limitations
 
-These benchmarks used 3 plugin types. Three is the minimum for meaningful polymorphism, but real systems may have 8, 15, or more. With more types, the branch miss rate climbs higher (the predictor has more targets to track), and the mechanisms may diverge further. The relative ranking is likely to hold (the structural differences between mechanisms don't change with type count), but the absolute numbers will be worse, and the gap between mechanisms may widen as BTB pressure increases.
+These benchmarks used 3 plugin types. Three is the minimum for meaningful polymorphism, but real systems may have 8, 15, or more. With more types, the branch miss rate climbs higher (the predictor has more targets to track). The relative ranking is likely to hold (the structural differences between mechanisms don't change with type count), but the absolute numbers will be worse, and the gap between mechanisms may widen as BTB pressure increases.
 
 ---
 
