@@ -1,6 +1,6 @@
 ---
 title: "The Backlog: What Falling Behind Costs an Unbounded Queue"
-date: 2026-11-03
+date: 2026-11-04
 categories: [C++, Performance]
 tags: [concurrency, queue, payload, memcpy, glibc, malloc, page-faults, ring-buffer, benchmarks, arm]
 description: >-
