@@ -69,7 +69,7 @@ public:
             std::uint64_t lost = std::exchange(dropped_, 0);
             lk.unlock();                              // write outside the lock
             room_.notify_all();
-            std::string gap = "[" + std::to_string(lost) + " messages dropped]";
+            std::string gap = lost ? "[" + std::to_string(lost) + " messages dropped]" : "";
             if (lost && policy_ == OverloadPolicy::DropOldest) sink_(gap);  // lost before batch
             for (auto& m : batch_) { if (m) sink_(*m); else done = true; }  // nullopt: shutdown
             if (lost && policy_ == OverloadPolicy::DropNewest) sink_(gap);  // lost after batch

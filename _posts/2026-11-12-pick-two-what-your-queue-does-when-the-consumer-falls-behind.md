@@ -1,5 +1,6 @@
 ---
 title: "Pick Two: What Your Queue Does When the Consumer Falls Behind"
+date: 2026-11-12
 categories: [C++, Concurrency]
 tags: [concurrency, queue, producer-consumer, logging, backpressure, condition-variable, hotspot, jvm, openjdk]
 description: >-
@@ -8,15 +9,17 @@ description: >-
   drop the newest, then let the user choose to stall. The review threads behind each
   answer, the bugs that sat on the full path, and a C++ two-buffer logger that writes
   its overload policy down.
+image:
+  path: /assets/img/og/pick-two-what-your-queue-does-when-the-consumer-falls-behind.png
+  alt: "Pick Two: What Your Queue Does When the Consumer Falls Behind"
+  hero: false
 ---
 
-Between 2020 and 2025, the JVM's asynchronous logger gave four different answers to one question: what happens to a log message when there is no room for it?
+My last queue post ended with an unbounded queue growing until the kernel killed it ([The Copy and the Backlog]({% post_url 2026-10-27-the-copy-and-the-backlog-what-a-bigger-payload-does-to-a-concurrent-queue %})). The obvious fix is to bound it, which just moves the question: once it's full, what gives?
 
-The first answer proposed for mainline was to make room (its author had used a ring buffer in JDK 8 and given it up), and it lasted ten days. The second threw away the oldest message, the third threw away the newest, and the fourth, which shipped in JDK 25, lets whoever starts the JVM choose between dropping and making the logging thread wait. Each switch was argued in public by the people who wrote and reviewed the code.
+Between 2020 and 2025, the JVM's asynchronous logger gave four different answers. The first, proposed for mainline, was to make room, and it lasted ten days. The second threw away the oldest message, the third threw away the newest, and the fourth, which shipped in JDK 25, lets whoever starts the JVM choose between dropping and making the logging thread wait. Each switch was argued in public by the people who wrote and reviewed the code.
 
 This is a history post. The numbers in it are quoted from those HotSpot engineers; I measured none of them. Where my own queue benchmarks bear on a claim, I link them.
-
-<!-- AUTHOR: One or two true sentences on what sent you into this history (a logging stall you saw, a question from the earlier queue posts, the talk). Leave it out if there is nothing specific. -->
 
 You need one fact about the JVM to follow along. HotSpot, the C++ program at the core of OpenJDK, sometimes parks every application thread so the garbage collector can work. That is a stop-the-world pause, with every thread stopped at what HotSpot calls a safepoint: picture them all blocked on one barrier until the collector lets them go. Anything the collector does while they wait, including writing a log line, makes the pause longer.
 
@@ -32,7 +35,7 @@ When Liu reposted the design against the current JDK in February 2020, he made i
 
 > In this implementation, I decide to use dynamic memory. ie. It doesn't drop any message. It's because I observe that asynchronous task is so fast that it doesn't need much memory to buffer all messages in the interval.
 
-Underneath, "A mutex-protected FIFO stores all asynchronous log messages." It was a linked list behind a lock, with no limit. The reasoning holds for as long as the consumer keeps up, which is the one situation where you don't need an overload policy at all. When the consumer falls even slightly behind, an unbounded queue has no steady state; in [my payload benchmarks]({% post_url 2026-10-27-the-copy-and-the-backlog-what-a-bigger-payload-does-to-a-concurrent-queue %}) one reached 64.6 GB of resident memory in 38 seconds before the kernel's OOM killer took it.
+Underneath, "A mutex-protected FIFO stores all asynchronous log messages." It was a linked list behind a lock, with no limit. The reasoning holds for as long as the consumer keeps up, which is the one situation where you don't need an overload policy at all. When the consumer falls even slightly behind, an unbounded queue has no steady state; mine reached 64.6 GB of resident memory in 38 seconds.
 
 Liu's internal users raised the same worry ten days later, and [his update](https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2020-March/038495.html) conceded it: "Indeed, I gave up ringbuffer design in previous version and turn to use a dynamic allocated linkedlist. If writing to filesystem stalls infinitely, JVM may implode because of memory usage." The second answer was a memory quota: "It will start dropping early messages of the FIFO if it has consumed too many free memories."
 
@@ -60,7 +63,7 @@ With a lock, "it is easy to be reviewed as well." Review is where lock-free code
 
 ## Which Messages to Lose
 
-Which messages to lose came up in May 2021, in the compatibility review for the new `-Xlog:async` option ([CSR JDK-8264323](https://bugs.openjdk.org/browse/JDK-8264323)). The pull request still dropped the oldest, and Holmes questioned hard-wiring either policy: "it may be that the user needs to be able to decide which is better for them?" Liu defended the oldest: the "current policy simulates a RingBuffer", and "I think recent logging messages are more relevant when AsyncLog flusher thread get blocked."
+The question came up in May 2021, in the compatibility review for the new `-Xlog:async` option ([CSR JDK-8264323](https://bugs.openjdk.org/browse/JDK-8264323)). The pull request still dropped the oldest, and Holmes questioned hard-wiring either policy: "it may be that the user needs to be able to decide which is better for them?" Liu defended the oldest: the "current policy simulates a RingBuffer", and "I think recent logging messages are more relevant when AsyncLog flusher thread get blocked."
 
 Holmes argued from the reader's side: "The cons of dropping oldest is that it is the old log messages that may give you the clue as to why the log buffer filled up faster than it could be drained." Stuefe sided with him on the policy and against him on the choice. He wanted the dropped-message "gaps in the log related to the time the buffer was exhausted", and: "I would not leave this up to the user to choose."
 
@@ -108,7 +111,7 @@ This transfers only where unsent work still gets done some slower way, as an unc
 
 ## Writing Yours Down
 
-`std::queue` over `std::deque` behind a `std::mutex`, the queue I measured in [the first queue post]({% post_url 2026-07-07-a-deep-dive-into-producer-consumer-queues %}), already has an overload policy: grow. So does every unbounded queue. If you don't write a policy down, the container picks one for you. Here is the menu:
+`std::queue` over `std::deque` behind a `std::mutex`, the queue I measured in [the first queue post]({% post_url 2026-07-07-a-deep-dive-into-producer-consumer-queues %}), already has an overload policy: grow. If you don't write a policy down, the container picks one for you. Here is the menu:
 
 | Policy | The producer sees | Who pays | In this post |
 |---|---|---|---|
@@ -129,7 +132,7 @@ Reserve room for control messages, as HotSpot's [buffer code](https://github.com
 
 Wake a batching consumer on a predicate, `condition_variable::wait(lock, pred)` over a flag or a non-empty check, and not on a semaphore whose count tracks items it will drain in bulk. And test the full path on purpose, with a buffer small enough to fill. Every bug in this post was on that path, and HotSpot's own stress test found the stall hang with 192 bytes.
 
-Library queues leave the policy, the loss record and the wake-up to you, and supply mechanisms instead: moodycamel::ConcurrentQueue's `enqueue` allocates where `try_enqueue` fails, boost.lockfree has the same split between `push` and `bounded_push`, and folly's `MPMCQueue` adds a `blockingWrite`.
+Library queues leave the policy, the loss record and the wake-up to you, and supply mechanisms instead: moodycamel::ConcurrentQueue's `enqueue` allocates where `try_enqueue` fails, boost.lockfree has the same split between `push` and `bounded_push`, and folly's `MPMCQueue` adds a `blockingWrite`. spdlog's async logger does name its policy: [v1.17.0](https://github.com/gabime/spdlog/blob/v1.17.0/include/spdlog/async_logger.h#L21-L27) offers `block` (the default), `overrun_oldest` and `discard_new`. It counts losses in [`overrun_counter()` and `discard_counter()`](https://github.com/gabime/spdlog/blob/v1.17.0/include/spdlog/details/thread_pool.h#L92-L95), so the log shows no gap.
 
 ## Why the Logger Kept Its Mutex
 
@@ -185,7 +188,7 @@ public:
             std::uint64_t lost = std::exchange(dropped_, 0);
             lk.unlock();                              // write outside the lock
             room_.notify_all();
-            std::string gap = "[" + std::to_string(lost) + " messages dropped]";
+            std::string gap = lost ? "[" + std::to_string(lost) + " messages dropped]" : "";
             if (lost && policy_ == OverloadPolicy::DropOldest) sink_(gap);  // lost before batch
             for (auto& m : batch_) { if (m) sink_(*m); else done = true; }  // nullopt: shutdown
             if (lost && policy_ == OverloadPolicy::DropNewest) sink_(gap);  // lost after batch
@@ -194,14 +197,12 @@ public:
 };
 ```
 
-`push` returns `false` only when its own message was dropped, so under `DropOldest` it returns `true` while someone else's message pays. `Block` is the stall mode, with the catch HotSpot accepted: one slow write holds up every producer. The sketch also allocates a `std::string` per message, the cost HotSpot's 2022 buffers removed. It has been stress-tested under ThreadSanitizer, AddressSanitizer and UBSan: eight producers, 100,000 messages each, a deliberately slow consumer, every policy, and a two-slot run, each checking that delivered messages plus the in-stream drop counts equal the messages produced.
-
-<!-- AUTHOR: The stress harness lives at tools/hotspot_series/sketches/pick-two-what-your-queue-does-when-the-consumer-falls-behind.cpp in the blog repo. Decide whether to link it, and whether you want "I ran it" wording once you have run it yourself. -->
+`push` returns `false` only when its own message was dropped, so under `DropOldest` it returns `true` while someone else's message pays. `Block` is the stall mode, with the catch HotSpot accepted: one slow write holds up every producer. The sketch also allocates a `std::string` per message, the cost HotSpot's 2022 buffers removed. It has been stress-tested with GCC 14.3.0 under ThreadSanitizer, AddressSanitizer and UBSan: eight producers, 100,000 messages each, a deliberately slow consumer, every policy, and a two-slot run, each checking that delivered messages plus the in-stream drop counts equal the messages produced. The [stress harness](https://github.com/Shubhankar-Gambhir/Shubhankar-Gambhir.github.io/blob/main/tools/hotspot_series/sketches/pick-two-what-your-queue-does-when-the-consumer-falls-behind.cpp) is in the blog's repo.
 
 ---
 
 Sources: HotSpot code is linked at `jdk-27-ga` (815ff4dc) where it is current, and at the commit where it lived otherwise: a060be188df for JFR's first discard path, 2114527fec4 for the 2011 compile policy. Versions are the first build tag containing each commit.
 
-No benchmarks in this post: every number is quoted from the linked sources. The C++ sketch above is complete as shown; there is no companion repo.
+No benchmarks here: every number is quoted from the linked sources. The sketch omits its `#include`s; the linked harness compiles as is.
 
 **Next:** Two Commits, One Day: The Queue HotSpot Added and the Queue It Deleted (coming soon)
