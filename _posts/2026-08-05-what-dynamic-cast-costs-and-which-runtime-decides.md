@@ -1,6 +1,6 @@
 ---
 title: "What dynamic_cast Costs, and Which Runtime Decides"
-date: 2026-08-27
+date: 2026-08-05
 last_modified_at: 2026-10-01
 categories: [C++, Performance]
 tags: [rtti, dynamic-cast, vtable, hotspot, gcc, clang, libstdc++, libc++, benchmarks]
@@ -17,7 +17,7 @@ image:
 
 A `dynamic_cast` that misses costs 29 times the single bit test that HotSpot-style code uses in its place, and which C++ runtime answers the call can halve the miss itself.
 
-[The Null Slot: What -fno-rtti Actually Removes]({% post_url 2026-08-26-the-null-slot-what-fno-rtti-actually-removes %}) opened this three-part series on `-fno-rtti` by counting what the flag saves in a binary. This second post is about the type checks themselves.
+[The Null Slot: What -fno-rtti Actually Removes]({% post_url 2026-07-22-the-null-slot-what-fno-rtti-actually-removes %}) opened this three-part series on `-fno-rtti` by counting what the flag saves in a binary. This second post is about the type checks themselves.
 
 ## Impact: Speed
 
@@ -109,7 +109,7 @@ The `dynamic_cast` rows are far enough out to mean something, and what they mean
 
 ## What Changed Across Compilers and Versions
 
-The front end has barely moved. The one construct that changed between versions in [the acceptance test]({% post_url 2026-08-26-the-null-slot-what-fno-rtti-actually-removes %}) (eleven one-line constructs, compiled under `-fno-rtti` with all eight compilers) is `std::function::target<T>()`: GCC 9.5.0 and 10.4.0 reject it under `-fno-rtti`, and from GCC 11 libstdc++ keeps it working by comparing the address of the stored manager function instead of a `type_info`. The vtable layout, which the same post probed on every compiler, never changed at all.
+The front end has barely moved. The one construct that changed between versions in [the acceptance test]({% post_url 2026-07-22-the-null-slot-what-fno-rtti-actually-removes %}) (eleven one-line constructs, compiled under `-fno-rtti` with all eight compilers) is `std::function::target<T>()`: GCC 9.5.0 and 10.4.0 reject it under `-fno-rtti`, and from GCC 11 libstdc++ keeps it working by comparing the address of the stored manager function instead of a `type_info`. The vtable layout, which the same post probed on every compiler, never changed at all.
 
 The runtime is another story. `dynamic_cast` compiles to a call into `__dynamic_cast`, which lives in the C++ runtime library, so "which compiler" is really two questions: which compiler generated the call, and which runtime answered it. [An earlier post]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %}) found that libstdc++'s version mattered more to `std::variant` than the dispatch pattern did; for `dynamic_cast`, the library that matters is the compiled runtime rather than the headers. I ran the cast benchmark with each compiler linked against its own runtime, `-static-libstdc++`, median of five runs, pinned to one core:
 
@@ -157,7 +157,7 @@ to_leaf(Base*):
         retq                                    ; return rax
 ```
 
-GCC 16.1 still emits the `__dynamic_cast` call. Marking the benchmark's most-derived class `final` takes Clang's exact hit from 5.26 ns to 0.96 ns, two cycles, which puts it in the same bracket as `is_a()`. The optimization rests on the same assumption as libc++: one vtable per class. `-fno-assume-unique-vtables` switches it off, and the commit message restricts it to the Itanium ABI because its author did not know "what guarantees are made about vfptr uniqueness" on Microsoft's. Hold that thought for [What Comes After -fno-rtti, and How OpenJDK Lives Without RTTI]({% post_url 2026-08-28-what-comes-after-fno-rtti-and-how-openjdk-lives-without-rtti %}).
+GCC 16.1 still emits the `__dynamic_cast` call. Marking the benchmark's most-derived class `final` takes Clang's exact hit from 5.26 ns to 0.96 ns, two cycles, which puts it in the same bracket as `is_a()`. The optimization rests on the same assumption as libc++: one vtable per class. `-fno-assume-unique-vtables` switches it off, and the commit message restricts it to the Itanium ABI because its author did not know "what guarantees are made about vfptr uniqueness" on Microsoft's. Hold that thought for [What Comes After -fno-rtti, and How OpenJDK Lives Without RTTI]({% post_url 2026-08-19-what-comes-after-fno-rtti-and-how-openjdk-lives-without-rtti %}).
 
 The compilers also disagree about where the flag's boundary sits. MSVC's `/GR-` accepts `typeid` and `dynamic_cast` on polymorphic types with warning [C4541](https://learn.microsoft.com/en-us/cpp/error-messages/compiler-warnings/compiler-warning-level-1-c4541), "unpredictable behavior may result". Clang has a `-fno-rtti-data` mode, which is what `clang-cl /GR-` maps to, with the same philosophy: drop the data, warn, and let the code compile. It only changes anything under the Microsoft ABI, where it removes the RTTI records from vftables; on Linux it just warns. Code that builds with `/GR-` will not necessarily build with `-fno-rtti`.
 
@@ -169,6 +169,6 @@ Hardware: Intel Xeon Gold 6130 @ 2.10 GHz (2x16 cores, Skylake), single-threaded
 Compilers: GCC 9.5.0, 10.4.0, 11.4.0, 12.4.0, 13.4.0, 14.3.0, 15.2.0 and Clang 22.1.4 with libc++ 22.1.4, all from conda-forge via micromamba. The Impact section's cast table is GCC 11.4.0 code dynamically linked against the environment's libstdc++ 15.2.0 runtime; the compiler matrix links each compiler's own runtime with `-static-libstdc++` (GCC 15.2.0 fully static, since its runtime needs a newer glibc than the host has). Flags: `-std=c++17 -O2 -march=skylake-avx512 -fcf-protection -falign-functions=64 -falign-loops=64 -DNDEBUG`. The alignment flags were measured against a plain `-O2 -DNDEBUG` build and changed nothing here; they are kept for consistency with the rest of the series.
 Methodology: the cast microbenchmark is 30M iterations after a 2M warmup, 5 runs, median reported, with an inline asm barrier to stop the optimiser hoisting a loop-invariant cast. The compiler matrix is `make compilers`.
 
-**Previously:** [The Null Slot: What -fno-rtti Actually Removes]({% post_url 2026-08-26-the-null-slot-what-fno-rtti-actually-removes %})
+**Previously:** [The Null Slot: What -fno-rtti Actually Removes]({% post_url 2026-07-22-the-null-slot-what-fno-rtti-actually-removes %})
 
-**Next:** [What Comes After -fno-rtti, and How OpenJDK Lives Without RTTI]({% post_url 2026-08-28-what-comes-after-fno-rtti-and-how-openjdk-lives-without-rtti %})
+**Next:** [What Comes After -fno-rtti, and How OpenJDK Lives Without RTTI]({% post_url 2026-08-19-what-comes-after-fno-rtti-and-how-openjdk-lives-without-rtti %})

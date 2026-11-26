@@ -15,7 +15,7 @@ image:
   hero: false
 ---
 
-My last queue post ended with an unbounded queue growing until the kernel killed it ([The Backlog]({% post_url 2026-10-28-the-backlog-what-falling-behind-costs-an-unbounded-queue %})). The obvious fix is to bound it, which just moves the question: once it's full, what gives?
+My last queue post ended with an unbounded queue growing until the kernel killed it ([The Backlog]({% post_url 2026-11-03-the-backlog-what-falling-behind-costs-an-unbounded-queue %})). The obvious fix is to bound it, which just moves the question: once it's full, what gives?
 
 Between 2020 and 2025, the JVM's asynchronous logger gave four different answers. The first, proposed for mainline, was to make room, and it lasted ten days. The second threw away the oldest message, the third threw away the newest, and the fourth, which shipped in JDK 25, lets whoever starts the JVM choose between dropping and making the logging thread wait. Each switch was argued in public by the people who wrote and reviewed the code.
 
@@ -59,7 +59,7 @@ Liu said no. His first objection was that RCU suits many readers and rare writer
 
 > TBH, I would rather grumpy customers yell at me about async-logging performance first before jump into lock-free algorithms.
 
-With a lock, "it is easy to be reviewed as well." Review is where lock-free code hurts: the first lock-free stack on this blog passed its tests once and then [failed forty reruns in a row]({% post_url 2026-08-19-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %}). Ehn let it go.
+With a lock, "it is easy to be reviewed as well." Review is where lock-free code hurts: the first lock-free stack on this blog passed its tests once and then [failed forty reruns in a row]({% post_url 2026-07-15-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %}). Ehn let it go.
 
 ## Which Messages to Lose
 

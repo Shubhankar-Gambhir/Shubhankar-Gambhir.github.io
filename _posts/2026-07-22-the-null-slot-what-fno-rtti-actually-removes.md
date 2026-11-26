@@ -1,6 +1,6 @@
 ---
 title: "The Null Slot: What -fno-rtti Actually Removes"
-date: 2026-08-26
+date: 2026-07-22
 last_modified_at: 2026-10-01
 categories: [C++, Performance]
 tags: [rtti, dynamic-cast, typeid, abi, vtable, openjdk, hotspot, gcc, clang, libstdc++, libc++, elf, relocations, benchmarks]
@@ -19,9 +19,9 @@ Everyone describes `-fno-rtti` the same way: it disables `dynamic_cast` and `typ
 
 The part that surprised me is that the vtable does not get any smaller. Compile a polymorphic class with the flag and the typeinfo pointer is still there, still occupying its eight bytes, just holding null. That one detail explains the flag's nastiest failure mode, and a good deal of what follows.
 
-I went looking because OpenJDK builds `libjvm.so` with it and I wanted to know what that buys. What I found fills three posts, and [the last of them]({% post_url 2026-08-28-what-comes-after-fno-rtti-and-how-openjdk-lives-without-rtti %}) gets back to the JVM. Everything reproduces from [the companion repo](https://github.com/Shubhankar-Gambhir/fno-rtti-bench) with `make`.
+I went looking because OpenJDK builds `libjvm.so` with it and I wanted to know what that buys. What I found fills three posts, and [the last of them]({% post_url 2026-08-19-what-comes-after-fno-rtti-and-how-openjdk-lives-without-rtti %}) gets back to the JVM. Everything reproduces from [the companion repo](https://github.com/Shubhankar-Gambhir/fno-rtti-bench) with `make`.
 
-*Revised 1 October 2026. This version is reorganised and expanded, adds [measurements across GCC 9 to 15, Clang 22 and libc++]({% post_url 2026-08-27-what-dynamic-cast-costs-and-which-runtime-decides %}), and corrects several claims the first version got wrong, chiefly about where its build-time savings came from and which runtime produced its `dynamic_cast` timings.*
+*Revised 1 October 2026. This version is reorganised and expanded, adds [measurements across GCC 9 to 15, Clang 22 and libc++]({% post_url 2026-08-05-what-dynamic-cast-costs-and-which-runtime-decides %}), and corrects several claims the first version got wrong, chiefly about where its build-time savings came from and which runtime produced its `dynamic_cast` timings.*
 
 ## What the Flag Is
 
@@ -107,7 +107,7 @@ The Itanium ABI matches catch handlers by comparing `type_info` objects, so the 
 
 ## Why Codebases Turn It Off, and Who Should
 
-Almost nobody disables RTTI by itself. Every project surveyed in [What Comes After -fno-rtti, and How OpenJDK Lives Without RTTI]({% post_url 2026-08-28-what-comes-after-fno-rtti-and-how-openjdk-lives-without-rtti %}) (Chromium and V8, Firefox, LLVM, Android's platform build, WebKit, Fuchsia and OpenJDK) pairs `-fno-rtti` with `-fno-exceptions`. The reasons fall into three groups, and they are not equally convincing.
+Almost nobody disables RTTI by itself. Every project surveyed in [What Comes After -fno-rtti, and How OpenJDK Lives Without RTTI]({% post_url 2026-08-19-what-comes-after-fno-rtti-and-how-openjdk-lives-without-rtti %}) (Chromium and V8, Firefox, LLVM, Android's platform build, WebKit, Fuchsia and OpenJDK) pairs `-fno-rtti` with `-fno-exceptions`. The reasons fall into three groups, and they are not equally convincing.
 
 The first is size. Every polymorphic class drags along a name string, a `type_info` object and four relocations, and the next section measures what that adds up to. It is real, and on a real binary it is small.
 
@@ -182,7 +182,7 @@ Relocations cost more than the objects they point at, and they are the part peop
 
 The percentages do not transfer. The synthetic library is almost pure vtable, since every method body is `return N;`, while a real `libjvm.so` is overwhelmingly code. The same per-class rates land at 3157 x 184 B, roughly 580 KB on a 21.7 MiB binary. That is two and a half percent, not twenty-one.
 
-Speed is left for [What dynamic_cast Costs, and Which Runtime Decides]({% post_url 2026-08-27-what-dynamic-cast-costs-and-which-runtime-decides %}): the type tag projects use in place of `dynamic_cast`, and `dynamic_cast` itself across seven GCC releases, Clang 22 and libc++.
+Speed is left for [What dynamic_cast Costs, and Which Runtime Decides]({% post_url 2026-08-05-what-dynamic-cast-costs-and-which-runtime-decides %}): the type tag projects use in place of `dynamic_cast`, and `dynamic_cast` itself across seven GCC releases, Clang 22 and libc++.
 
 ---
 
@@ -193,4 +193,4 @@ Compilers: GCC 9.5.0, 10.4.0, 11.4.0, 12.4.0, 13.4.0, 14.3.0, 15.2.0 and Clang 2
 Methodology: size and relocation figures are static ELF accounting and exactly reproducible. Compile wall time is best of 5 at `-j64`; the compile CPU rows are user CPU time for compiling each group of files serially, median of 5. `dlopen` figures are the median of 400 loads, with private-dirty pages read from `/proc/self/smaps` after the final load. The construct matrix is `make constructs`.
 JVM figures come from a stock OpenJDK 17.0.0.1 build (`nm -a`, `readelf -rW`); `make jvm` runs the same census against any JDK you point it at.
 
-**Next:** [What dynamic_cast Costs, and Which Runtime Decides]({% post_url 2026-08-27-what-dynamic-cast-costs-and-which-runtime-decides %})
+**Next:** [What dynamic_cast Costs, and Which Runtime Decides]({% post_url 2026-08-05-what-dynamic-cast-costs-and-which-runtime-decides %})

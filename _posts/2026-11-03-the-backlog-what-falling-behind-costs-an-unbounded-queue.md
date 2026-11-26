@@ -1,6 +1,6 @@
 ---
 title: "The Backlog: What Falling Behind Costs an Unbounded Queue"
-date: 2026-10-28
+date: 2026-11-03
 categories: [C++, Performance]
 tags: [concurrency, queue, payload, memcpy, glibc, malloc, page-faults, ring-buffer, benchmarks, arm]
 description: >-
@@ -76,11 +76,11 @@ The same thing happens on the Xeon in fan-in, where one consumer faces fifteen p
 
 ## The Ring Does Not Care
 
-[Part 4]({% post_url 2026-08-21-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %}#where-that-leaves-the-pool) said a big payload would penalize the ring. At 4 KB it is the fastest queue in every Xeon mix in every mode, 486 to 1,437 ns, and its cost at four consumers rises from 344 ns at 8 bytes to 488 at 4 KB while `MutexQueue` goes up ninefold. On ARM it wins every 4 KB mix but one.
+[Part 4]({% post_url 2026-08-12-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %}#where-that-leaves-the-pool) said a big payload would penalize the ring. At 4 KB it is the fastest queue in every Xeon mix in every mode, 486 to 1,437 ns, and its cost at four consumers rises from 344 ns at 8 bytes to 488 at 4 KB while `MutexQueue` goes up ninefold. On ARM it wins every 4 KB mix but one.
 
 The ring copies exactly as much as everyone else. What it never does is ask for memory: its cells are allocated once, up front, and when they are all full the producers wait instead of growing a backlog. The allocator has nothing to trim or fault back in.
 
-The exception is the oversubscribed one. At 16P x 16C on 16 ARM cores the ring takes 1,423 ns against the deferred variant's 889: a preempted thread holding a claimed cell stalls the sequence handoff for everyone behind it, where a mutex would let them sleep. The same dip is in [Part 4's ARM table]({% post_url 2026-08-21-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %}#the-ring) with `int64_t`: 763 ns at 16P x 16C, against 486 for the deque.
+The exception is the oversubscribed one. At 16P x 16C on 16 ARM cores the ring takes 1,423 ns against the deferred variant's 889: a preempted thread holding a claimed cell stalls the sequence handoff for everyone behind it, where a mutex would let them sleep. The same dip is in [Part 4's ARM table]({% post_url 2026-08-12-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %}#the-ring) with `int64_t`: 763 ns at 16P x 16C, against 486 for the deque.
 
 ## Two Layers
 

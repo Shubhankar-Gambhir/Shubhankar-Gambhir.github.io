@@ -1,11 +1,11 @@
 queues:
   - 2026-07-07-a-deep-dive-into-producer-consumer-queues
-  - 2026-08-19-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring
-  - 2026-08-20-taking-the-lock-out-of-the-pool-and-building-a-ring-instead
-  - 2026-08-21-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue
+  - 2026-07-15-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring
+  - 2026-07-29-taking-the-lock-out-of-the-pool-and-building-a-ring-instead
+  - 2026-08-12-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue
   - 2026-10-27-the-copy-and-the-backlog-what-a-bigger-payload-does-to-a-concurrent-queue
-  - 2026-10-28-the-backlog-what-falling-behind-costs-an-unbounded-queue
+  - 2026-11-03-the-backlog-what-falling-behind-costs-an-unbounded-queue
 fno-rtti:
-  - 2026-08-26-the-null-slot-what-fno-rtti-actually-removes
-  - 2026-08-27-what-dynamic-cast-costs-and-which-runtime-decides
-  - 2026-08-28-what-comes-after-fno-rtti-and-how-openjdk-lives-without-rtti
+  - 2026-07-22-the-null-slot-what-fno-rtti-actually-removes
+  - 2026-08-05-what-dynamic-cast-costs-and-which-runtime-decides
+  - 2026-08-19-what-comes-after-fno-rtti-and-how-openjdk-lives-without-rtti

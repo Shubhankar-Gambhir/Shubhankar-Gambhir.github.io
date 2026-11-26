@@ -1,6 +1,6 @@
 ---
 title: "Taking the Lock Out of the Pool, and Building a Ring Instead"
-date: 2026-08-20
+date: 2026-07-29
 categories: [C++, Performance]
 tags: [concurrency, queue, lock-free, treiber-stack, ring-buffer, cas, atomics, benchmarks, arm]
 description: >-
@@ -16,7 +16,7 @@ image:
 
 Take the mutex out of a node pool and the same code loses seven of nine thread mixes to the mutex version on a two-socket Xeon, then beats it in all nine on a 16-core ARM machine. The pool belongs to the two-lock queue from [A Deep Dive into Producer-Consumer Queues in C++]({% post_url 2026-07-07-a-deep-dive-into-producer-consumer-queues %}), where it recycles nodes instead of calling `new` for every item. Behind one mutex it lost to plain `new`/`delete`; split across sixteen mutexes, it still lost.
 
-Telling whether the lock or the pool was to blame took a free list with no lock at all: a Treiber stack, made correct after a [detour through the ABA problem]({% post_url 2026-08-19-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %}) by packing a version counter into the top sixteen bits of each pointer. Nothing else about the queue changed.
+Telling whether the lock or the pool was to blame took a free list with no lock at all: a Treiber stack, made correct after a [detour through the ABA problem]({% post_url 2026-07-15-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %}) by packing a version counter into the top sixteen bits of each pointer. Nothing else about the queue changed.
 
 ## Removing the Mutex Made It Slower, On One Machine
 
@@ -100,7 +100,7 @@ The shared counter only hands out tickets; correctness lives in the cells. A con
 
 The signed `diff` is doing quiet work. Both `pos` and `seq` are unsigned counters that will eventually wrap around zero, but their difference stays small and correct across the wrap, so the four `seq` cases keep working forever.
 
-How fast that is in practice, and where it still loses, is in [The Ring That Doesn't Allocate: Benchmarking a Bounded MPMC Queue]({% post_url 2026-08-21-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %}).
+How fast that is in practice, and where it still loses, is in [The Ring That Doesn't Allocate: Benchmarking a Bounded MPMC Queue]({% post_url 2026-08-12-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %}).
 
 ---
 
@@ -110,6 +110,6 @@ Hardware: Intel Xeon Gold 6130 @ 2.10 GHz (2x16 cores, Skylake, two NUMA nodes);
 Compilers: GCC 13.4.0 (x86), GCC 13.3.0 (ARM). Flags: `-std=c++17 -O2 -Wall -Wextra -pthread`, identical on both architectures (no `-march`) for a clean cross-architecture comparison.
 Methodology: 1M items per producer, 5 runs after warmup, median reported, each thread pinned to its own core by consecutive core id (which interleaves the Xeon's two NUMA nodes, so multi-thread runs span both sockets), synchronized start, post-run count and checksum invariant.
 
-**Previously:** [Lock-Free Is Not Free: ABA and Tagged Pointers]({% post_url 2026-08-19-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %})
+**Previously:** [Lock-Free Is Not Free: ABA and Tagged Pointers]({% post_url 2026-07-15-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %})
 
-**Next:** [The Ring That Doesn't Allocate: Benchmarking a Bounded MPMC Queue]({% post_url 2026-08-21-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %})
+**Next:** [The Ring That Doesn't Allocate: Benchmarking a Bounded MPMC Queue]({% post_url 2026-08-12-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %})
