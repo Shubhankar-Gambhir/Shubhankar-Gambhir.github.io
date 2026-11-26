@@ -184,7 +184,7 @@ quotes:
 
   # The author's own measured posts, linked inline
   - id: own-oom
-    text: "one of the queues in this post reached 64.6 GB of resident memory in 38 seconds before the kernel's OOM killer took it"
+    text: "one of the queues in this experiment reached 64.6 GB of resident memory in 38 seconds before the kernel's OOM killer took it"
     url: https://shubhankar-gambhir.github.io/posts/the-copy-and-the-backlog-what-a-bigger-payload-does-to-a-concurrent-queue/
   - id: own-forty
     text: "Every one of those forty runs failed"
