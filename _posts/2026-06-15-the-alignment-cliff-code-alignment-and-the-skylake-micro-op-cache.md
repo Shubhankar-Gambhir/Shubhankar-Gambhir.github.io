@@ -20,7 +20,7 @@ Part 6 also offered a cause: misaligned code falling out of the micro-op cache o
 
 ## The Experiment
 
-The setup is a two-translation-unit design. The function under measurement, `work()`, lives in its own `.c` file:
+The function under measurement, `work()`, lives in its own `.c` file:
 
 ```c
 long work(long x) {
@@ -45,7 +45,7 @@ The volatile pointer is load-bearing. A direct call gives the decoder a statical
 
 ### Placing the Function at a Controlled Offset
 
-Compilers have their own alignment policies. GCC 15.2.0 with `-march=skylake-avx512` defaults to 16-byte function alignment; Clang 22.1.4 similar. To put `work()` at an arbitrary byte offset within a 64-byte cache line, the script compiles it to assembly with self-alignment disabled (`-falign-functions=1`), then injects a shim:
+GCC 15.2.0 with `-march=skylake-avx512` defaults to 16-byte function alignment; Clang 22.1.4 similar. To put `work()` at an arbitrary byte offset within a 64-byte cache line, the script compiles it to assembly with self-alignment disabled (`-falign-functions=1`), then injects a shim:
 
 ```bash
 $CC -O2 -march=skylake-avx512 -fcf-protection -falign-functions=1 \
@@ -104,8 +104,6 @@ A second sweep at 4-byte intervals narrows the threshold:
 | 56     | 2.8705  |
 | 60     | 2.8702  |
 
-Offset 24 is still on the fast side. Offset 28 is already on the slow side. The cliff is between them.
-
 ```
 # bars scaled to the ns range: | = 2.39 ns (min), full bar = 2.87 ns (max)
 gcc15_fine
@@ -127,7 +125,7 @@ gcc15_fine
   off 60   2.87 ns | ############################################
 ```
 
-There's no gradual degradation as the offset increases. The function runs at one of two speeds, which already rules out anything that scales with the offset; something crosses a boundary between byte 24 and byte 28.
+The function runs at one of two speeds, which already rules out anything that scales with the offset; something crosses a boundary between byte 24 and byte 28.
 
 ## The PMU Investigation
 
@@ -178,7 +176,7 @@ work:
 
 Verify on [Compiler Explorer](https://godbolt.org) by pasting `benchmarks/sweep_work.c` with GCC 15 at `-O2 -march=skylake-avx512 -fcf-protection`.
 
-Clang 22.1.4 emits a near-identical 38-byte body (using `%rcx` as the intermediate register rather than `%rdi`). The function body is 38 bytes in both compilers.
+Clang 22.1.4 emits a near-identical 38-byte body (using `%rcx` as the intermediate register rather than `%rdi`).
 
 Skylake's micro-op cache (DSB) organizes decoded uops into 32-byte aligned windows, each holding up to 6 uops from a contiguous 32-byte instruction region (Intel Optimization Reference Manual, §3.4.2.5). On Skylake, the processor typically delivers uops from a single DSB window per cycle. When a function call is the tight inner loop, the cycle budget per call is dominated by how many DSB window transitions the processor must make.
 
@@ -197,13 +195,13 @@ For `work()` at entry offset 28:
 
 Three DSB windows. Two transitions per call, one more than at offset 0.
 
-The transition from window 1 to window 2 is also a cache line boundary transition: window 1 ends at A+63, window 2 starts at A+64. The processor must issue an L1i fetch request for the second cache line to complete the function. Even with both lines warm in L1i, the pipeline appears unable to overlap the two fetch requests. The extra cache line fetch serializes with the first, and that extra cycle is what `uops_not_delivered.core` records.
+The transition from window 1 to window 2 is also a cache line boundary transition: window 1 ends at A+63, window 2 starts at A+64. The processor must issue an L1i fetch request for the second cache line to complete the function. Even with both lines warm in L1i, the pipeline appears unable to overlap the two fetch requests, and that extra cycle is what `uops_not_delivered.core` records.
 
-The threshold at offset 27 falls directly out of the arithmetic: a 38-byte function starting at offset N straddles a 64-byte cache line boundary when N + 37 >= 64, i.e., when N >= 27. Our fine sweep finds the cliff between offsets 24 and 28, consistent with 27 being the exact boundary (which falls between our two sample points).
+The threshold at offset 27 falls directly out of the arithmetic: a 38-byte function starting at offset N straddles a 64-byte cache line boundary when N + 37 >= 64, i.e., when N >= 27. Our fine sweep finds the cliff between offsets 24 and 28, consistent with 27 being the exact boundary.
 
-The same geometry explains why the cliff is also a DSB window boundary: at offset 26, bytes 26-31 fill window 0 and bytes 32-63 fill window 1, with the function ending at byte 63 (the last byte of both window 1 and the cache line). At offset 27, the `retq` lands at byte 64, the start of window 2. Cache line boundary and DSB window boundary coincide because 64 and 32 share the factor 32, and 64 - 38 = 26 is the exact capacity of two DSB windows for this function.
+The cliff is also a DSB window boundary: at offset 26, bytes 26-31 fill window 0 and bytes 32-63 fill window 1, with the function ending at byte 63 (the last byte of both window 1 and the cache line). At offset 27, the `retq` lands at byte 64, the start of window 2. Cache line boundary and DSB window boundary coincide because 64 and 32 share the factor 32, and 64 - 38 = 26 is the exact capacity of two DSB windows for this function.
 
-These parameters are Skylake-specific. AMD Zen 2+ organizes its uop cache in 64-byte aligned chunks with a different capacity model, so the cliff point will differ. The general mechanism (DSB window boundary crossing raising `uops_not_delivered`) is shared across modern x86 designs, but you'd need to re-run the sweep on each microarchitecture to find its specific threshold.
+These parameters are Skylake-specific. AMD Zen 2+ organizes its uop cache in 64-byte aligned chunks with a different capacity model, so the cliff point will differ. The general mechanism is shared across modern x86 designs, but each microarchitecture needs its own sweep to find its threshold.
 
 ## Cross-Compiler Validation
 
@@ -220,29 +218,7 @@ If this is a hardware effect, not a codegen artifact, GCC and Clang should show 
 | 48     | 2.8705     | 2.8701       |
 | 56     | 2.8700     | 2.8706       |
 
-```
-gcc15
-  off  0   2.39 ns |
-  off  8   2.39 ns |
-  off 16   2.39 ns |
-  off 24   2.39 ns |
-  off 32   2.87 ns | ############################################
-  off 40   2.87 ns | ############################################
-  off 48   2.87 ns | ############################################
-  off 56   2.87 ns | ############################################
-
-clang
-  off  0   2.39 ns |
-  off  8   2.39 ns |
-  off 16   2.39 ns |
-  off 24   2.39 ns |
-  off 32   2.87 ns | ############################################
-  off 40   2.87 ns | ############################################
-  off 48   2.87 ns | ############################################
-  off 56   2.87 ns | ############################################
-```
-
-2.3919 ns vs 2.3924 ns. 2.8703 ns vs 2.8703 ns. Both compilers emit a 38-byte body, and both hit a 0.478 ns cliff at the same offsets.
+Both compilers hit a 0.478 ns cliff at the same offsets.
 
 ## Controlling the Effect
 
@@ -277,7 +253,7 @@ There's no command-line equivalent to `-falign-functions=N` for per-function cod
 - Linker `/ALIGN:n` sets section alignment, not per-function alignment.
 - `/FUNCTIONPADMIN[:n]` inserts padding before functions for hot-patching, not for cache-line alignment.
 
-Readers on MSVC who observe alignment-induced regressions should verify on their toolchain via Compiler Explorer. The `__attribute__((aligned(64)))` decoration is accepted by MSVC as a non-standard extension in some versions, but behavior is not guaranteed.
+The `__attribute__((aligned(64)))` decoration is accepted by MSVC as a non-standard extension in some versions, but behavior is not guaranteed.
 
 ### Benchmark Methodology Checklist
 
@@ -292,9 +268,7 @@ A benchmark that omits alignment flags is measuring function placement as much a
 
 ## Where the Penalty Applies
 
-The 0.478 ns penalty applies when the tight inner loop calls a small callee through an indirect pointer. Virtual dispatch, function pointers, and `std::function` are all in scope. A callee that is large relative to the cache line size is less affected because the penalty is amortized over more work per call.
-
-In dispatch benchmarks, where the function body is intentionally minimal to isolate the dispatch cost, the penalty is proportionally large. That's why the [alignment matrix in Part 6]({% post_url 2026-06-10-the-048-ns-ghost-how-code-alignment-broke-our-dispatch-benchmarks %}) showed swings of 0.47-0.96 ns across GCC versions for small dispatch shims, while larger functions showed smaller swings.
+The 0.478 ns penalty applies when the tight inner loop calls a small callee through an indirect pointer. Virtual dispatch, function pointers, and `std::function` are all in scope. A callee that is large relative to the cache line size is less affected because the penalty is amortized over more work per call. That's why the [alignment matrix in Part 6]({% post_url 2026-06-10-the-048-ns-ghost-how-code-alignment-broke-our-dispatch-benchmarks %}) showed swings of 0.47-0.96 ns across GCC versions for small dispatch shims, while larger functions showed smaller swings.
 
 For production hot paths, measuring and fixing alignment should follow profiling, not precede it. If `perf stat` shows `idq_uops_not_delivered.core` is high and `idq.dsb_uops` is flat, alignment is a candidate; check function addresses with `nm` and add `__attribute__((aligned(64)))` to the specific hot callee. Applying `-falign-functions=64` globally wastes up to 63 bytes per function in NOP padding, which increases I-cache footprint and can hurt more than it helps in code-size-sensitive paths.
 
