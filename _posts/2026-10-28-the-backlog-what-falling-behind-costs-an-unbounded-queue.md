@@ -52,7 +52,7 @@ move4096(std::array<char, 4096>&, std::array<char, 4096>&):
 
 [See all five sizes on Compiler Explorer](https://godbolt.org/z/Pc6j9bbTq) (GCC 13.4, `-std=c++17 -O2`). The benchmark binary contains the same inlined `rep movsq` in its producer and consumer loops. `-O3` produces identical code for these functions.
 
-The switch lands at 512 bytes, the same size at which libstdc++'s `std::deque` starts giving every element its own chunk (`__deque_buf_size` in [`stl_deque.h`](https://gcc.gnu.org/git/?p=gcc.git;a=blob;f=libstdc%2B%2B-v3/include/bits/stl_deque.h;hb=releases/gcc-13.4.0#l91), 512-byte threshold), so `MutexQueue` changes two things at once there. I expected a cliff. The curves keep their slope straight through it: `MutexQueue` goes 1,053, 2,040, 2,896, 3,181 ns from 64 to 1024 bytes.
+The switch lands at 512 bytes, the same size at which libstdc++'s `std::deque` starts giving every element its own chunk (`__deque_buf_size` in [`stl_deque.h`](https://gcc.gnu.org/git/?p=gcc.git;a=blob;f=libstdc%2B%2B-v3/include/bits/stl_deque.h;hb=releases/gcc-13.4.0#l91), 512-byte threshold), so `MutexQueue` changes two things at once there. I expected a cliff and didn't get one: at 4P x 4C on the Xeon, `MutexQueue` goes 1,053, 2,040, 2,896, 3,181 ns from 64 to 1024 bytes, with no jump at 512.
 
 ## Falling Behind
 
