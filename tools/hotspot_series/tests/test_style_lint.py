@@ -40,7 +40,7 @@ def env(tmp_path):
             if sketch_text is not None:
                 (tmp_path / "sketch.cpp").write_text(sketch_text)
                 sc["sketch"] = "sketch.cpp"
-            return run(FM + words(2600) + body, sc)
+            return run(FM + words(1800) + body, sc)
 
         def lint_raw(self, text):
             return run(text, {"post": "_drafts/d.md"})
@@ -95,11 +95,11 @@ def test_word_count_bounds(env):
     def count(n, extra=""):
         return env.lint_raw(FM + words(n) + extra)
 
-    assert count(2499).returncode == 1
-    assert "prose_words=2499" in count(2499).stdout
-    assert count(2500).returncode == 0
-    assert count(3000).returncode == 0
-    assert count(3001).returncode == 1
+    assert count(1499).returncode == 1
+    assert "prose_words=1499" in count(1499).stdout
+    assert count(1500).returncode == 0
+    assert count(2200).returncode == 0
+    assert count(2201).returncode == 1
     # exclusions: fences, tables, comments, link targets (link text "[x]" still counts as 1 word)
     extra = (
         "```cpp\n" + words(500) + "```\n"
@@ -107,8 +107,8 @@ def test_word_count_bounds(env):
         + "<!-- AUTHOR: " + words(300).strip() + " -->\n"
         + "[x](https://example.com/" + "a" * 50 + " " + "b" * 50 + ")\n"
     )
-    r = count(2499, extra)
-    assert "prose_words=2500" in r.stdout
+    r = count(1499, extra)
+    assert "prose_words=1500" in r.stdout
 
 
 def test_unlisted_quote_fails(env):

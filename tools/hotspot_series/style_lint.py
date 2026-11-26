@@ -25,7 +25,7 @@ BANNED_PHRASES = [
     "it's important to note",
 ]
 BANNED_HEADINGS = ["key takeaways", "what this means for you", "what i learned", "conclusion"]
-MIN_WORDS, MAX_WORDS = 2500, 3000
+MIN_WORDS, MAX_WORDS = 1500, 2200
 FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})\s*([^\s`]*)")
 
 
