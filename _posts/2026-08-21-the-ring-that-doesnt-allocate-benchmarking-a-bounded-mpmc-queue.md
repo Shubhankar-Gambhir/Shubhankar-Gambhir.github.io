@@ -8,11 +8,15 @@ description: >-
   ARM when uncontended, and stays within 1.4x across the Xeon's contended mixes. It still
   loses fan-in to a deque behind one mutex, and re-running the ARM numbers overturned one
   of Part 1's conclusions.
+image:
+  path: /assets/img/og/the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue.png
+  alt: "The Ring That Doesn't Allocate: Benchmarking a Bounded MPMC Queue"
+  hero: false
 ---
 
 The ring in this post is [Dmitry Vyukov's bounded MPMC queue](https://www.1024cores.net/home/lock-free-algorithms/queues/bounded-mpmc-queue): a fixed array of cells allocated once in the constructor, a shared counter, `_enq`, that hands out tickets, and a sequence number in every cell that tells whoever holds a ticket whether the cell is theirs yet. In steady state it touches no allocator and takes no lock. The [previous post]({% post_url 2026-08-20-taking-the-lock-out-of-the-pool-faster-on-arm-slower-on-the-xeon %}) walks through the code.
 
-Its competition is the rest of the queue lab. From [Part 1]({% post_url 2026-07-07-a-deep-dive-into-producer-consumer-queues %}) come a `std::deque` behind one mutex and a two-lock linked queue that calls `new`/`delete` for every node. The third is that two-lock queue drawing its nodes from a lock-free pool, the last of three attempts at making node allocation cheaper; like the other two, it mostly lost to plain `new`/`delete`. Every variant moves `int64_t` items through one shared harness across nine producer/consumer mixes, on a two-socket Xeon and a 16-core ARM machine, and the ring runs at two capacities, 1024 and 65536 slots.
+Its competition is the rest of the queue lab. From [Part 1]({% post_url 2026-07-07-a-deep-dive-into-producer-consumer-queues %}) come a `std::deque` behind one mutex and a two-lock linked queue that calls `new`/`delete` for every node. The third is that two-lock queue drawing its nodes from a lock-free pool, which, like the mutex pool and the sharded pool before it, mostly lost to plain `new`/`delete`. Every variant moves `int64_t` items through one shared harness across nine producer/consumer mixes, on a two-socket Xeon and a 16-core ARM machine, and the ring runs at two capacities, 1024 and 65536 slots.
 
 ## The Ring
 
@@ -74,7 +78,7 @@ There is one more thread to pull. Every queue here moves an `int64_t`, which is 
 
 ---
 
-Companion repo: [github.com/Shubhankar-Gambhir/concurrent-data-structures-cpp](https://github.com/Shubhankar-Gambhir/concurrent-data-structures-cpp)
+Companion repo: [github.com/Shubhankar-Gambhir/concurrent-data-structures-cpp](https://github.com/Shubhankar-Gambhir/concurrent-data-structures-cpp); the tables reproduce with `make bench-queue`.
 
 Hardware: Intel Xeon Gold 6130 @ 2.10 GHz (2x16 cores, Skylake, two NUMA nodes); ARM Neoverse-N1 (16 cores, single NUMA node). Note that 16P x 16C is 32 threads on both, which fits the Xeon's 32 cores and oversubscribes ARM's 16.
 Compilers: GCC 13.4.0 (x86), GCC 13.3.0 (ARM). Flags: `-std=c++17 -O2 -Wall -Wextra -pthread`, identical on both architectures (no `-march`) for a clean cross-architecture comparison.
