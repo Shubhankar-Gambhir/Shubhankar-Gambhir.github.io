@@ -3,12 +3,12 @@ title: "The Null Slot: What -fno-rtti Actually Removes"
 date: 2026-08-26
 last_modified_at: 2026-10-01
 categories: [C++, Performance]
-tags: [rtti, dynamic-cast, typeid, abi, vtable, gcc, clang, libstdc++, libc++, elf, relocations]
+tags: [rtti, dynamic-cast, typeid, abi, vtable, openjdk, hotspot, gcc, clang, libstdc++, libc++, elf, relocations, benchmarks]
 description: >-
-  What -fno-rtti actually does to a binary: the typeinfo objects and name strings go, the
-  vtable keeps its typeinfo slot and leaves it null, and exceptions still emit typeinfo. Which
-  constructs eight compilers reject under it, why large projects switch it off, and a mixing
-  failure that links without a diagnostic and segfaults at the first typeid.
+  What -fno-rtti actually does to a binary (the typeinfo objects and name strings go, the
+  vtable keeps its typeinfo slot and leaves it null, exceptions still emit typeinfo), why large
+  projects switch it off, the mixing failure that links clean and segfaults, and what the flag
+  saves in size, load time and build time on a synthetic library and on OpenJDK's libjvm.so.
 image:
   path: /assets/img/og/the-null-slot-what-fno-rtti-actually-removes.png
   alt: "The Null Slot: What -fno-rtti Actually Removes"
@@ -19,9 +19,9 @@ Everyone describes `-fno-rtti` the same way: it disables `dynamic_cast` and `typ
 
 The part that surprised me is that the vtable does not get any smaller. Compile a polymorphic class with the flag and the typeinfo pointer is still there, still occupying its eight bytes, just holding null. That one detail explains the flag's nastiest failure mode, and a good deal of what follows.
 
-I went looking because OpenJDK builds `libjvm.so` with it and I wanted to know what that buys. What I found fills four posts, and the last of them, [How OpenJDK and Everyone Else Live Without RTTI]({% post_url 2026-08-29-how-openjdk-and-everyone-else-live-without-rtti %}), gets back to the JVM. Everything reproduces from [the companion repo](https://github.com/Shubhankar-Gambhir/fno-rtti-bench) with `make`.
+I went looking because OpenJDK builds `libjvm.so` with it and I wanted to know what that buys. What I found fills three posts, and [the last of them]({% post_url 2026-08-28-what-comes-after-fno-rtti-and-how-openjdk-lives-without-rtti %}) gets back to the JVM. Everything reproduces from [the companion repo](https://github.com/Shubhankar-Gambhir/fno-rtti-bench) with `make`.
 
-*Revised 1 October 2026. This version is reorganised and expanded, adds [measurements across GCC 9 to 15, Clang 22 and libc++]({% post_url 2026-08-28-which-runtime-answers-dynamic-cast-and-what-comes-after-fno-rtti %}), and corrects several claims the first version got wrong, chiefly about [where its build-time savings came from]({% post_url 2026-08-27-what-fno-rtti-saves-and-what-dynamic-cast-costs %}) and which runtime produced its `dynamic_cast` timings.*
+*Revised 1 October 2026. This version is reorganised and expanded, adds [measurements across GCC 9 to 15, Clang 22 and libc++]({% post_url 2026-08-27-what-dynamic-cast-costs-and-which-runtime-decides %}), and corrects several claims the first version got wrong, chiefly about where its build-time savings came from and which runtime produced its `dynamic_cast` timings.*
 
 ## What the Flag Is
 
@@ -107,9 +107,9 @@ The Itanium ABI matches catch handlers by comparing `type_info` objects, so the 
 
 ## Why Codebases Turn It Off, and Who Should
 
-Almost nobody disables RTTI by itself. Every project surveyed in [How OpenJDK and Everyone Else Live Without RTTI]({% post_url 2026-08-29-how-openjdk-and-everyone-else-live-without-rtti %}) (Chromium and V8, Firefox, LLVM, Android's platform build, WebKit, Fuchsia and OpenJDK) pairs `-fno-rtti` with `-fno-exceptions`. The reasons fall into three groups, and they are not equally convincing.
+Almost nobody disables RTTI by itself. Every project surveyed in [What Comes After -fno-rtti, and How OpenJDK Lives Without RTTI]({% post_url 2026-08-28-what-comes-after-fno-rtti-and-how-openjdk-lives-without-rtti %}) (Chromium and V8, Firefox, LLVM, Android's platform build, WebKit, Fuchsia and OpenJDK) pairs `-fno-rtti` with `-fno-exceptions`. The reasons fall into three groups, and they are not equally convincing.
 
-The first is size. Every polymorphic class drags along a name string, a `type_info` object and four relocations, and [the next post]({% post_url 2026-08-27-what-fno-rtti-saves-and-what-dynamic-cast-costs %}) measures what that adds up to. It is real, and on a real binary it is small.
+The first is size. Every polymorphic class drags along a name string, a `type_info` object and four relocations, and the next section measures what that adds up to. It is real, and on a real binary it is small.
 
 The second is style. Google's C++ style guide says ["Avoid using run-time type information (RTTI)"](https://google.github.io/styleguide/cppguide.html#Run-Time_Type_Information__RTTI_) and, a few sections earlier, ["We do not use C++ exceptions."](https://google.github.io/styleguide/cppguide.html#Exceptions) Chromium's build files carry [the note](https://chromium.googlesource.com/chromium/src/+/refs/tags/154.0.8037.92/build/config/compiler/BUILD.gn#2374) "exceptions are disallowed in Google code"; Android's Soong switches them off because ["Google C++ style does not allow exceptions"](https://android.googlesource.com/platform/build/soong/+/refs/tags/android-17.0.0_r1/cc/config/global.go#141). Underneath is the argument that code which branches on an object's dynamic type is usually a missing virtual function. HotSpot's style guide makes the same case in nearly the same words.
 
@@ -141,14 +141,56 @@ Sanitizers notice too. With `-fsanitize=undefined`, GCC 15.2.0 and Clang 22.1.4 
 
 If you already avoid `dynamic_cast` and `typeid`, control the whole link (or will document the contract), and are switching off exceptions in the same change, the flag is a reasonable thing to adopt. If you ship polymorphic types to consumers you don't control, or your only reason is size, I'd leave it alone.
 
-Size is the reason given most often, and it is also the easiest one to put a number on, so [What -fno-rtti Saves, and What dynamic_cast Costs]({% post_url 2026-08-27-what-fno-rtti-saves-and-what-dynamic-cast-costs %}) starts there, with a stock `libjvm.so` and a synthetic library that is almost nothing but vtables.
+## Impact: Size, Load Time, Build Time
+
+Start with something real. A stock OpenJDK 17.0.0.1 `libjvm.so`:
+
+```
+_ZTV (vtables)     3157
+_ZTI (typeinfo)      10        <- 315:1
+```
+
+All ten survivors are libsupc++ and libstdc++ internals: `__class_type_info`, `std::bad_exception`, `__forced_unwind`. HotSpot's own three thousand polymorphic classes contribute none. Counting `_ZTI` against `_ZTV` makes a decent one-line test for whether any binary was built this way.
+
+To find out what those 3157 null slots are worth, I cloned HotSpot's `BarrierSet` hierarchy shape into 1,800 polymorphic classes under one shared root and built it three ways with GCC 11.4.0, keeping the two flags separate:
+
+| metric | `-frtti` | `-fno-rtti` | `+ -fno-exceptions` |
+|---|---:|---:|---:|
+| file size (bytes) | 2,747,984 | 2,160,928 (-21.4%) | 2,082,856 (-24.2%) |
+| dynamic relocations | 16,219 | 9,016 (-44.4%) | 9,014 (-44.4%) |
+| `.rodata`, the `_ZTS` name strings | 159,628 | 44,716 (-72.0%) | 44,716 |
+| `.data.rel.ro`, the `_ZTI` objects | 144,072 | 100,856 (-30.0%) | 100,856 |
+| `.gcc_except_table` | 23,656 | 23,656 (0%) | 0 (-100%) |
+| `_ZTI` symbols | 1,801 | 0 | 0 |
+| compile wall time, best of 5 | 2.92 s | 2.86 s (noise) | 1.50 s (-49%) |
+| compile CPU, the 20 class files | 11.53 s | 10.72 s (-7%) | 10.65 s (-8%) |
+| compile CPU, the factory file | 1.92 s | 1.83 s (noise) | 0.85 s (-56%) |
+
+The build-time rows are mostly about one file. At `-j64` the wall clock waits for the slowest translation unit, and here that is the factory, one function with 1,800 `new` expressions. Each needs a cleanup that frees the memory if the constructor throws, and those cleanups are the whole of `.gcc_except_table`; `-fno-exceptions` deletes them and more than halves the factory. The twenty files that define the classes have no cleanups, so `-fno-exceptions` leaves them alone. They are where the typeinfo gets emitted, though, and `-fno-rtti` trims them by 7 percent, a saving the wall clock never shows because the factory is still running. Neither flag is a build-time flag in general: `-fno-exceptions` pays in proportion to your cleanup code and `-fno-rtti` in proportion to your polymorphic classes. Quoting the pair's savings for either one is how the folklore got muddled.
+
+The 7,203 vanished relocations come to four per class: the vtable's typeinfo slot, the `_ZTI` object's own vptr, its `__name` pointer and its `__base_type` pointer. That is 1,800 times four, plus three for the root, whose `_ZTI` has no base to point at. It gives per-class rates that transfer:
+
+```
+_ZTS name strings   (.rodata)       63.8 B/class
+_ZTI objects        (.data.rel.ro)  24.0 B/class
+dynamic relocations (.rela.dyn)     96.0 B/class   (4.00 relocs/class)
+                                   -----------------
+                                   183.8 B/class
+```
+
+Relocations cost more than the objects they point at, and they are the part people forget. Each one is processed at load time and dirties a page in `.data.rel.ro` that the process can no longer share with anyone. On this corpus that makes `dlopen` 17 to 21 percent faster across two runs (medians of 400 loads, 295 down to 232 microseconds in the first) and leaves 30 percent fewer private-dirty pages, 148 KB down to 104 KB.
+
+The percentages do not transfer. The synthetic library is almost pure vtable, since every method body is `return N;`, while a real `libjvm.so` is overwhelmingly code. The same per-class rates land at 3157 x 184 B, roughly 580 KB on a 21.7 MiB binary. That is two and a half percent, not twenty-one.
+
+Speed is left for [What dynamic_cast Costs, and Which Runtime Decides]({% post_url 2026-08-27-what-dynamic-cast-costs-and-which-runtime-decides %}): the type tag projects use in place of `dynamic_cast`, and `dynamic_cast` itself across seven GCC releases, Clang 22 and libc++.
 
 ---
 
 Companion repo: [github.com/Shubhankar-Gambhir/fno-rtti-bench](https://github.com/Shubhankar-Gambhir/fno-rtti-bench)
 
-Hardware: Intel Xeon Gold 6130 @ 2.10 GHz (2x16 cores, Skylake).
+Hardware: Intel Xeon Gold 6130 @ 2.10 GHz (2x16 cores, Skylake), single-threaded and pinned to one core.
 Compilers: GCC 9.5.0, 10.4.0, 11.4.0, 12.4.0, 13.4.0, 14.3.0, 15.2.0 and Clang 22.1.4 with libc++ 22.1.4, all from conda-forge via micromamba. Flags: `-std=c++17 -O2 -march=skylake-avx512 -fcf-protection -falign-functions=64 -falign-loops=64 -DNDEBUG`.
-Methodology: nothing in this post is timed. Symbol, size and relocation figures are static ELF accounting and exactly reproducible; the construct matrix is `make constructs`.
+Methodology: size and relocation figures are static ELF accounting and exactly reproducible. Compile wall time is best of 5 at `-j64`; the compile CPU rows are user CPU time for compiling each group of files serially, median of 5. `dlopen` figures are the median of 400 loads, with private-dirty pages read from `/proc/self/smaps` after the final load. The construct matrix is `make constructs`.
+JVM figures come from a stock OpenJDK 17.0.0.1 build (`nm -a`, `readelf -rW`); `make jvm` runs the same census against any JDK you point it at.
 
-**Next:** [What -fno-rtti Saves, and What dynamic_cast Costs]({% post_url 2026-08-27-what-fno-rtti-saves-and-what-dynamic-cast-costs %})
+**Next:** [What dynamic_cast Costs, and Which Runtime Decides]({% post_url 2026-08-27-what-dynamic-cast-costs-and-which-runtime-decides %})
