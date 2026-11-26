@@ -1,6 +1,8 @@
 queues:
   - 2026-07-07-a-deep-dive-into-producer-consumer-queues
   - 2026-08-19-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring
+  - 2026-08-20-taking-the-lock-out-of-the-pool-faster-on-arm-slower-on-the-xeon
+  - 2026-08-21-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue
   - 2026-10-27-the-copy-and-the-backlog-what-a-bigger-payload-does-to-a-concurrent-queue
 fno-rtti:
   - 2026-08-26-the-null-slot-what-fno-rtti-actually-removes
