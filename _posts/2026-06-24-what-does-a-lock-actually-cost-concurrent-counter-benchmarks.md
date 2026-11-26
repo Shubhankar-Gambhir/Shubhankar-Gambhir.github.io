@@ -78,7 +78,7 @@ The harness creates T threads, pins each to a distinct core (Linux only; the cal
 
 ## The Uncontended Lock
 
-At one thread there is zero contention. This isolates the cost of the primitive itself, with no cache-line tug of war to muddy it.
+At one thread there is zero contention. This isolates the cost of the primitive itself.
 
 | Variant | x86 (ns/op) | ARM (ns/op) |
 |---------|-------------|-------------|
@@ -109,9 +109,9 @@ The picture changes the moment two threads want the same cache line.
 | AtomicCounter (relaxed) | 196.2M | 108.5M | 102.9M | 82.6M | 83.5M | 100.7M |
 | AtomicSeqCstCounter | 196.8M | 108.2M | 108.7M | 85.8M | 91.5M | 102.2M |
 
-The mutex falls off a cliff at two threads. On x86 it drops from 38.7M to 6.7M, an 83% loss from a single competitor, and never recovers. The atomic variants degrade too, but the floor is far higher.
+The mutex falls off a cliff at two threads. On x86 it drops from 38.7M to 6.7M, an 83% loss from a single competitor, and never recovers.
 
-ARM absorbs contention better. At two threads `AtomicCounter` drops from 196M to 108M, a 45% loss, against x86's fall from 116M to 16M, an 86% loss. The reason is in the instructions. The Neoverse-N1 implements an atomic add as a load-exclusive / store-exclusive retry loop (`ldxr` / `stxr`) that fails and retries locally when another core touches the line, while x86's `lock xadd` must win exclusive ownership of the line through the coherence protocol before it can complete. The same logical operation maps onto very different hardware.
+ARM absorbs contention better. At two threads `AtomicCounter` drops from 196M to 108M, a 45% loss, against x86's fall from 116M to 16M, an 86% loss. The reason is in the instructions. The Neoverse-N1 implements an atomic add as a load-exclusive / store-exclusive retry loop (`ldxr` / `stxr`) that fails and retries locally when another core touches the line, while x86's `lock xadd` must win exclusive ownership of the line through the coherence protocol before it can complete.
 
 ## relaxed vs seq_cst: Why They Cost the Same
 
@@ -123,7 +123,7 @@ On x86 the tie is no mystery. Both orders compile to one instruction ([Compiler 
         lock xaddq  %rax, (counter)   # atomic read-modify-write, full barrier
 ```
 
-The `lock` prefix on x86 is already a full barrier; sequential consistency for a read-modify-write comes for free with the prefix. The `memory_order` argument only tells the *compiler* what it may reorder around the instruction. The emitted opcode is the same for relaxed and seq_cst, so the cost is identical by construction.
+The `lock` prefix on x86 is already a full barrier. The `memory_order` argument only tells the *compiler* what it may reorder around the instruction. The opcode is the same, so the cost is identical by construction.
 
 ARM is where I expected to be vindicated. The benchmark was built with `-O2` and nothing else, and Ubuntu's GCC 13 defaults to outline-atomics, so each order becomes a call to a runtime-dispatched helper rather than inline instructions ([Compiler Explorer](https://godbolt.org/z/j57eWPnx8)):
 
@@ -145,9 +145,9 @@ f_relax:    ldadd    x1, x1, [x0]     # atomic add, no ordering
 f_seq_cst:  ldaddal  x1, x1, [x0]     # atomic add, acquire (a) + release (l)
 ```
 
-So the measured difference comes down to one instruction versus another: `ldadd` against `ldaddal`. The ordering is right there in the `al` suffix. Why no measured difference? Because of what the ordering acts on. The acquire stops *later* memory operations from being reordered before the RMW; the release stops *earlier* ones from being reordered after it. In a tight loop whose entire body is one `fetch_add`, there are no surrounding loads or stores to hold back, and the atomic add must make its result globally visible to complete regardless of ordering, which is the part that costs.
+So the difference comes down to `ldadd` against `ldaddal`. The ordering is right there in the `al` suffix. Why no measured difference? Because of what the ordering acts on. The acquire stops *later* memory operations from being reordered before the RMW; the release stops *earlier* ones from being reordered after it. In a tight loop whose entire body is one `fetch_add`, there are no surrounding loads or stores to hold back, and the atomic add must make its result globally visible to complete regardless of ordering, which is the part that costs.
 
-This only holds for an RMW with nothing around it. The difference reappears the instant you use standalone loads and stores instead of an RMW. The same probe shows it plainly ([Compiler Explorer](https://godbolt.org/z/j57eWPnx8)):
+The difference reappears the instant you use standalone loads and stores instead of an RMW. The same probe shows it plainly ([Compiler Explorer](https://godbolt.org/z/j57eWPnx8)):
 
 ```nasm
 store relaxed:  str   x0, [x1]    # plain store
@@ -156,7 +156,7 @@ load  relaxed:  ldr   x0, [x0]    # plain load
 load  seq_cst:  ldar  x0, [x0]    # load-acquire
 ```
 
-`str`/`ldr` and `stlr`/`ldar` are different instructions with different costs, and there a relaxed-versus-seq_cst benchmark would finally separate. That is the natural next experiment: a producer-consumer where one thread writes data then a release flag, and the other reads the acquire flag then the data. There, the ordering is not just measurable, it is required for correctness; dropping to relaxed on both sides is a data race, not an optimization. The counter loop simply never gave the ordering anything to do.
+`str`/`ldr` and `stlr`/`ldar` are different instructions with different costs, and there a relaxed-versus-seq_cst benchmark would finally separate. That is the natural next experiment: a producer-consumer where one thread writes data then a release flag, and the other reads the acquire flag then the data. There, the ordering is not just measurable, it is required for correctness; dropping to relaxed on both sides is a data race, not an optimization.
 
 ## The False Sharing Tax
 
@@ -188,7 +188,7 @@ Three C++20 features, measured against the C++17 baseline.
 
 ### std::atomic_ref: zero overhead
 
-`AtomicRefCounter` wraps a plain `int64_t` with `std::atomic_ref` instead of declaring a `std::atomic<int64_t>`. On both architectures the numbers match `AtomicCounter` exactly at every thread count. The wrapper compiles away to nothing. This is the feature to reach for when you cannot change the storage type itself: a field in a struct that came from a C library, a slice of a memory-mapped region, a member of a class hierarchy you do not own. You get atomic semantics over existing bytes at no cost.
+`AtomicRefCounter` wraps a plain `int64_t` with `std::atomic_ref` instead of declaring a `std::atomic<int64_t>`. On both architectures the numbers match `AtomicCounter` exactly at every thread count. The wrapper compiles away to nothing. This is the feature to reach for when you cannot change the storage type itself: a field in a struct that came from a C library, a slice of a memory-mapped region, a member of a class hierarchy you do not own.
 
 There is one ergonomic snag. `atomic_ref<T>` takes a non-const `T&`, so using it inside a `const` method forces either a `mutable` member or a `const_cast`. The standard offers no read-only atomic view, because even a load can participate in a release sequence, which needs non-const access to the object's synchronization state. It reads as a wart until you remember that an atomic load is not a passive read.
 
@@ -202,11 +202,11 @@ There is one ergonomic snag. `atomic_ref<T>` takes a non-const `T&`, so using it
 | WaitNotifyCounter | 59.7M ops/s | 81.8M ops/s |
 | **Overhead** | **48%** | **58%** |
 
-`notify_one` pokes the futex layer on every call, whether or not a waiter exists, and that roughly halves throughput. In a real producer-consumer you notify only when you have reason to think someone is blocked, or you batch notifications. Calling it unconditionally in a hot path costs you half your throughput for nothing in return.
+`notify_one` pokes the futex layer on every call, whether or not a waiter exists, and that roughly halves throughput. In a real producer-consumer you notify only when you have reason to think someone is blocked, or you batch notifications.
 
 ### ModernStripedCounter: same speed, cleaner code
 
-The C++20 striped counter uses `atomic_ref` over plain `int64_t` cells rather than wrapping each cell in an atomic class. Performance matches the C++17 version on both platforms; the code loses a wrapper type and reads a little cleaner. The codegen is equivalent, so this is purely an ergonomic win. Take it if you are already on C++20.
+The C++20 striped counter uses `atomic_ref` over plain `int64_t` cells rather than wrapping each cell in an atomic class. Performance matches the C++17 version on both platforms; the code loses a wrapper type and reads a little cleaner. Take it if you are already on C++20.
 
 ## GCC Version Sweep
 
