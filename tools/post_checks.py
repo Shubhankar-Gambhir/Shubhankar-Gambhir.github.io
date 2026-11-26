@@ -40,7 +40,7 @@ def _prose_lines(md):
 def prose_violations(md):
     out = []
     for n, line in _prose_lines(md):
-        if not line.startswith("|") and ("—" in line or " -- " in line):
+        if "—" in line or (" -- " in line and not line.startswith("|")):
             out.append(f"line {n}: em dash or ' -- ' in prose")
         if EMOJI_RE.search(line):
             out.append(f"line {n}: emoji")
@@ -204,6 +204,7 @@ def main(argv=None):
             continue
         print(f"minutes {slug} {minutes}")
         if minutes > args.max_minutes:
+            print(f"FAIL {f}: {minutes} min > {args.max_minutes}")
             fail = True
     return 1 if fail else 0
 

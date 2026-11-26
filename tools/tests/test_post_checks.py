@@ -18,6 +18,8 @@ def test_prose_violations_flags():
     assert pc.prose_violations("a -- b\n")
     ok = f"{FENCE}mermaid\nA -- B\n{FENCE}\n| a -- b | c |\nplain\n"
     assert pc.prose_violations(ok) == []
+    assert pc.prose_violations("| a — b | c |\n")
+    assert pc.prose_violations("| a -- b | c |\n") == []
     assert pc.prose_violations(f"{FENCE}asm\nnop\n{FENCE}\n")
     unbalanced = f"{FENCE}cpp\nx\n{FENCE}\n{FENCE}cpp\ny\n"
     assert any("fence" in v for v in pc.prose_violations(unbalanced))
