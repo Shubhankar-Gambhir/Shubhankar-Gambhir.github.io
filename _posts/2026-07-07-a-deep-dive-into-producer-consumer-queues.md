@@ -31,7 +31,7 @@ bool pop(T& out);        // dequeue into out; returns false when empty
 
 None of the six variants here is bounded, so their `push` always returns `true`. That is the whole surface. Everything interesting is behind it.
 
-The benchmark spins up P producer threads and C consumer threads, each pinned to its own core, handed out as consecutive core ids. That detail matters on the Xeon: its two NUMA nodes are interleaved by core id (even ids on one socket, odd on the other), so any run with more than one thread already straddles both sockets. Producers push one million items each; consumers pop until every item is accounted for. A synchronized start releases all threads at once, the clock covers only the timed region, and a post-run invariant checks that the count and the checksum match what went in, so a variant that loses or duplicates an item scores zero rather than a fast-but-wrong number. I report nanoseconds per item, median of five runs after a warmup.
+The benchmark spins up P producer threads and C consumer threads, each pinned to its own core, handed out as consecutive core ids. That detail matters on the Xeon: its two NUMA nodes are interleaved by core id (even ids on one socket, odd on the other), so any run with more than one thread already straddles both sockets, by design. Producers push one million items each; consumers pop until every item is accounted for. A synchronized start releases all threads at once, the clock covers only the timed region, and a post-run invariant checks that the count and the checksum match what went in, so a variant that loses or duplicates an item scores zero rather than a fast-but-wrong number. I report nanoseconds per item, median of five runs after a warmup.
 
 The mixes are the point. A balanced mix (P equals C) measures throughput under symmetric load. A fan-out mix (one producer, many consumers) starves the queue: consumers outrun the single producer and spend most of their time finding it empty. A fan-in mix (many producers, one consumer) floods it: the lone consumer cannot keep up. Real systems live in all three regimes, and the best queue for one is the worst for another.
 
@@ -215,7 +215,7 @@ Glibc's allocator keeps [per-thread arenas](https://sourceware.org/glibc/wiki/Ma
 
 The single-lock linked queue makes the point cleanest. Pooling it costs 12 percent at 1P x 1C but 93 percent at 1P x 15C, where fifteen consumers all return nodes through the one free-list lock. A penalty that stays small when threads work alone and explodes precisely under fan-out, when a crowd converges on `_f`, is the signature of lock contention, not allocation cost.
 
-If the diagnosis is right, then splitting the free list should recover the loss, the same way splitting the queue's lock did. So I sharded it: sixteen free lists, each with its own lock, each `alignas(64)` so two shards never share a cache line, and a thread hashes its id to pick one. On ARM that confirms the diagnosis:
+If the diagnosis is right, then splitting the free list should recover the loss, the same way splitting the queue's lock did. So I sharded it: sixteen free lists, each with its own lock, each `alignas(64)` so two shards never share a cache line (no [false sharing]({% post_url 2026-06-24-what-does-a-lock-actually-cost-concurrent-counter-benchmarks %})), and a thread hashes its id to pick one. On ARM that confirms the diagnosis:
 
 | Mix (ARM) | TwoLockPooled (1 free list) | TwoLockSharded (16 free lists) |
 |-----------|----------------------------:|-------------------------------:|
@@ -229,7 +229,7 @@ On the Xeon the pooling picture is muddier. The penalty is still there in the fa
 
 ## One Suspect Left
 
-There is one suspect left standing. If a shared, locked free list loses to `malloc`, and a sharded, locked one still loses, the question is whether the lock is the only problem or whether pooling itself is a dead end for this workload. The way to find out is to take the lock away entirely: a lock-free free list built on a compare-and-swap loop, and then a bounded ring buffer that does no allocation at all in steady state and holds no lock on the hot path. That is the next post, where lock-free finally has something to prove.
+There is one suspect left standing. If a shared, locked free list loses to `malloc`, and a sharded, locked one still loses, the question is whether the lock is the only problem or whether pooling itself is a dead end for this workload. The way to find out is to take the lock away entirely: a lock-free free list built on a compare-and-swap loop, and then a bounded ring buffer that never allocates in steady state. That starts in the [next post]({% post_url 2026-08-19-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %}), where lock-free finally has something to prove.
 
 ---
 
@@ -239,6 +239,4 @@ Hardware: Intel Xeon Gold 6130 @ 2.10 GHz (2x16 cores, Skylake, two NUMA nodes);
 Compilers: GCC 13.4.0 (x86), GCC 13.3.0 (ARM). Flags: `-std=c++17 -O2 -Wall -Wextra -pthread`, identical on both architectures (no `-march`) for a clean cross-architecture comparison.
 Methodology: 1M items per producer, 5 runs after warmup, median reported, each thread pinned to its own core by consecutive core id (which interleaves the Xeon's two NUMA nodes, so multi-thread runs span both sockets), synchronized start, post-run count and checksum invariant.
 
-**Previously:** [What Does a Lock Actually Cost? Benchmarking Concurrent Counters in C++]({% post_url 2026-06-24-what-does-a-lock-actually-cost-concurrent-counter-benchmarks %})
-
-**Next:** [Lock-Free Is Not Free: ABA, Tagged Pointers, and a Bounded Ring]({% post_url 2026-08-19-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %})
+**Next:** [Lock-Free Is Not Free: ABA and Tagged Pointers]({% post_url 2026-08-19-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %})
