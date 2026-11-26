@@ -8,11 +8,15 @@ description: >-
   version in all nine producer/consumer mixes on a single-node ARM machine and loses seven
   of nine on a two-socket Xeon. On ARM, plain new/delete still beats every pool design.
   Then the bounded ring that skips the allocator altogether.
+image:
+  path: /assets/img/og/taking-the-lock-out-of-the-pool-faster-on-arm-slower-on-the-xeon.png
+  alt: "Taking the Lock Out of the Pool: Faster on ARM, Slower on the Xeon"
+  hero: false
 ---
 
-A node pool is supposed to make a linked queue faster by recycling nodes instead of calling `new` for every item. In [A Deep Dive into Producer-Consumer Queues in C++]({% post_url 2026-07-07-a-deep-dive-into-producer-consumer-queues %}) mine did the opposite. Behind one mutex, the two-lock queue's free list lost to plain `new`/`delete`; split across sixteen mutexes, it still lost. That left the question of whether the lock was the problem or the pool was.
+Take the mutex out of a node pool and the same code loses seven of nine thread mixes to the mutex version on a two-socket Xeon, then beats it in all nine on a 16-core ARM machine. The pool belongs to the two-lock queue from [A Deep Dive into Producer-Consumer Queues in C++]({% post_url 2026-07-07-a-deep-dive-into-producer-consumer-queues %}), where it recycles nodes instead of calling `new` for every item. Behind one mutex it lost to plain `new`/`delete`; split across sixteen mutexes, it still lost.
 
-So the pool lost its lock. The free list became a lock-free Treiber stack, and after a [detour through the ABA problem]({% post_url 2026-08-19-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %}) it became a correct one, with a version counter packed into the top sixteen bits of each pointer. Nothing else about the queue changed.
+Telling whether the lock or the pool was to blame took a free list with no lock at all: a Treiber stack, made correct after a [detour through the ABA problem]({% post_url 2026-08-19-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %}) by packing a version counter into the top sixteen bits of each pointer. Nothing else about the queue changed.
 
 ## Removing the Mutex Made It Slower, On One Machine
 
@@ -100,7 +104,7 @@ How fast that is in practice, and where it still loses, is in [The Ring That Doe
 
 ---
 
-Companion repo: [github.com/Shubhankar-Gambhir/concurrent-data-structures-cpp](https://github.com/Shubhankar-Gambhir/concurrent-data-structures-cpp)
+Companion repo: [github.com/Shubhankar-Gambhir/concurrent-data-structures-cpp](https://github.com/Shubhankar-Gambhir/concurrent-data-structures-cpp); the tables reproduce with `make bench-queue`.
 
 Hardware: Intel Xeon Gold 6130 @ 2.10 GHz (2x16 cores, Skylake, two NUMA nodes); ARM Neoverse-N1 (16 cores, single NUMA node). Note that 16P x 16C is 32 threads on both, which fits the Xeon's 32 cores and oversubscribes ARM's 16.
 Compilers: GCC 13.4.0 (x86), GCC 13.3.0 (ARM). Flags: `-std=c++17 -O2 -Wall -Wextra -pthread`, identical on both architectures (no `-march`) for a clean cross-architecture comparison.
