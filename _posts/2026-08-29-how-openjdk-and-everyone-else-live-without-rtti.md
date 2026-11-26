@@ -14,7 +14,7 @@ image:
   hero: false
 ---
 
-HotSpot on Windows has been built with RTTI the whole time, by accident, and when someone tried to fix that in 2023 the accident turned out to be load-bearing. Under GCC and Clang the JVM builds with `-fno-rtti`, the flag that [The Null Slot: What -fno-rtti Actually Removes]({% post_url 2026-08-26-the-null-slot-what-fno-rtti-actually-removes %}), the first of these four posts, takes apart: no `type_info` for any polymorphic class, a null where each vtable's typeinfo pointer used to be, and no `typeid` or downcasting `dynamic_cast`. HotSpot replaces them with several type checks of its own, and nearly every large C++ project that made the same choice built something similar.
+HotSpot on Windows has been built with RTTI the whole time, by accident, and when someone tried to fix that in 2023 the accident turned out to be load-bearing. Under GCC and Clang the JVM builds with `-fno-rtti`, the flag this four-part series has been taking apart since [The Null Slot: What -fno-rtti Actually Removes]({% post_url 2026-08-26-the-null-slot-what-fno-rtti-actually-removes %}): no `type_info` for any polymorphic class, a null where each vtable's typeinfo pointer used to be, and no `typeid` or downcasting `dynamic_cast`. HotSpot replaces them with several type checks of its own, and nearly every large C++ project that made the same choice built something similar.
 
 ## OpenJDK, and Everyone Else
 
