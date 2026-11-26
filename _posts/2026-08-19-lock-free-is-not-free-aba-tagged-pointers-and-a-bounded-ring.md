@@ -143,7 +143,7 @@ That assert is not decoration. "Pointers are 48 bits" describes a default, not t
 
 Sixteen bits of version wraps every 65,536 modifications, so ABA is not eliminated, only made astronomically unlikely. An interfering thread would have to perform an exact multiple of 65,536 free-list operations inside another thread's compare-exchange window. A 128-bit tagged pointer removes the wrap; hazard pointers or epoch-based reclamation remove the whole class of problem by making it safe to touch a node that might have been recycled. The repo implements none of those, and if you need a guarantee rather than a probability you should reach for one of them instead of this. What I have survives thirty consecutive runs of the full test suite on both benchmark machines and forty on the EPYC box, which is enough to benchmark with and is not a proof.
 
-That was the bar I needed, because the question this post started from is still open. Part 1's pools lost to plain `new`/`delete` with mutexes inside them, and a correct lock-free free list is the fair way to ask whether the mutexes were the reason. The [next post]({% post_url 2026-08-20-taking-the-lock-out-of-the-pool-faster-on-arm-slower-on-the-xeon %}) runs it against all three earlier designs on the Xeon and on the ARM machine.
+That was the bar I needed, because the question this post started from is still open. Part 1's pools lost to plain `new`/`delete` with mutexes inside them, and a correct lock-free free list is the fair way to ask whether the mutexes were the reason. The [next post]({% post_url 2026-08-20-taking-the-lock-out-of-the-pool-and-building-a-ring-instead %}) runs it against all three earlier designs on the Xeon and on the ARM machine.
 
 ---
 
@@ -155,4 +155,4 @@ ABA rates: 20 trials per mix at 100k items per producer, reported as absolute de
 
 **Previously:** [A Deep Dive into Producer-Consumer Queues in C++]({% post_url 2026-07-07-a-deep-dive-into-producer-consumer-queues %})
 
-**Next:** [Taking the Lock Out of the Pool: Faster on ARM, Slower on the Xeon]({% post_url 2026-08-20-taking-the-lock-out-of-the-pool-faster-on-arm-slower-on-the-xeon %})
+**Next:** [Taking the Lock Out of the Pool, and Building a Ring Instead]({% post_url 2026-08-20-taking-the-lock-out-of-the-pool-and-building-a-ring-instead %})

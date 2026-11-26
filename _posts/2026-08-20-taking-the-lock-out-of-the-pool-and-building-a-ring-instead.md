@@ -1,5 +1,5 @@
 ---
-title: "Taking the Lock Out of the Pool: Faster on ARM, Slower on the Xeon"
+title: "Taking the Lock Out of the Pool, and Building a Ring Instead"
 date: 2026-08-20
 categories: [C++, Performance]
 tags: [concurrency, queue, lock-free, treiber-stack, ring-buffer, cas, atomics, benchmarks, arm]
@@ -7,10 +7,10 @@ description: >-
   A node pool with its mutex swapped for a correct lock-free free list beats the mutex
   version in all nine producer/consumer mixes on a single-node ARM machine and loses seven
   of nine on a two-socket Xeon. On ARM, plain new/delete still beats every pool design.
-  Then the bounded ring that skips the allocator altogether.
+  Then the design of Vyukov's bounded MPMC ring, which skips the allocator altogether.
 image:
-  path: /assets/img/og/taking-the-lock-out-of-the-pool-faster-on-arm-slower-on-the-xeon.png
-  alt: "Taking the Lock Out of the Pool: Faster on ARM, Slower on the Xeon"
+  path: /assets/img/og/taking-the-lock-out-of-the-pool-and-building-a-ring-instead.png
+  alt: "Taking the Lock Out of the Pool, and Building a Ring Instead"
   hero: false
 ---
 
