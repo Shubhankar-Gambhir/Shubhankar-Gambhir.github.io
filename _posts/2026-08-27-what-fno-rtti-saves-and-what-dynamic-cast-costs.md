@@ -14,9 +14,9 @@ image:
   hero: false
 ---
 
-On a synthetic library of 1,800 polymorphic classes, `-fno-rtti` takes 21 percent off the file. On a stock OpenJDK `libjvm.so`, the same per-class savings come to about two and a half.
+`-fno-rtti` takes 21 percent off a synthetic library of 1,800 polymorphic classes, yet the same per-class savings come to only about two and a half percent of a stock OpenJDK `libjvm.so`.
 
-The first of these four posts on the flag, [The Null Slot: What -fno-rtti Actually Removes]({% post_url 2026-08-26-the-null-slot-what-fno-rtti-actually-removes %}), covers what it deletes to get there: a `type_info` object and a mangled name string for every polymorphic class, plus the relocations that come with them. Each vtable keeps its typeinfo slot and leaves it null, so the layout, and every virtual call, stays exactly as it was. What changes is everything that used to ask the typeinfo a question, `dynamic_cast` most of all, and the second half of this post prices what projects put in its place.
+[The Null Slot: What -fno-rtti Actually Removes]({% post_url 2026-08-26-the-null-slot-what-fno-rtti-actually-removes %}), the first of four posts on the flag, lists what gets deleted: a `type_info` object and a mangled name string for every polymorphic class, plus the relocations that come with them. Each vtable keeps its typeinfo slot and leaves it null, and any `dynamic_cast` that has to look at the dynamic type stops compiling, so a codebase that wants checked downcasts has to build its own.
 
 ## Impact: Size, Load Time, Build Time, Speed
 
