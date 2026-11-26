@@ -7,3 +7,6 @@ queues:
   - 2026-10-28-the-backlog-what-falling-behind-costs-an-unbounded-queue
 fno-rtti:
   - 2026-08-26-the-null-slot-what-fno-rtti-actually-removes
+  - 2026-08-27-what-fno-rtti-saves-and-what-dynamic-cast-costs
+  - 2026-08-28-which-runtime-answers-dynamic-cast-and-what-comes-after-fno-rtti
+  - 2026-08-29-how-openjdk-and-everyone-else-live-without-rtti
