@@ -13,7 +13,7 @@ image:
   hero: false
 ---
 
-Everyone knows a mutex is slower than an atomic. That part is not in question. What I never had was the actual number: how many nanoseconds the difference costs, and whether it holds up once threads start fighting over the same line or the architecture changes underneath. So I decided to see for myself.
+It is a common assumption that a mutex is slower than an atomic. That part is not in question. What I never had was the actual number: how many nanoseconds the difference costs, and whether it holds up once threads start fighting over the same line or the architecture changes underneath. So I decided to see for myself.
 
 I built four concurrent counter variants in C++17, added three more in C++20, and measured them across thread counts on an Intel Xeon Gold 6130 and an ARM Neoverse-N1. I was sure seq_cst would cost something on ARM. It didn't, and working out why sent me into the disassembler.
 
