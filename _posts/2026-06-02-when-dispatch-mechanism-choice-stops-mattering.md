@@ -66,7 +66,7 @@ For reference, here are the monomorphic baselines from Parts 1 and 4 (Heavy plug
 
 Round-robin is the gentlest polymorphic pattern: modern branch predictors handle repeating patterns well and can predict each indirect branch correctly most of the time.
 
-CRTP and function pointer are identical: 2.87 vs 2.88 on GCC 11, 2.88 vs 2.88 on GCC 15. This is the design prediction from Part 2 playing out: after lazy resolution, decoupled CRTP collapses to a function pointer array. Under monomorphic dispatch, the two mechanisms looked similar but could have diverged due to code layout or alignment effects. Under polymorphic dispatch, they converge exactly.
+CRTP and function pointer are identical: 2.87 vs 2.88 on GCC 11, 2.88 vs 2.88 on GCC 15. This is the design prediction from [Part 2]({% post_url 2026-05-12-lazy-resolution-resolve-once-dispatch-forever %}) playing out: after lazy resolution, decoupled CRTP collapses to a function pointer array. Under monomorphic dispatch, the two mechanisms looked similar but could have diverged due to code layout or alignment effects. Under polymorphic dispatch, they converge exactly.
 
 Variant on GCC 15 is the fastest indirect mechanism at 2.24 ns. The switch-based `std::visit` from GCC 12+ lowers to a jump table on the variant index.
 
@@ -121,7 +121,7 @@ That accounts for less of the jump than it first appears. At one miss in ten, 7-
 
 Virtual dispatch pays a consistent premium over function pointer: about 1 ns on both compilers. Under monomorphic dispatch this gap was smaller (0.47 ns on GCC 11) because perfect prediction hid some of the vtable's extra load latency.
 
-Variant on GCC 15 (4.31 ns) beats function pointer (4.63 ns) again, though the gap has narrowed from the round-robin case. The switch-based dispatch still gives the optimizer an edge, but random arrival order makes the jump table harder to predict than the repeating pattern did.
+Variant on GCC 15 (4.31 ns) beats function pointer (4.63 ns) again, though the gap has narrowed from the round-robin case. Switch dispatch keeps its structural edge, but random arrival order makes the jump table harder to predict than the repeating pattern did.
 
 Variant on GCC 11 (7.08 ns) is worst in class by a wide margin. If you're on GCC 11 and your workload is polymorphic, variant is the wrong choice.
 
@@ -191,7 +191,7 @@ The clearest finding is what happened to variant: worst-in-class on GCC 11, best
 
 CRTP and function pointer land within 0.02 ns of each other in every measurement, across all three workloads and both compilers. If you don't need composable plugin layers, a raw function pointer gives you the same runtime performance with less code.
 
-Virtual dispatch barely benefits from GCC 15: 2.90 to 2.42 ns in the monomorphic case (alignment and codegen improvements), but 17.61 vs 17.57 under random dispatch.
+Virtual dispatch barely benefits from GCC 15: 2.90 to 2.42 ns in the monomorphic case (alignment and codegen improvements), but 17.61 to 17.57 under random dispatch.
 
 All mechanisms see a 5-7x slowdown from monomorphic to random, except variant on GCC 15 at 9.5x (1.47 to 13.95). Its monomorphic number was flattered: the compiler [hoisted the switch out of the loop entirely]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %}), and under polymorphic dispatch that optimization has nothing to hoist.
 
