@@ -43,7 +43,7 @@ Liu's internal users raised the same worry ten days later, and [his update](http
 
 The design came back as a pull request in March 2021.
 
-Thomas Stuefe set the terms on 27 March. He accepted loss: ["things will get dropped, that is unavoidable. But it has to be reliable and comprehensible after the fact."](https://mail.openjdk.org/pipermail/hotspot-dev/2021-March/050373.html) He also said what reliable meant: dropping entries "without giving any indication *in the log itself* is a terrible idea :)".
+Thomas Stuefe set the terms on 27 March. He accepted loss from a bounded buffer: ["things will get dropped, that is unavoidable. But it has to be reliable and comprehensible after the fact."](https://mail.openjdk.org/pipermail/hotspot-dev/2021-March/050373.html) He also said what reliable meant: dropping entries "without giving any indication *in the log itself* is a terrible idea :)".
 
 Two days later David Holmes [questioned the bound itself](https://mail.openjdk.org/pipermail/hotspot-dev/2021-March/050386.html): "Why can't the design accommodate unlimited buffer space as determined by available memory?"
 
@@ -55,7 +55,7 @@ Non-blocking was the whole point of the feature, so "we think it's fair to trade
 
 The same day, Robbin Ehn offered a way to stop the lock from ever blocking a logger: ["If you instead use two arrays, one active and one for flushing, you can swap them with atomic stores from the flushing thread."](https://mail.openjdk.org/pipermail/hotspot-dev/2021-March/050479.html) Loggers would claim slots with an atomic increment, and an RCU-style wait would tell the flusher when the old array was free.
 
-Liu said no, first because RCU suits many readers and rare writers, and ["Unfortunately, all participants of logging are writers. No one is read-only."](https://mail.openjdk.org/pipermail/hotspot-dev/2021-April/050620.html) Ehn [pointed out](https://mail.openjdk.org/pipermail/hotspot-dev/2021-April/050663.html) that only the flusher writes the buffer pointer, so every logger counts as a reader. The reason that decided it came in his next paragraph:
+Liu said no, first because RCU suits many readers and rare writers, and ["Unfortunately, all participants of logging are writers. No one is read-only."](https://mail.openjdk.org/pipermail/hotspot-dev/2021-April/050620.html) Ehn [pointed out](https://mail.openjdk.org/pipermail/hotspot-dev/2021-April/050663.html) that only the flusher writes the buffer pointer, so every logger counts as a reader. The reason that decided it was in Liu's next paragraph:
 
 > TBH, I would rather grumpy customers yell at me about async-logging performance first before jump into lock-free algorithms.
 
@@ -87,7 +87,7 @@ Liu reran the comparison on a slow debug build, twenty times with a t-test: [the
 
 > when the producers do outstrip the consumer then you have to decide what is more important: the log message, or the non-blocking behaviour? That is a policy choice the programmer should be allowed to make.
 
-He cited the rejection policies of Java's `ThreadPoolExecutor` as precedent.
+He cited the rejection policies of Java's `ThreadPoolExecutor`, from aborting to dropping the new item, as precedent.
 
 The ring didn't survive. In December 2024 Sjölen posted a smaller patch that added stalling on top of the existing two buffers, and [explained](https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2024-December/075170.html) that the first one "didn't go through because 1. The stalling mode was broken 2. The complexity was a bit too large imho." His Spring Boot benchmark, with all logging at debug, ran at 15,441 requests per second stalling, 20,255 dropping and 3,584 synchronous; stalling wrote 501 MiB of log against 292 MiB.
 
@@ -95,7 +95,7 @@ Stall mode landed in February 2025, in jdk-25+12, as `-Xlog:async:stall`; droppi
 
 ## Writing Yours Down
 
-`std::queue` over `std::deque` behind a `std::mutex`, the queue I measured in [the first queue post]({% post_url 2026-07-07-a-deep-dive-into-producer-consumer-queues %}), already has an overload policy: grow. If you don't write a policy down, the container picks one for you. Here is the menu:
+`std::queue` over `std::deque` behind a `std::mutex`, the queue I measured in [the first queue post]({% post_url 2026-07-07-a-deep-dive-into-producer-consumer-queues %}), already has an overload policy: grow. Here is the menu:
 
 | Policy | The producer sees | Who pays | In this post |
 |---|---|---|---|
