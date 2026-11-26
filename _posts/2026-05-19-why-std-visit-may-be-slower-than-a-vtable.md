@@ -37,7 +37,7 @@ Virtual dispatch is the baseline everyone knows. Here's the hot loop from our be
 
 Two dependent memory loads, then a call. The second load (`call *16(%rax)`) cannot start until the first (`movq (%rdi), %rax`) completes, because the vtable address depends on the vptr. That's the cost: two serial cache accesses per call.
 
-But there's a reason this works well in practice. The vptr doesn't change between calls. The branch predictor learns the target quickly and predicts it correctly on every subsequent iteration. For a monomorphic call site (one concrete type at runtime), virtual dispatch is essentially free after warmup. The CPU speculatively executes through the indirect call without stalling. Every benchmark in this post is monomorphic; [Part 5]({% post_url 2026-06-02-when-dispatch-mechanism-choice-stops-mattering %}) mixes plugin types per call, and there the branch predictor becomes the dominant cost.
+But there's a reason this works well in practice. The vptr doesn't change between calls. The branch predictor learns the target quickly and predicts it correctly on every subsequent iteration. For a monomorphic call site (one concrete type at runtime), virtual dispatch is essentially free after warmup. Every benchmark in this post is monomorphic; [Part 5]({% post_url 2026-06-02-when-dispatch-mechanism-choice-stops-mattering %}) mixes plugin types per call, and there the branch predictor becomes the dominant cost.
 
 ## What std::visit Generates
 
@@ -67,11 +67,9 @@ Before the call itself:
 
 3. **An indexed indirect call** (`call *(%r14,%rax,8)`) uses the discriminant to index into a function pointer table at `%r14`. This is `_S_vtable`, a compile-time generated array of function pointers, one per alternative.
 
-This is the "vtable with extra steps" from [Part 1]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}): a function pointer table, plus a capture struct the callee has to read back where virtual dispatch would pass arguments in registers.
-
 ## Inside the Stdlib: How std::visit Dispatches
 
-The assembly above is a consequence of specific implementation choices in libstdc++. This section traces the dispatch path through three layers of template machinery. If you're mainly interested in the performance implications and not the stdlib internals, you can [skip ahead to the valueless_by_exception section](#the-valueless_by_exception-tax); the short version is that libstdc++ builds a compile-time function pointer table and calls through it, which the optimizer cannot inline through.
+The assembly above is a consequence of specific implementation choices in libstdc++. If you're mainly interested in the performance implications, you can [skip ahead to the valueless_by_exception section](#the-valueless_by_exception-tax).
 
 ### libstdc++ (GCC 11.4): The Vtable Builder
 
@@ -177,7 +175,7 @@ Five instructions, with the arguments arriving in registers. The variant version
 | **Branch misses** | ~0.00% | ~0.00% | ~0.00% |
 | **ns/call** | 3.74 | 2.88 | 2.42 |
 
-Branch misses are essentially zero across all three. The CPU predicts the indirect call target perfectly in every case. The variant version actually has the *highest* IPC (3.44); the CPU is executing those extra instructions efficiently, with no pipeline stalls. It's simply doing more work per call. The 69% instruction overhead maps directly to the 30% cycle overhead, which maps to the 28% wall-time difference.
+The CPU predicts the indirect call target perfectly in every case. The variant version actually has the *highest* IPC (3.44); the CPU is executing those extra instructions efficiently, with no pipeline stalls. It's simply doing more work per call. The 69% instruction overhead maps directly to the 30% cycle overhead, which maps to the 28% wall-time difference.
 
 ### libc++ (Clang/LLVM): Pure Function Pointer Table
 
@@ -193,13 +191,13 @@ template <class _Visitor, class... _Vs>
 
 libc++ uses this function pointer table regardless of variant size. Even a `variant<A, B>` with just two alternatives goes through a table lookup and an indirect call through a function pointer.
 
-That matters because the compiler can't inline through a function pointer call as effectively as through a `switch` statement. When the compiler sees `switch (index) { case 0: ...; case 1: ...; }`, it can inline the visitor body directly into each case. When it sees `table[index](visitor, variant)`, the call target is opaque. It's just an address.
+That matters because the compiler can't inline through a function pointer call as effectively as through a `switch` statement. When the compiler sees `switch (index) { case 0: ...; case 1: ...; }`, it can inline the visitor body directly into each case. When it sees `table[index](visitor, variant)`, the call target is opaque.
 
-In practice, libstdc++ at least has a path to optimization (GCC 12 added a switch for small variants, as we'll see in [Part 4]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %})). libc++ has no such path in its headers. Every `std::visit` call, regardless of variant size, goes through an indirect call that the optimizer cannot see through. On macOS, where Clang defaults to libc++, this is the dispatch path your variant code uses unless you explicitly link against libstdc++.
+libstdc++ at least has a path to optimization (GCC 12 added a switch for small variants, as we'll see in [Part 4]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %})). libc++ has no such path in its headers. On macOS, where Clang defaults to libc++, this is the dispatch path your variant code uses unless you explicitly link against libstdc++.
 
 **Update (June 2026):** LLVM has taken a different approach. Instead of adding a switch path to libc++'s headers (which was [tried and reverted twice](https://github.com/llvm/llvm-project/commit/9c09757bca) due to debug build binary size), LLVM now has a mid-level optimizer pass called JumpTableToSwitch that recognizes the function-pointer-table pattern and transforms it to a switch automatically. The pass was [enabled by default](https://github.com/llvm/llvm-project/pull/190674) in April 2026 (after [several revert cycles](https://github.com/llvm/llvm-project/commit/a80d2a719374)) and will ship in a future Clang release. This solves the problem at the optimizer level: libc++ keeps its compact headers and small debug builds, and the optimizer recovers the switch form at `-O2`. Thanks to [Reid Kleckner](https://reidkleckner.dev) for pointing this out.
 
-Michael Park (who [wrote libc++'s variant implementation](https://github.com/llvm/llvm-project/commit/0d3d8de014f1012dd0b2c2c077099cf6face44e5) in 2016) later demonstrated in his standalone [mpark::variant](https://github.com/mpark/variant) library that a switch-based approach is 2-4x faster than the table approach for small variants. libstdc++ added a switch optimization in GCC 12. libc++ never did.
+Michael Park (who [wrote libc++'s variant implementation](https://github.com/llvm/llvm-project/commit/0d3d8de014f1012dd0b2c2c077099cf6face44e5) in 2016) later demonstrated in his standalone [mpark::variant](https://github.com/mpark/variant) library that a switch-based approach is 2-4x faster than the table approach for small variants.
 
 ## The valueless_by_exception Tax
 
@@ -211,9 +209,9 @@ if ((__variant::__as(__variants).valueless_by_exception() || ...))
     __throw_bad_variant_access("std::visit: variant is valueless");
 ```
 
-A variant becomes valueless when a type-changing assignment's move/copy constructor throws. The old value has already been destroyed, but the new one failed to construct, leaving the variant in a "neither" state. `std::visit` must check for this and throw `bad_variant_access` if it encounters one.
+A variant becomes valueless when a type-changing assignment's move/copy constructor throws. The old value has already been destroyed, but the new one failed to construct, leaving the variant in a "neither" state.
 
-For our benchmark, this check can never fire. All three alternative types (`EpsilonBS`, `SerialBS`, `G1BS`) are trivially copyable structs smaller than 256 bytes. A type-changing assignment for these types uses a temporary and a `memcpy`; it cannot throw. The variant physically cannot become valueless.
+For our benchmark, this check can never fire. All three alternative types (`EpsilonBS`, `SerialBS`, `G1BS`) are trivially copyable structs smaller than 256 bytes. A type-changing assignment for these types uses a temporary and a `memcpy`; it cannot throw.
 
 libstdc++ knows this. Since [GCC 9](https://gcc.gnu.org/git/?p=gcc.git;a=blob;f=libstdc%2B%2B-v3/include/std/variant;hb=releases/gcc-9.1.0#l370), it has a `_Never_valueless_alt` trait:
 
@@ -225,7 +223,7 @@ template<typename _Tp>
   { };
 ```
 
-When all alternatives satisfy this trait, `__never_valueless()` returns `true`. In our benchmark, GCC 11 at `-O2` sees through the inline expansion of `valueless_by_exception()`, determines it always returns `false`, and eliminates the check entirely from the hot loop. So our benchmark doesn't actually pay this cost.
+When all alternatives satisfy this trait, `__never_valueless()` returns `true`. In our benchmark, GCC 11 at `-O2` sees through the inline expansion of `valueless_by_exception()`, determines it always returns `false`, and eliminates the check entirely from the hot loop.
 
 But change one alternative to a non-trivially-copyable type (say, a struct containing `std::string`) and the check appears:
 
@@ -239,7 +237,7 @@ But change one alternative to a non-trivially-copyable type (say, a struct conta
 
 That `cmpb $-1` / `je` pair runs on every visit call, branching to a cold path that throws. The CPU branch predictor handles it well (always not-taken), but it's an instruction pair that has no equivalent in virtual dispatch, where a vtable pointer is always valid if the object exists.
 
-libc++ has no equivalent `_Never_valueless_alt` optimization. It always emits the check, even for trivially copyable types where the variant physically cannot become valueless.
+libc++ has no equivalent `_Never_valueless_alt` optimization. It always emits the check, even for trivially copyable types.
 
 ## Where the 28% Goes
 
@@ -255,7 +253,7 @@ Side by side:
 | **Valueless check** | None; vtable pointer is always valid | Elided for trivially copyable types (libstdc++); always present (libc++) |
 | **Storage** | Heap-allocated, pointer indirection | Stack-allocated, cache-local |
 
-`std::visit` has *fewer* dependent dispatch loads than virtual: its discriminant and table base are independent, while virtual's vtable lookup must wait for the vptr load. The 28% comes from the lambda capture indirection. The visitor lambda captures local variables by reference, so `std::visit` materializes a capture struct on the stack before the call, and the callee loads those references back to reconstruct the arguments. Virtual dispatch passes arguments in registers: 5 instructions in the callee versus 15. With 69% more instructions, branch misses near zero and IPC at 3.44, the extra time is extra work.
+`std::visit` has *fewer* dependent dispatch loads than virtual: its discriminant and table base are independent, while virtual's vtable lookup must wait for the vptr load. The 28% comes from the lambda capture indirection. Virtual dispatch passes arguments in registers: 5 instructions in the callee versus 15. With 69% more instructions, branch misses near zero and IPC at 3.44, the extra time is extra work.
 
 The last row is the one that makes `std::variant` attractive: no heap allocation, no pointer indirection for the data itself. For access patterns that read the stored value frequently but dispatch infrequently, variant wins. But for dispatch-heavy hot paths where every call goes through `std::visit`, the dispatch mechanism's overhead outweighs the storage advantage.
 
