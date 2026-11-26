@@ -199,9 +199,9 @@ The transition from window 1 to window 2 is also a cache line boundary transitio
 
 The threshold at offset 27 falls directly out of the arithmetic: a 38-byte function starting at offset N straddles a 64-byte cache line boundary when N + 37 >= 64, i.e., when N >= 27. Our fine sweep finds the cliff between offsets 24 and 28, consistent with 27 being the exact boundary.
 
-The cliff is also a DSB window boundary: at offset 26, bytes 26-31 fill window 0 and bytes 32-63 fill window 1, with the function ending at byte 63 (the last byte of both window 1 and the cache line). At offset 27, the `retq` lands at byte 64, the start of window 2. Cache line boundary and DSB window boundary coincide because 64 and 32 share the factor 32, and 64 - 38 = 26 is the exact capacity of two DSB windows for this function.
+The cliff is also a DSB window boundary: at offset 26, bytes 26-31 fill window 0 and bytes 32-63 fill window 1, with the function ending at byte 63 (the last byte of both window 1 and the cache line). At offset 27, the `retq` lands at byte 64, the start of window 2. Cache line boundary and DSB window boundary coincide because 64 and 32 share the factor 32, and 64 - 38 = 26 is the last offset at which the function fits in one cache line.
 
-These parameters are Skylake-specific. AMD Zen 2+ organizes its uop cache in 64-byte aligned chunks with a different capacity model, so the cliff point will differ. The general mechanism is shared across modern x86 designs, but each microarchitecture needs its own sweep to find its threshold.
+These parameters are Skylake-specific. AMD Zen 2+ organizes its uop cache in 64-byte aligned chunks with a different capacity model, so the cliff point will differ. The window-crossing mechanism is shared across modern x86 designs, but each microarchitecture needs its own sweep to find its threshold.
 
 ## Cross-Compiler Validation
 
@@ -253,7 +253,7 @@ There's no command-line equivalent to `-falign-functions=N` for per-function cod
 - Linker `/ALIGN:n` sets section alignment, not per-function alignment.
 - `/FUNCTIONPADMIN[:n]` inserts padding before functions for hot-patching, not for cache-line alignment.
 
-The `__attribute__((aligned(64)))` decoration is accepted by MSVC as a non-standard extension in some versions, but behavior is not guaranteed.
+clang-cl accepts `__attribute__((aligned(64)))` on functions; MSVC itself does not.
 
 ### Benchmark Methodology Checklist
 
