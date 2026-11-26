@@ -70,14 +70,8 @@ quotes:
   - id: ehn-readers
     text: "From the algorithm perspective all loggers are readers. We are protecting the buffer pointer which only the flusher writes to."
     url: https://mail.openjdk.org/pipermail/hotspot-dev/2021-April/050663.html
-  - id: ehn-battle-proven
-    text: "If you feel that your current code is battle-proven and you think doing additional enhancements as incremental changes is better, please do so."
-    url: https://mail.openjdk.org/pipermail/hotspot-dev/2021-April/050663.html
 
   # May 2021: the CSR, drop the newest
-  - id: liu-ringbuffer
-    text: "current policy simulates a RingBuffer"
-    url: https://bugs.openjdk.org/browse/JDK-8264323
   - id: holmes-user-choice
     text: "it may be that the user needs to be able to decide which is better for them?"
     url: https://bugs.openjdk.org/browse/JDK-8264323
@@ -105,7 +99,7 @@ quotes:
     text: "SEM_VALUE_MAX limit of 32k"
     url: https://bugs.openjdk.org/browse/JDK-8269865
   - id: holmes-n-signals
-    text: "If you have N loggers you get N signals and N messages. The writer thread will write all N messages at once and then loop another N-1 times (redundantly calling write()) before blocking."
+    text: "The writer thread will write all N messages at once and then loop another N-1 times (redundantly calling write()) before blocking."
     url: https://bugs.openjdk.org/browse/JDK-8269865
   - id: holmes-cant-keep-up
     text: "The problem _is_ that the async log thread can't keep up"
@@ -117,7 +111,7 @@ quotes:
     text: "with so much activity it will be a serialization point"
     url: https://bugs.openjdk.org/browse/JDK-8269865
   - id: holmes-lockfree
-    text: "We may need to look at a lock-free technique for that (not as part of this bug fix)."
+    text: "We may need to look at a lock-free technique for that (not as part of this bug fix)"
     url: https://bugs.openjdk.org/browse/JDK-8269865
 
   # 2022: ping-pong buffers, mutex kept
@@ -135,9 +129,6 @@ quotes:
   - id: sjolen-two-mutexes
     text: "a basic producer/consumer pattern with two mutexes and a circular buffer"
     url: https://mail.openjdk.org/pipermail/hotspot-dev/2024-February/084892.html
-  - id: stuefe-never-liked
-    text: "I never liked the idea of losing output"
-    url: https://mail.openjdk.org/pipermail/hotspot-dev/2024-February/084893.html
   - id: liu-why-async
     text: "why do we still choose async-logging in the first place?"
     url: https://mail.openjdk.org/pipermail/hotspot-dev/2024-March/085961.html
@@ -179,9 +170,6 @@ quotes:
   - id: stall-192
     text: "-Xlog:async:stall -Xlog:all=trace -XX:AsyncLogBufferSize=192"
     url: https://bugs.openjdk.org/browse/JDK-8362282
-  - id: holmes-deadlock
-    text: "Looks like some form of deadlock if you examine the native stacks from the core dump."
-    url: https://bugs.openjdk.org/browse/JDK-8362282
   - id: stall-startup
     text: "the problems if any, manifest at startup"
     url: https://bugs.openjdk.org/browse/JDK-8362282
@@ -193,40 +181,6 @@ quotes:
   - id: hs-caller-runs
     text: "If this returns false then we give up on logging asynchronously and do so synchronously instead."
     url: https://raw.githubusercontent.com/openjdk/jdk/815ff4dc327fe17f2433c7d115a5a503af10f3c4/src/hotspot/share/logging/logAsyncWriter.cpp
-
-  # Supporting case: JFR drops the oldest
-  - id: jep328-recent
-    text: "it is promoted to a global in-memory circular buffer system which maintains the most recent event data"
-    url: https://openjdk.org/jeps/328
-  - id: jep328-discard
-    text: "Depending on configuration, the oldest data is either discarded or written to disk"
-    url: https://openjdk.org/jeps/328
-  - id: jfr-assert
-    text: "Possible safepoint reached by thread that does not allow it"
-    url: https://bugs.openjdk.org/browse/JDK-8244289
-  - id: jfr-raii
-    text: "I was finally able to pinpoint this strange problem."
-    url: https://bugs.openjdk.org/browse/JDK-8244289
-  - id: jfr-rfr
-    text: "this correction to an invalid lock acquisition when JFR is configured for not writing to disk"
-    url: https://mail.openjdk.org/pipermail/hotspot-jfr-dev/2023-July/005195.html
-
-  # Supporting case: the compile queue throttles its producers
-  - id: ct-throttle
-    text: "The rationale is that by the time a method gets compiled it can become unused, so it doesn't make sense to put too much onto the queue."
-    url: https://raw.githubusercontent.com/openjdk/jdk/2114527fec4758c483744322fbfb773d69ac754f/hotspot/src/share/vm/runtime/advancedThresholdPolicy.hpp
-  - id: ct-duplicate
-    text: "If this method is already in the compile queue"
-    url: https://raw.githubusercontent.com/openjdk/jdk/815ff4dc327fe17f2433c7d115a5a503af10f3c4/src/hotspot/share/compiler/compileBroker.cpp
-  - id: ct-750k
-    text: "may compile >750K methods in the first hour after startup with JDK 21. With JDK 25, it only compiles ~370K methods in the first hour."
-    url: https://bugs.openjdk.org/browse/JDK-8368071
-  - id: ct-8h
-    text: "with JDK 25 it takes 8 hours to warm up this application to the same level"
-    url: https://bugs.openjdk.org/browse/JDK-8368071
-  - id: ct-culprit
-    text: "to adjust the scale based on code cache usage and compilation queue size"
-    url: https://bugs.openjdk.org/browse/JDK-8368071
 
   # The author's own measured posts, linked inline
   - id: own-oom
@@ -255,21 +209,6 @@ versions:
   - id: stall-hang-fix
     commit: c968a672c03
     expect_first_tag: jdk-26+15
-  - id: jfr-initial
-    commit: a060be188df
-    expect_first_tag: jdk-11+14
-  - id: jfr-raii-fix
-    commit: 61932f49a58
-    expect_first_tag: jdk-22+7
-  - id: ct-policy-2011
-    commit: 2114527fec4
-    expect_first_tag: jdk7-b135
-  - id: jep515
-    commit: e3f85c961b4
-    expect_first_tag: jdk-25+26
-  - id: ct-fix
-    commit: bdfe05b595d
-    expect_first_tag: jdk-26+17
 
 forbidden:
   - pattern: "(?i)three times"
@@ -286,13 +225,5 @@ forbidden:
   - pattern: "(?i)\\bcrash"
     near: "8269865"
     why: "the semaphore overflow was a debug-build assertion in a gtest run, not a field crash"
-  - pattern: "(?i)\\bcrash"
-    near: "8244289"
-    why: "the JFR lock leak surfaced as a debug-build assertion; no field crash on record"
   - pattern: "(?i)before the (consumer|writer|output|logging) thread (was |had )?(been )?start"
     why: "the 8362282 mechanism (a producer stalling before the writer started) is an inference, not stated in the bug"
-  - pattern: "(?i)(went|go|gone|became) stale"
-    near: "8368071"
-    why: "no mechanism for the compile-queue regression is on record; stale-request explanation is inference"
-  - pattern: "(?i)JFR (drops|discards|chose|picked) the oldest because"
-    why: "JFR's drop-oldest rationale is one JEP sentence; do not attribute a reason beyond it"
