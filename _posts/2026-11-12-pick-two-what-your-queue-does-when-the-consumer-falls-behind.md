@@ -35,7 +35,7 @@ When Liu reposted the design against the current JDK in February 2020, he made i
 
 > It doesn't drop any message. It's because I observe that asynchronous task is so fast that it doesn't need much memory to buffer all messages in the interval.
 
-Underneath, "A mutex-protected FIFO stores all asynchronous log messages." It was a linked list behind a lock, with no limit. The reasoning holds only while the consumer keeps up, when you need no overload policy at all. Once it falls behind, an unbounded queue has no steady state; mine reached 64.6 GB of resident memory in 38 seconds.
+Underneath, "A mutex-protected FIFO stores all asynchronous log messages." It was a linked list behind a lock, with no limit. The reasoning holds only while the consumer keeps up, when you need no overload policy at all. Once the consumer falls behind, an unbounded queue has no steady state; mine reached 64.6 GB of resident memory in 38 seconds.
 
 Liu's internal users raised the same worry ten days later, and [his update](https://mail.openjdk.org/pipermail/hotspot-runtime-dev/2020-March/038495.html) conceded it: "If writing to filesystem stalls infinitely, JVM may implode because of memory usage." The second answer was a memory quota: "It will start dropping early messages of the FIFO if it has consumed too many free memories."
 
