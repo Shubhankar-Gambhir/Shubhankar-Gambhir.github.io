@@ -1,6 +1,6 @@
 ---
 title: "The Backlog: What Falling Behind Costs an Unbounded Queue"
-date: 2026-11-04
+date: 2026-09-22
 categories: [C++, Performance]
 tags: [concurrency, queue, payload, memcpy, glibc, malloc, page-faults, ring-buffer, benchmarks, arm]
 description: >-
@@ -16,7 +16,7 @@ image:
 
 The five queues in my lab all copy each item twice: into storage the queue owns on push, and out to the consumer on pop. They differ in what they hold while they copy. `TwoLockQueue` moves the value out while it holds the head lock, so every other consumer waits through the copy; `TwoLockQueueDeferred` is the same queue with that move pushed past the unlock. The other three are a `std::deque` behind one mutex (`MutexQueue`), a linked list behind one mutex (`MutexLinkedQueue`), and a bounded lock-free ring.
 
-On a two-socket Xeon, [moving that one copy out of the lock]({% post_url 2026-10-27-the-copy-and-the-backlog-what-a-bigger-payload-does-to-a-concurrent-queue %}) made the two-lock queue 1.54x faster at 4 KB with four consumers, but only with glibc's heap trimming switched off. Under default settings, glibc 2.28's allocator was a coin flip: each process landed in a fast mode or one up to seven times slower, and that swamped the copy. The payloads are `std::array<char, N>` from 8 bytes to 4 KB, and "trimming off" here means `glibc.malloc.trim_threshold` set to 16 GB, plus a 1 GB `top_pad`.
+On a two-socket Xeon, [moving that one copy out of the lock]({% post_url 2026-09-10-the-copy-and-the-backlog-what-a-bigger-payload-does-to-a-concurrent-queue %}) made the two-lock queue 1.54x faster at 4 KB with four consumers, but only with glibc's heap trimming switched off. Under default settings, glibc 2.28's allocator was a coin flip: each process landed in a fast mode or one up to seven times slower, and that swamped the copy. The payloads are `std::array<char, N>` from 8 bytes to 4 KB, and "trimming off" here means `glibc.malloc.trim_threshold` set to 16 GB, plus a 1 GB `top_pad`.
 
 ## What the Copy Compiles To
 
@@ -76,11 +76,11 @@ The same thing happens on the Xeon in fan-in, where one consumer faces fifteen p
 
 ## The Ring Does Not Care
 
-[Part 4]({% post_url 2026-08-12-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %}#where-that-leaves-the-pool) said a big payload would penalize the ring. At 4 KB it is the fastest queue in every Xeon mix in every mode, 486 to 1,437 ns, and its cost at four consumers rises from 344 ns at 8 bytes to 488 at 4 KB while `MutexQueue` goes up ninefold. On ARM it wins every 4 KB mix but one.
+[Part 4]({% post_url 2026-08-25-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %}#where-that-leaves-the-pool) said a big payload would penalize the ring. At 4 KB it is the fastest queue in every Xeon mix in every mode, 486 to 1,437 ns, and its cost at four consumers rises from 344 ns at 8 bytes to 488 at 4 KB while `MutexQueue` goes up ninefold. On ARM it wins every 4 KB mix but one.
 
 The ring copies exactly as much as everyone else. What it never does is ask for memory: its cells are allocated once, up front, and when they are all full the producers wait instead of growing a backlog. The allocator has nothing to trim or fault back in.
 
-The exception is the oversubscribed one. At 16P x 16C on 16 ARM cores the ring takes 1,423 ns against the deferred variant's 889: a preempted thread holding a claimed cell stalls the sequence handoff for everyone behind it, where a mutex would let them sleep. The same dip is in [Part 4's ARM table]({% post_url 2026-08-12-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %}#the-ring) with `int64_t`: 763 ns at 16P x 16C, against 486 for the deque.
+The exception is the oversubscribed one. At 16P x 16C on 16 ARM cores the ring takes 1,423 ns against the deferred variant's 889: a preempted thread holding a claimed cell stalls the sequence handoff for everyone behind it, where a mutex would let them sleep. The same dip is in [Part 4's ARM table]({% post_url 2026-08-25-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %}#the-ring) with `int64_t`: 763 ns at 16P x 16C, against 486 for the deque.
 
 ## Two Layers
 
@@ -96,4 +96,4 @@ Hardware: Intel Xeon Gold 6130 @ 2.10 GHz (2x16 cores, Skylake, two NUMA nodes, 
 Compilers: GCC 13.4.0 (x86), GCC 13.3.0 (ARM). Flags: `-std=c++17 -O2 -Wall -Wextra -pthread`, no `-march`, identical on both architectures, linked with `-static-libstdc++` so `std::string` runs each compiler's own runtime. No code-alignment flags, to match Parts 1 to 4. An `-O3` spot check (4P x 4C and 15P x 1C at 8, 512 and 4096 bytes) agreed with `-O2` within run-to-run spread.
 Methodology: 1M items per producer, 5 runs after warmup, median reported, threads pinned to consecutive core ids (which interleaves the Xeon's two NUMA nodes), synchronized start, count and checksum invariant. Payloads up to 512 bytes come from a sweep with all variants in one process; from 1 KB up, every variant ran in its own process, with default glibc and with `GLIBC_TUNABLES=glibc.malloc.trim_threshold=17179869184:glibc.malloc.top_pad=1073741824`. An `int64_t` baseline through the new harness matched Part 4's Xeon table within about 10 percent except the 1P x 1C cells, which are noisy on this machine. ARM ran `std::array` only, on two instances. Missing ARM cells: 15P x 1C at 4 KB (backlog exceeds RAM) and `TwoLockQueue` at 16P x 16C, 4 KB, trimming off (out of memory).
 
-**Previously:** [The Copy: What a Bigger Payload Does to a Concurrent Queue]({% post_url 2026-10-27-the-copy-and-the-backlog-what-a-bigger-payload-does-to-a-concurrent-queue %})
+**Previously:** [The Copy: What a Bigger Payload Does to a Concurrent Queue]({% post_url 2026-09-10-the-copy-and-the-backlog-what-a-bigger-payload-does-to-a-concurrent-queue %})

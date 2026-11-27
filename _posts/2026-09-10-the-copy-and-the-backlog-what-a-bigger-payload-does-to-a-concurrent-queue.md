@@ -1,6 +1,6 @@
 ---
 title: "The Copy: What a Bigger Payload Does to a Concurrent Queue"
-date: 2026-10-27
+date: 2026-09-10
 categories: [C++, Performance]
 tags: [concurrency, queue, payload, memcpy, glibc, malloc, page-faults, ring-buffer, benchmarks]
 description: >-
@@ -14,17 +14,17 @@ image:
   hero: false
 ---
 
-At sixteen producers, sixteen consumers and 4 KB items, one of the queues in this experiment reached 64.6 GB of resident memory in 38 seconds before the kernel's OOM killer took it. [The follow-up post]({% post_url 2026-11-04-the-backlog-what-falling-behind-costs-an-unbounded-queue %}) explains why; this one starts with a much smaller question.
+At sixteen producers, sixteen consumers and 4 KB items, one of the queues in this experiment reached 64.6 GB of resident memory in 38 seconds before the kernel's OOM killer took it. [The follow-up post]({% post_url 2026-09-22-the-backlog-what-falling-behind-costs-an-unbounded-queue %}) explains why; this one starts with a much smaller question.
 
-The [previous post]({% post_url 2026-08-12-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %}) ended with a prediction. All the measurements so far moved an `int64_t`, which "flatters the linked variants, which hand around pointers to nodes, and penalizes the ring, which copies values into cells." A payload that costs real money to copy should move the ranking. So I made the payload expensive, from 8 bytes up to 4 KB, and measured five queues on the same two machines.
+The [previous post]({% post_url 2026-08-25-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %}) ended with a prediction. All the measurements so far moved an `int64_t`, which "flatters the linked variants, which hand around pointers to nodes, and penalizes the ring, which copies values into cells." A payload that costs real money to copy should move the ranking. So I made the payload expensive, from 8 bytes up to 4 KB, and measured five queues on the same two machines.
 
-The ranking moved, but not the way [Part 4]({% post_url 2026-08-12-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %}) said it would, and my first reading of the new numbers was wrong too. The first sweep made copy location look like a fivefold effect. Most of that was glibc's allocator, which on the Xeon swung the same cell between fast and seven times slower from one process to the next. Hold the allocator still and a smaller copy effect is left. This post stays on the Xeon. On the ARM machines' newer glibc the allocator stops being a coin flip, and that copy effect shows through on its own, which is where [the next one]({% post_url 2026-11-04-the-backlog-what-falling-behind-costs-an-unbounded-queue %}) picks up.
+The ranking moved, but not the way [Part 4]({% post_url 2026-08-25-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %}) said it would, and my first reading of the new numbers was wrong too. The first sweep made copy location look like a fivefold effect. Most of that was glibc's allocator, which on the Xeon swung the same cell between fast and seven times slower from one process to the next. Hold the allocator still and a smaller copy effect is left. This post stays on the Xeon. On the ARM machines' newer glibc the allocator stops being a coin flip, and that copy effect shows through on its own, which is where [the next one]({% post_url 2026-09-22-the-backlog-what-falling-behind-costs-an-unbounded-queue %}) picks up.
 
 Everything here reproduces from the [companion repo](https://github.com/Shubhankar-Gambhir/concurrent-data-structures-cpp) with `scripts/run_part3.sh`.
 
 ## A Correction to Part 4
 
-In [Part 4]({% post_url 2026-08-12-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %}) I wrote that the linked queues hand around pointers. They don't. Here is `TwoLockQueue`, the Michael-Scott design from [Part 1]({% post_url 2026-07-07-a-deep-dive-into-producer-consumer-queues %}), unchanged:
+In [Part 4]({% post_url 2026-08-25-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %}) I wrote that the linked queues hand around pointers. They don't. Here is `TwoLockQueue`, the Michael-Scott design from [Part 1]({% post_url 2026-07-07-a-deep-dive-into-producer-consumer-queues %}), unchanged:
 
 ```cpp
 bool push(const T& v) {
@@ -149,16 +149,16 @@ The second control is `std::string`. Its move is a pointer swap of about 32 byte
 
 `MutexQueue` copies on push inside its lock, so taking the copy away helps by up to 2.2x. `TwoLockQueue` already copies before it takes the lock, so the same change is noise.
 
-On the ARM instances, the same 4 KB copy inside the head lock decides whether the consumers keep up with the producers. [The Backlog: What Falling Behind Costs an Unbounded Queue]({% post_url 2026-11-04-the-backlog-what-falling-behind-costs-an-unbounded-queue %}) is what happens when they don't.
+On the ARM instances, the same 4 KB copy inside the head lock decides whether the consumers keep up with the producers. [The Backlog: What Falling Behind Costs an Unbounded Queue]({% post_url 2026-09-22-the-backlog-what-falling-behind-costs-an-unbounded-queue %}) is what happens when they don't.
 
 ---
 
 Companion repo: [github.com/Shubhankar-Gambhir/concurrent-data-structures-cpp](https://github.com/Shubhankar-Gambhir/concurrent-data-structures-cpp)
 
-Hardware: Intel Xeon Gold 6130 @ 2.10 GHz (2x16 cores, Skylake, two NUMA nodes, 187 GB, glibc 2.28 from the machine's stock OS, the same box as Parts 1 to 4); two ARM Neoverse-N1 cloud instances (16 cores, single NUMA node, 62 GB, Ubuntu 24.04, glibc 2.39), whose results are in [The Backlog: What Falling Behind Costs an Unbounded Queue]({% post_url 2026-11-04-the-backlog-what-falling-behind-costs-an-unbounded-queue %}). 16P x 16C is 32 threads on both, which oversubscribes ARM's 16 cores.
+Hardware: Intel Xeon Gold 6130 @ 2.10 GHz (2x16 cores, Skylake, two NUMA nodes, 187 GB, glibc 2.28 from the machine's stock OS, the same box as Parts 1 to 4); two ARM Neoverse-N1 cloud instances (16 cores, single NUMA node, 62 GB, Ubuntu 24.04, glibc 2.39), whose results are in [The Backlog: What Falling Behind Costs an Unbounded Queue]({% post_url 2026-09-22-the-backlog-what-falling-behind-costs-an-unbounded-queue %}). 16P x 16C is 32 threads on both, which oversubscribes ARM's 16 cores.
 Compilers: GCC 13.4.0. Flags: `-std=c++17 -O2 -Wall -Wextra -pthread`, no `-march`, linked with `-static-libstdc++` so `std::string` runs the compiler's own runtime. No code-alignment flags, to match Parts 1 to 4. An `-O3` spot check (4P x 4C and 15P x 1C at 8, 512 and 4096 bytes) agreed with `-O2` within run-to-run spread.
 Methodology: 1M items per producer, 5 runs after warmup, median reported, threads pinned to consecutive core ids (which interleaves the Xeon's two NUMA nodes), synchronized start, count and checksum invariant. Payloads up to 512 bytes come from a sweep with all variants in one process; from 1 KB up, every variant ran in its own process, with default glibc and with `GLIBC_TUNABLES=glibc.malloc.trim_threshold=17179869184:glibc.malloc.top_pad=1073741824`. An `int64_t` baseline through the new harness matched Part 4's Xeon table within about 10 percent except the 1P x 1C cells, which are noisy on this machine. Re-running the 1 KB trimming-off cells two weeks later moved the 8P x 8C ratio from 0.97x to 1.11x, so treat single-cell differences of that size as noise. The single-consumer slowdown of `TwoLockQueueDeferred` on the Xeon is measured but unexplained.
 
-**Previously:** [The Ring That Doesn't Allocate: Benchmarking a Bounded MPMC Queue]({% post_url 2026-08-12-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %})
+**Previously:** [The Ring That Doesn't Allocate: Benchmarking a Bounded MPMC Queue]({% post_url 2026-08-25-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %})
 
-**Next:** [The Backlog: What Falling Behind Costs an Unbounded Queue]({% post_url 2026-11-04-the-backlog-what-falling-behind-costs-an-unbounded-queue %})
+**Next:** [The Backlog: What Falling Behind Costs an Unbounded Queue]({% post_url 2026-09-22-the-backlog-what-falling-behind-costs-an-unbounded-queue %})

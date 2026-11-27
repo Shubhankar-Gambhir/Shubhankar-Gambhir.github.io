@@ -15,7 +15,7 @@ image:
   hero: false
 ---
 
-My last queue post ended with an unbounded queue growing until the kernel killed it ([The Backlog]({% post_url 2026-11-04-the-backlog-what-falling-behind-costs-an-unbounded-queue %})). The obvious fix is to bound it, which just moves the question: once it's full, what gives?
+My last queue post ended with an unbounded queue growing until the kernel killed it ([The Backlog]({% post_url 2026-09-22-the-backlog-what-falling-behind-costs-an-unbounded-queue %})). The obvious fix is to bound it, which just moves the question: once it's full, what gives?
 
 Between 2020 and 2025, the JVM's asynchronous logger gave four answers. The first, proposed for mainline, was to make room, and it lasted ten days. The second threw away the oldest message, the third the newest, and the fourth, which shipped in JDK 25, lets whoever starts the JVM choose between dropping and making the logging thread wait.
 
@@ -185,6 +185,6 @@ Sources: HotSpot code is linked at `jdk-27-ga` (815ff4dc). Versions are the firs
 
 No benchmarks here: every number is quoted from the linked sources. The sketch omits its `#include`s; the linked harness compiles as is.
 
-**Previously:** [HotSpot for C++ Programmers: The Queue Inside a Java Pointer Store]({% post_url 2026-10-15-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store %})
+**Previously:** [HotSpot for C++ Programmers: The Queue Inside a Java Pointer Store]({% post_url 2026-10-28-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store %})
 
 **Next:** Two Commits, One Day: The Queue HotSpot Added and the Queue It Deleted (coming soon)

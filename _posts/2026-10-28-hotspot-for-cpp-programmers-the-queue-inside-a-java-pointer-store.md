@@ -1,6 +1,6 @@
 ---
 title: "HotSpot for C++ Programmers: The Queue Inside a Java Pointer Store"
-date: 2026-10-15
+date: 2026-10-28
 categories: [C++, Concurrency]
 tags: [hotspot, jvm, openjdk, garbage-collection, g1, satb, write-barrier, assembly, concurrency, queue]
 description: >-
@@ -17,7 +17,7 @@ image:
 
 A Java pointer store looks like one `mov`. While G1 is marking, it is also a push into a per-thread log, and the push takes a dozen hand-written instructions, and not one of them is atomic.
 
-That log is the first producer-consumer queue of this series. To see why the collector needs it, you need one piece of garbage-collector theory: how to find live objects while the program keeps running. [The previous post]({% post_url 2026-10-07-hotspot-for-cpp-programmers-a-million-lines-without-std-mutex %}) covered the rest of the vocabulary used here: HotSpot's threads, its safepoints and its two JIT compilers. Source links point at the [`jdk-27-ga`](https://github.com/openjdk/jdk/tree/jdk-27-ga) tag of OpenJDK.
+That log is the first producer-consumer queue of this series. To see why the collector needs it, you need one piece of garbage-collector theory: how to find live objects while the program keeps running. [The previous post]({% post_url 2026-10-13-hotspot-for-cpp-programmers-a-million-lines-without-std-mutex %}) covered the rest of the vocabulary used here: HotSpot's threads, its safepoints and its two JIT compilers. Source links point at the [`jdk-27-ga`](https://github.com/openjdk/jdk/tree/jdk-27-ga) tag of OpenJDK.
 
 ## Finding Live Objects While the Program Keeps Running
 
@@ -36,7 +36,7 @@ sequenceDiagram
     Note over M,J: C freed while still reachable
 ```
 
-B started out pointing to C. The marker finished A before A pointed to C, and reaches B after B stopped pointing to C. C is reachable the whole time and never seen. The collector frees it, and A is left holding a dangling pointer. In C++ terms it is a use-after-free, produced by a reader traversing a structure while a writer rearranges it, the same family of bug as iterator invalidation or the [ABA problem in a lock-free stack]({% post_url 2026-07-15-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %}).
+B started out pointing to C. The marker finished A before A pointed to C, and reaches B after B stopped pointing to C. C is reachable the whole time and never seen. The collector frees it, and A is left holding a dangling pointer. In C++ terms it is a use-after-free, produced by a reader traversing a structure while a writer rearranges it, the same family of bug as iterator invalidation or the [ABA problem in a lock-free stack]({% post_url 2026-07-16-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %}).
 
 Stopping the mutators would fix it, but avoiding exactly that is the reason to mark concurrently, so the JVM fixes it with a barrier instead.
 
@@ -52,7 +52,7 @@ While marking is running, every pointer store in every Java thread is now also a
 static void store(Node n, Object v) { n.ref = v; }
 ```
 
-and this is what [C2]({% post_url 2026-10-07-hotspot-for-cpp-programmers-a-million-lines-without-std-mutex %}#tiered-compilation) compiled it to on JDK 27 GA, under G1, captured with `-XX:CompileCommand=print` and the hsdis disassembler. I turned off tiered compilation and inlining so C2 compiles `store` on its own, and pinned the heap at 2 GB so compressed pointers are zero-based, which keeps a shift out of the listing (with a larger heap you will see an extra `shr $0x3` / `shl $0x3` pair). I have kept the SATB part and dropped the method frame, the null check on `n`, and the post-store barrier (which comes back in a later post, A Lock-Free Queue With One User):
+and this is what [C2]({% post_url 2026-10-13-hotspot-for-cpp-programmers-a-million-lines-without-std-mutex %}#tiered-compilation) compiled it to on JDK 27 GA, under G1, captured with `-XX:CompileCommand=print` and the hsdis disassembler. I turned off tiered compilation and inlining so C2 compiles `store` on its own, and pinned the heap at 2 GB so compressed pointers are zero-based, which keeps a shift out of the listing (with a larger heap you will see an extra `shr $0x3` / `shl $0x3` pair). I have kept the SATB part and dropped the method frame, the null check on `n`, and the post-store barrier (which comes back in a later post, A Lock-Free Queue With One User):
 
 ```nasm
 ; is marking running? (the common answer is no)
@@ -87,13 +87,13 @@ Synchronization only appears when the buffer fills, and with the default [`G1SAT
 
 > Per-thread queues obtain buffers from the qset's buffer allocator, fill them, and push them onto the qset's list. The GC concurrently pops buffers from the qset, processes them, and returns them to the buffer allocator for re-use. Both the allocator and the qset use lock-free stacks.
 
-Most of this series is already in that paragraph. Each thread's buffer gets away with no synchronization because only one thread ever writes it, and the handoff pays for synchronization once per buffer rather than once per pointer. The list that buffers are handed to has many producers and several consumers, and it is a *stack* rather than a queue, since marking does not care what order it sees things in. Then there is the memory-reclamation problem every lock-free stack runs into, which the same comment goes on to solve with something called [`GlobalCounter`]({% post_url 2026-10-07-hotspot-for-cpp-programmers-a-million-lines-without-std-mutex %}#hotspots-concurrency-toolkit). The last two posts of this series, A Lock-Free Queue With One User and Who Frees the Node?, take those apart.
+Most of this series is already in that paragraph. Each thread's buffer gets away with no synchronization because only one thread ever writes it, and the handoff pays for synchronization once per buffer rather than once per pointer. The list that buffers are handed to has many producers and several consumers, and it is a *stack* rather than a queue, since marking does not care what order it sees things in. Then there is the memory-reclamation problem every lock-free stack runs into, which the same comment goes on to solve with something called [`GlobalCounter`]({% post_url 2026-10-13-hotspot-for-cpp-programmers-a-million-lines-without-std-mutex %}#hotspots-concurrency-toolkit). The last two posts of this series, A Lock-Free Queue With One User and Who Frees the Node?, take those apart.
 
 The collectors differ here. Parallel and Serial, HotSpot's simpler collectors, mark only while the application is stopped, so they need no SATB barrier at all. ZGC, the low-latency collector, does mark concurrently, but with its own design: colored pointers, a load barrier and a store barrier, and a separate per-thread [store-barrier buffer](https://github.com/openjdk/jdk/blob/jdk-27-ga/src/hotspot/share/gc/z/zStoreBarrierBuffer.hpp#L41) instead of G1's SATB queue. Since [JEP 490](https://openjdk.org/jeps/490) removed ZGC's older non-generational mode in JDK 24, that store barrier is the only ZGC there is. Everything in this section describes G1 and Shenandoah.
 
 ## Glossary
 
-The table covers both posts. The [thread cast]({% post_url 2026-10-07-hotspot-for-cpp-programmers-a-million-lines-without-std-mutex %}#the-thread-cast), [safepoints and handshakes]({% post_url 2026-10-07-hotspot-for-cpp-programmers-a-million-lines-without-std-mutex %}#stopping-threads-safepoints-and-handshakes) and [tiered compilation]({% post_url 2026-10-07-hotspot-for-cpp-programmers-a-million-lines-without-std-mutex %}#tiered-compilation) have their full explanations in the previous post.
+The table covers both posts. The [thread cast]({% post_url 2026-10-13-hotspot-for-cpp-programmers-a-million-lines-without-std-mutex %}#the-thread-cast), [safepoints and handshakes]({% post_url 2026-10-13-hotspot-for-cpp-programmers-a-million-lines-without-std-mutex %}#stopping-threads-safepoints-and-handshakes) and [tiered compilation]({% post_url 2026-10-13-hotspot-for-cpp-programmers-a-million-lines-without-std-mutex %}#tiered-compilation) have their full explanations in the previous post.
 
 | Term | Meaning |
 |---|---|
@@ -148,6 +148,6 @@ Run with `-XX:+UseG1GC -Xms2g -Xmx2g -XX:+UnlockDiagnosticVMOptions -XX:-TieredC
 
 Hardware: Intel Xeon Gold 6130 @ 2.10 GHz, Linux 5.15.
 
-**Previously:** [HotSpot for C++ Programmers: A Million Lines Without std::mutex]({% post_url 2026-10-07-hotspot-for-cpp-programmers-a-million-lines-without-std-mutex %})
+**Previously:** [HotSpot for C++ Programmers: A Million Lines Without std::mutex]({% post_url 2026-10-13-hotspot-for-cpp-programmers-a-million-lines-without-std-mutex %})
 
 **Next:** [Pick Two: What Your Queue Does When the Consumer Falls Behind]({% post_url 2026-11-12-pick-two-what-your-queue-does-when-the-consumer-falls-behind %})

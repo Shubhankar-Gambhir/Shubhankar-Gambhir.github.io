@@ -1,6 +1,6 @@
 ---
 title: "The Ring That Doesn't Allocate: Benchmarking a Bounded MPMC Queue"
-date: 2026-08-12
+date: 2026-08-25
 categories: [C++, Performance]
 tags: [concurrency, queue, lock-free, ring-buffer, cas, atomics, benchmarks, arm]
 description: >-
@@ -14,7 +14,7 @@ image:
   hero: false
 ---
 
-The ring in this post is [Dmitry Vyukov's bounded MPMC queue](https://www.1024cores.net/home/lock-free-algorithms/queues/bounded-mpmc-queue): a fixed array of cells allocated once in the constructor, a shared counter, `_enq`, that hands out tickets, and a sequence number in every cell that tells whoever holds a ticket whether the cell is theirs yet. In steady state it touches no allocator and takes no lock. The [previous post]({% post_url 2026-07-29-taking-the-lock-out-of-the-pool-and-building-a-ring-instead %}) walks through the code.
+The ring in this post is [Dmitry Vyukov's bounded MPMC queue](https://www.1024cores.net/home/lock-free-algorithms/queues/bounded-mpmc-queue): a fixed array of cells allocated once in the constructor, a shared counter, `_enq`, that hands out tickets, and a sequence number in every cell that tells whoever holds a ticket whether the cell is theirs yet. In steady state it touches no allocator and takes no lock. The [previous post]({% post_url 2026-08-04-taking-the-lock-out-of-the-pool-and-building-a-ring-instead %}) walks through the code.
 
 Its competition is the rest of the queue lab. From [Part 1]({% post_url 2026-07-07-a-deep-dive-into-producer-consumer-queues %}) come a `std::deque` behind one mutex and a two-lock linked queue that calls `new`/`delete` for every node. The third is that two-lock queue drawing its nodes from a lock-free pool, which, like the mutex pool and the sharded pool before it, mostly lost to plain `new`/`delete`. Every variant moves `int64_t` items through one shared harness across nine producer/consumer mixes, on a two-socket Xeon and a 16-core ARM machine, and the ring runs at two capacities, 1024 and 65536 slots.
 
@@ -74,7 +74,7 @@ I do not know which run is representative. My best reading is that this particul
 
 Three attempts to make allocation cheaper, and the thing that won on both machines was the ring, which doesn't allocate.
 
-There is one more thread to pull. Every queue here moves an `int64_t`, which is the friendliest possible payload: it fits in a register, copies for free, and makes the synchronization the entire cost. That is what I wanted for measuring locks, but it flatters the linked variants, which hand around pointers to nodes, and penalizes the ring, which copies values into cells. A payload that costs real money to copy should move the ranking, possibly a lot. That is the next thing to measure. (It did move the ranking, though not the way I predicted here: see [The Copy: What a Bigger Payload Does to a Concurrent Queue]({% post_url 2026-10-27-the-copy-and-the-backlog-what-a-bigger-payload-does-to-a-concurrent-queue %}).)
+There is one more thread to pull. Every queue here moves an `int64_t`, which is the friendliest possible payload: it fits in a register, copies for free, and makes the synchronization the entire cost. That is what I wanted for measuring locks, but it flatters the linked variants, which hand around pointers to nodes, and penalizes the ring, which copies values into cells. A payload that costs real money to copy should move the ranking, possibly a lot. That is the next thing to measure. (It did move the ranking, though not the way I predicted here: see [The Copy: What a Bigger Payload Does to a Concurrent Queue]({% post_url 2026-09-10-the-copy-and-the-backlog-what-a-bigger-payload-does-to-a-concurrent-queue %}).)
 
 ---
 
@@ -84,6 +84,6 @@ Hardware: Intel Xeon Gold 6130 @ 2.10 GHz (2x16 cores, Skylake, two NUMA nodes);
 Compilers: GCC 13.4.0 (x86), GCC 13.3.0 (ARM). Flags: `-std=c++17 -O2 -Wall -Wextra -pthread`, identical on both architectures (no `-march`) for a clean cross-architecture comparison.
 Methodology: 1M items per producer, 5 runs after warmup, median reported, each thread pinned to its own core by consecutive core id (which interleaves the Xeon's two NUMA nodes, so multi-thread runs span both sockets), synchronized start, post-run count and checksum invariant.
 
-**Previously:** [Taking the Lock Out of the Pool, and Building a Ring Instead]({% post_url 2026-07-29-taking-the-lock-out-of-the-pool-and-building-a-ring-instead %})
+**Previously:** [Taking the Lock Out of the Pool, and Building a Ring Instead]({% post_url 2026-08-04-taking-the-lock-out-of-the-pool-and-building-a-ring-instead %})
 
-**Next:** [The Copy: What a Bigger Payload Does to a Concurrent Queue]({% post_url 2026-10-27-the-copy-and-the-backlog-what-a-bigger-payload-does-to-a-concurrent-queue %})
+**Next:** [The Copy: What a Bigger Payload Does to a Concurrent Queue]({% post_url 2026-09-10-the-copy-and-the-backlog-what-a-bigger-payload-does-to-a-concurrent-queue %})

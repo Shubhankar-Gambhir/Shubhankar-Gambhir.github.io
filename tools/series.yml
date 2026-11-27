@@ -1,15 +1,15 @@
 queues:
   - 2026-07-07-a-deep-dive-into-producer-consumer-queues
-  - 2026-07-15-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring
-  - 2026-07-29-taking-the-lock-out-of-the-pool-and-building-a-ring-instead
-  - 2026-08-12-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue
-  - 2026-10-27-the-copy-and-the-backlog-what-a-bigger-payload-does-to-a-concurrent-queue
-  - 2026-11-04-the-backlog-what-falling-behind-costs-an-unbounded-queue
+  - 2026-07-16-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring
+  - 2026-08-04-taking-the-lock-out-of-the-pool-and-building-a-ring-instead
+  - 2026-08-25-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue
+  - 2026-09-10-the-copy-and-the-backlog-what-a-bigger-payload-does-to-a-concurrent-queue
+  - 2026-09-22-the-backlog-what-falling-behind-costs-an-unbounded-queue
 fno-rtti:
-  - 2026-07-21-the-null-slot-what-fno-rtti-actually-removes
-  - 2026-08-04-what-dynamic-cast-costs-and-which-runtime-decides
-  - 2026-08-19-what-comes-after-fno-rtti-and-how-openjdk-lives-without-rtti
+  - 2026-07-28-the-null-slot-what-fno-rtti-actually-removes
+  - 2026-08-13-what-dynamic-cast-costs-and-which-runtime-decides
+  - 2026-09-02-what-comes-after-fno-rtti-and-how-openjdk-lives-without-rtti
 hotspot:
-  - 2026-10-07-hotspot-for-cpp-programmers-a-million-lines-without-std-mutex
-  - 2026-10-15-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store
+  - 2026-10-13-hotspot-for-cpp-programmers-a-million-lines-without-std-mutex
+  - 2026-10-28-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store
   - 2026-11-12-pick-two-what-your-queue-does-when-the-consumer-falls-behind

@@ -159,7 +159,7 @@ With one lock, every consumer that wants to check for work must take that lock, 
 
 Fan-in is where it backfires, and the reason is that the two-lock design's benefit and its cost come due at different times. Its benefit is decoupling: keeping the consumers from starving the producer. Under fan-in there is no starvation to prevent, because the lone consumer always finds work and the many producers serialize on `_t` exactly as they would on a single lock. The cost, though, is always present: a second lock on its own cache line plus the atomic `next` handoff, extra coordination that has to move between threads on every operation.
 
-The cross-architecture data tells you that cost is the socket crossing. On the single-NUMA-node ARM machine, the two-lock queue wins fan-in too (321 ns versus 378 ns at 15P x 1C), because moving a lock line between cores within one node is cheap. The fan-in penalty appears only on the two-socket Xeon, where every contended line has to cross the interconnect between NUMA nodes. I did not confirm this with performance counters; the socket-crossing account is an inference from the ARM control. The throughput numbers themselves are solid and repeatable. (Part 4 [revisits this]({% post_url 2026-08-12-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %}#a-correction-to-part-1).)
+The cross-architecture data tells you that cost is the socket crossing. On the single-NUMA-node ARM machine, the two-lock queue wins fan-in too (321 ns versus 378 ns at 15P x 1C), because moving a lock line between cores within one node is cheap. The fan-in penalty appears only on the two-socket Xeon, where every contended line has to cross the interconnect between NUMA nodes. I did not confirm this with performance counters; the socket-crossing account is an inference from the ARM control. The throughput numbers themselves are solid and repeatable. (Part 4 [revisits this]({% post_url 2026-08-25-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %}#a-correction-to-part-1).)
 
 The deque baseline makes the same point from the other direction. Under fan-out it collapses:
 
@@ -229,7 +229,7 @@ On the Xeon the pooling picture is muddier. The penalty is still there in the fa
 
 ## One Suspect Left
 
-There is one suspect left standing. If a shared, locked free list loses to `malloc`, and a sharded, locked one still loses, the question is whether the lock is the only problem or whether pooling itself is a dead end for this workload. The way to find out is to take the lock away entirely: a lock-free free list built on a compare-and-swap loop, and then a bounded ring buffer that never allocates in steady state. That starts in the [next post]({% post_url 2026-07-15-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %}), where lock-free finally has something to prove.
+There is one suspect left standing. If a shared, locked free list loses to `malloc`, and a sharded, locked one still loses, the question is whether the lock is the only problem or whether pooling itself is a dead end for this workload. The way to find out is to take the lock away entirely: a lock-free free list built on a compare-and-swap loop, and then a bounded ring buffer that never allocates in steady state. That starts in the [next post]({% post_url 2026-07-16-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %}), where lock-free finally has something to prove.
 
 ---
 
@@ -239,4 +239,4 @@ Hardware: Intel Xeon Gold 6130 @ 2.10 GHz (2x16 cores, Skylake, two NUMA nodes);
 Compilers: GCC 13.4.0 (x86), GCC 13.3.0 (ARM). Flags: `-std=c++17 -O2 -Wall -Wextra -pthread`, identical on both architectures (no `-march`) for a clean cross-architecture comparison.
 Methodology: 1M items per producer, 5 runs after warmup, median reported, each thread pinned to its own core by consecutive core id (which interleaves the Xeon's two NUMA nodes, so multi-thread runs span both sockets), synchronized start, post-run count and checksum invariant.
 
-**Next:** [Lock-Free Is Not Free: ABA and Tagged Pointers]({% post_url 2026-07-15-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %})
+**Next:** [Lock-Free Is Not Free: ABA and Tagged Pointers]({% post_url 2026-07-16-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %})

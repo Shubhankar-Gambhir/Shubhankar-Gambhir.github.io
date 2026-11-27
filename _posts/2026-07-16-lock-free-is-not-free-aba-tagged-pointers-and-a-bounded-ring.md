@@ -1,6 +1,6 @@
 ---
 title: "Lock-Free Is Not Free: ABA and Tagged Pointers"
-date: 2026-07-15
+date: 2026-07-16
 categories: [C++, Performance]
 tags: [concurrency, queue, lock-free, aba, treiber-stack, tagged-pointer, cas, atomics, benchmarks, arm]
 description: >-
@@ -16,7 +16,7 @@ image:
 
 The [previous post]({% post_url 2026-07-07-a-deep-dive-into-producer-consumer-queues %}) ended with one suspect still standing. A node pool guarded by a mutex lost to plain `new`/`delete`. Sharding that pool sixteen ways recovered some of the loss and still lost. The open question was whether the lock was the only problem, or whether pooling is simply a dead end for this workload. The way to settle it is to take the lock away.
 
-So I did, twice. First by replacing the free list's mutex with a lock-free Treiber stack, which is the move everyone reaches for. Then by deleting the allocation question entirely with a bounded ring buffer that touches no allocator at all in steady state, which has [a post of its own]({% post_url 2026-08-12-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %}).
+So I did, twice. First by replacing the free list's mutex with a lock-free Treiber stack, which is the move everyone reaches for. Then by deleting the allocation question entirely with a bounded ring buffer that touches no allocator at all in steady state, which has [a post of its own]({% post_url 2026-08-25-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %}).
 
 The first attempt lost 83 percent of the items pushed through it, and my test suite told me it was fine. That is this post.
 
@@ -143,7 +143,7 @@ That assert is not decoration. "Pointers are 48 bits" describes a default, not t
 
 Sixteen bits of version wraps every 65,536 modifications, so ABA is not eliminated, only made astronomically unlikely. An interfering thread would have to perform an exact multiple of 65,536 free-list operations inside another thread's compare-exchange window. A 128-bit tagged pointer removes the wrap; hazard pointers or epoch-based reclamation remove the whole class of problem by making it safe to touch a node that might have been recycled. The repo implements none of those, and if you need a guarantee rather than a probability you should reach for one of them instead of this. What I have survives thirty consecutive runs of the full test suite on both benchmark machines and forty on the EPYC box, which is enough to benchmark with and is not a proof.
 
-That was the bar I needed, because the question this post started from is still open. Part 1's pools lost to plain `new`/`delete` with mutexes inside them, and a correct lock-free free list is the fair way to ask whether the mutexes were the reason. The [next post]({% post_url 2026-07-29-taking-the-lock-out-of-the-pool-and-building-a-ring-instead %}) runs it against all three earlier designs on the Xeon and on the ARM machine.
+That was the bar I needed, because the question this post started from is still open. Part 1's pools lost to plain `new`/`delete` with mutexes inside them, and a correct lock-free free list is the fair way to ask whether the mutexes were the reason. The [next post]({% post_url 2026-08-04-taking-the-lock-out-of-the-pool-and-building-a-ring-instead %}) runs it against all three earlier designs on the Xeon and on the ARM machine.
 
 ---
 
@@ -155,4 +155,4 @@ ABA rates: 20 trials per mix at 100k items per producer, reported as absolute de
 
 **Previously:** [A Deep Dive into Producer-Consumer Queues in C++]({% post_url 2026-07-07-a-deep-dive-into-producer-consumer-queues %})
 
-**Next:** [Taking the Lock Out of the Pool, and Building a Ring Instead]({% post_url 2026-07-29-taking-the-lock-out-of-the-pool-and-building-a-ring-instead %})
+**Next:** [Taking the Lock Out of the Pool, and Building a Ring Instead]({% post_url 2026-08-04-taking-the-lock-out-of-the-pool-and-building-a-ring-instead %})

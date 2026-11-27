@@ -1,6 +1,6 @@
 ---
 title: "HotSpot for C++ Programmers: A Million Lines Without std::mutex"
-date: 2026-10-07
+date: 2026-10-13
 categories: [C++, Concurrency]
 tags: [hotspot, jvm, openjdk, threads, safepoint, handshake, jit, atomics, concurrency]
 description: >-
@@ -19,7 +19,7 @@ HotSpot, the virtual machine at the core of OpenJDK, is roughly a million lines 
 
 After a few posts benchmarking [my own C++ queues]({% post_url 2026-07-07-a-deep-dive-into-producer-consumer-queues %}), I wanted to see how a real system makes the same trade-offs, and how a large open-source project actually implements them.
 
-Inside HotSpot are about a dozen producer-consumer queues, and this series takes several of them apart. The first is a per-thread log that a Java pointer store writes to while the garbage collector is marking, and [the next post]({% post_url 2026-10-15-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store %}) reads it instruction by instruction. Reading any of them takes some JVM vocabulary first, but no Java: everything we read is C++.
+Inside HotSpot are about a dozen producer-consumer queues, and this series takes several of them apart. The first is a per-thread log that a Java pointer store writes to while the garbage collector is marking, and [the next post]({% post_url 2026-10-28-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store %}) reads it instruction by instruction. Reading any of them takes some JVM vocabulary first, but no Java: everything we read is C++.
 
 All source links point at the [`jdk-27-ga`](https://github.com/openjdk/jdk/tree/jdk-27-ga) tag of OpenJDK. Where history matters, later posts will link the older tags where the old code lived.
 
@@ -66,7 +66,7 @@ The ones that matter for queues:
 | VMThread | `NonJavaThread` | A single thread that runs "VM operations": anything that needs the whole JVM stopped. | Two Commits, One Day |
 | Compiler threads | `JavaThread` | Pull methods off the compile queue and JIT them. | Two Commits, One Day |
 | GC worker threads | `NonJavaThread` | Do the collector's parallel work; they share it by stealing from each other. | Who Frees the Node? |
-| Concurrent GC threads | `NonJavaThread` | Run collector phases alongside the application, such as concurrent marking. | [the next post]({% post_url 2026-10-15-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store %}); A Lock-Free Queue With One User |
+| Concurrent GC threads | `NonJavaThread` | Run collector phases alongside the application, such as concurrent marking. | [the next post]({% post_url 2026-10-28-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store %}); A Lock-Free Queue With One User |
 | Service thread | `JavaThread` | A catch-all housekeeper that drains several event queues. | not covered in this series |
 | JFR recorder, async log writer | mixed | Drain diagnostic data that other threads produce. | [Pick Two]({% post_url 2026-11-12-pick-two-what-your-queue-does-when-the-consumer-falls-behind %}) (the async log writer) |
 
@@ -76,7 +76,7 @@ The `JavaThread` / `NonJavaThread` split decides who has to cooperate when the V
 
 Some operations need every application thread frozen at a known point: certain GC phases, deoptimizing compiled code, redefining a class. A C++ program would usually reach for a lock that everyone takes. HotSpot cannot afford that on every operation in the hot path, so it does the reverse: application threads *poll*, cheaply and often, and the VM flips a switch when it needs them to stop.
 
-A point in the code where a thread is allowed to stop is a safepoint. Stopping every Java thread at one is what people mean by a stop-the-world pause. The poll itself is tiny. Here is the one that C2, HotSpot's optimizing just-in-time compiler (more on it [under tiered compilation](#tiered-compilation)), emitted at the end of a method in the listing that [the next post]({% post_url 2026-10-15-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store %}) dissects:
+A point in the code where a thread is allowed to stop is a safepoint. Stopping every Java thread at one is what people mean by a stop-the-world pause. The poll itself is tiny. Here is the one that C2, HotSpot's optimizing just-in-time compiler (more on it [under tiered compilation](#tiered-compilation)), emitted at the end of a method in the listing that [the next post]({% post_url 2026-10-28-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store %}) dissects:
 
 ```nasm
         cmp     0x28(%r15), %rsp    ; compare the stack pointer with this thread's polling word
@@ -111,14 +111,14 @@ The last piece of vocabulary is HotSpot's own versions of the primitives you alr
 
 Every HotSpot `Mutex` has a rank, and debug builds assert that a thread always acquires locks in rank order, so a lock-order deadlock fails an assertion the first time the order is violated instead of hanging the first time two threads actually race. Every locker also says whether the VM may reach a safepoint while it waits (`_safepoint_check_flag` or `_no_safepoint_check_flag`), which is the cooperation from the safepoint section made explicit. A `Monitor` is a `Mutex` with `wait` and `notify` built in, and most of the blocking queues in this series turn out to be a `Monitor` guarding a linked list.
 
-`GlobalCounter` is the one with no standard equivalent. Readers bracket their access with a cheap critical section, a store to thread-local memory and a fence, and a writer that wants to free memory calls `write_synchronize`, which waits until every reader that might still hold a pointer to it has left. This is how HotSpot's lock-free stacks avoid ABA without [tagged pointers]({% post_url 2026-07-15-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %}#making-the-pointer-change). The thread-local GC data is less exotic than it sounds: a fixed block of bytes inside every `Thread` object that the collector owns, reached through `%r15` in compiled code, and the home of the SATB log that [the next post]({% post_url 2026-10-15-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store %}) takes apart.
+`GlobalCounter` is the one with no standard equivalent. Readers bracket their access with a cheap critical section, a store to thread-local memory and a fence, and a writer that wants to free memory calls `write_synchronize`, which waits until every reader that might still hold a pointer to it has left. This is how HotSpot's lock-free stacks avoid ABA without [tagged pointers]({% post_url 2026-07-16-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %}#making-the-pointer-change). The thread-local GC data is less exotic than it sounds: a fixed block of bytes inside every `Thread` object that the collector owns, reached through `%r15` in compiled code, and the home of the SATB log that [the next post]({% post_url 2026-10-28-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store %}) takes apart.
 
 The atomics need a warning, because the history sections in this series will link code from before and after a recent change. `Atomic<T>` is a class template added in JDK 26. Before that, HotSpot spelled every atomic operation as a static function on a plain `volatile` field, through a class that was itself called `Atomic`, and JDK 26 renamed that class to `AtomicAccess`. So `Atomic::cmpxchg(&_top, old, new)` in a JDK 21 or 25 link and `_top.compare_exchange(old, new)` in a JDK 27 link are the same operation.
 
 ---
 
-Source: OpenJDK [`jdk-27-ga`](https://github.com/openjdk/jdk/tree/jdk-27-ga) (`815ff4dc327f`). The safepoint poll comes from the barrier capture whose program and flags are in the footer of [the next post]({% post_url 2026-10-15-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store %}).
+Source: OpenJDK [`jdk-27-ga`](https://github.com/openjdk/jdk/tree/jdk-27-ga) (`815ff4dc327f`). The safepoint poll comes from the barrier capture whose program and flags are in the footer of [the next post]({% post_url 2026-10-28-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store %}).
 
 Hardware: Intel Xeon Gold 6130 @ 2.10 GHz, Linux 5.15.
 
-**Next:** [HotSpot for C++ Programmers: The Queue Inside a Java Pointer Store]({% post_url 2026-10-15-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store %})
+**Next:** [HotSpot for C++ Programmers: The Queue Inside a Java Pointer Store]({% post_url 2026-10-28-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store %})
