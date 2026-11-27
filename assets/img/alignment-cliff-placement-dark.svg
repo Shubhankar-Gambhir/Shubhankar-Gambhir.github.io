@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 304" width="720" height="304" role="img" aria-label="work(), 38 bytes, placed at offsets 0, 24, 28, 32 and 60. The fast placements stay inside one 64-byte line; every slow one crosses into the next. Window counts do not separate them." font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif">
+<rect width="720" height="304" fill="#1b1b1e"/>
+<text x="149.0" y="60" text-anchor="middle" font-size="11" fill="#9c9c9c">window 0</text>
+<text x="255.0" y="60" text-anchor="middle" font-size="11" fill="#9c9c9c">window 1</text>
+<text x="361.0" y="60" text-anchor="middle" font-size="11" fill="#9c9c9c">window 2</text>
+<text x="467.0" y="60" text-anchor="middle" font-size="11" fill="#9c9c9c">window 3</text>
+<line x1="202.0" x2="202.0" y1="66" y2="260" stroke="#38383c" stroke-width="1"/>
+<line x1="414.0" x2="414.0" y1="66" y2="260" stroke="#38383c" stroke-width="1"/>
+<line x1="96.0" x2="96.0" y1="40" y2="260" stroke="#efefef" stroke-width="2"/>
+<line x1="308.0" x2="308.0" y1="40" y2="260" stroke="#efefef" stroke-width="2"/>
+<line x1="520.0" x2="520.0" y1="40" y2="260" stroke="#efefef" stroke-width="2"/>
+<text x="202.0" y="36" text-anchor="middle" font-size="12" font-weight="600" fill="#efefef">cache line A</text>
+<text x="414.0" y="36" text-anchor="middle" font-size="12" font-weight="600" fill="#efefef">cache line A + 64</text>
+<text x="566" y="60" text-anchor="middle" font-size="12" font-weight="600" fill="#efefef">windows</text>
+<text x="628" y="60" text-anchor="middle" font-size="12" font-weight="600" fill="#efefef">lines</text>
+<text x="690" y="60" text-anchor="middle" font-size="12" font-weight="600" fill="#efefef">ns/call</text>
+<text x="16" y="93.0" font-size="12" fill="#efefef">offset 0</text>
+<rect x="96.0" y="81.0" width="125.9" height="16" rx="3" fill="#338ced"/>
+<text x="566" y="93.0" text-anchor="middle" font-size="12" fill="#efefef">2</text>
+<text x="628" y="93.0" text-anchor="middle" font-size="12" fill="#efefef">1</text>
+<text x="690" y="93.0" text-anchor="middle" font-size="12" fill="#efefef">2.39</text>
+<text x="16" y="131.0" font-size="12" fill="#efefef">offset 24</text>
+<rect x="175.5" y="119.0" width="125.9" height="16" rx="3" fill="#338ced"/>
+<text x="566" y="131.0" text-anchor="middle" font-size="12" fill="#efefef">2</text>
+<text x="628" y="131.0" text-anchor="middle" font-size="12" fill="#efefef">1</text>
+<text x="690" y="131.0" text-anchor="middle" font-size="12" fill="#efefef">2.39</text>
+<text x="16" y="169.0" font-size="12" fill="#efefef">offset 28</text>
+<rect x="188.8" y="157.0" width="125.9" height="16" rx="3" fill="#e76624"/>
+<text x="566" y="169.0" text-anchor="middle" font-size="12" fill="#efefef">3</text>
+<text x="628" y="169.0" text-anchor="middle" font-size="12" fill="#efefef">2</text>
+<text x="690" y="169.0" text-anchor="middle" font-size="12" fill="#efefef">2.87</text>
+<text x="16" y="207.0" font-size="12" fill="#efefef">offset 32</text>
+<rect x="202.0" y="195.0" width="125.9" height="16" rx="3" fill="#e76624"/>
+<text x="566" y="207.0" text-anchor="middle" font-size="12" fill="#efefef">2</text>
+<text x="628" y="207.0" text-anchor="middle" font-size="12" fill="#efefef">2</text>
+<text x="690" y="207.0" text-anchor="middle" font-size="12" fill="#efefef">2.87</text>
+<text x="16" y="245.0" font-size="12" fill="#efefef">offset 60</text>
+<rect x="294.8" y="233.0" width="125.9" height="16" rx="3" fill="#e76624"/>
+<text x="566" y="245.0" text-anchor="middle" font-size="12" fill="#efefef">3</text>
+<text x="628" y="245.0" text-anchor="middle" font-size="12" fill="#efefef">2</text>
+<text x="690" y="245.0" text-anchor="middle" font-size="12" fill="#efefef">2.87</text>
+<text x="96.0" y="278" text-anchor="middle" font-size="11" fill="#9c9c9c">0</text>
+<text x="202.0" y="278" text-anchor="middle" font-size="11" fill="#9c9c9c">32</text>
+<text x="308.0" y="278" text-anchor="middle" font-size="11" fill="#9c9c9c">64</text>
+<text x="414.0" y="278" text-anchor="middle" font-size="11" fill="#9c9c9c">96</text>
+<text x="520.0" y="278" text-anchor="middle" font-size="11" fill="#9c9c9c">128</text>
+<text x="308.0" y="296" text-anchor="middle" font-size="12" fill="#9c9c9c">byte offset from A (64-byte aligned)</text>
+</svg>

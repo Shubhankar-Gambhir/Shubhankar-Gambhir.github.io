@@ -55,6 +55,8 @@ For reference, here are the monomorphic baselines from Parts 1 and 4 (Heavy plug
 | std::variant + std::visit | 3.71 | 1.47 |
 | Decoupled CRTP | 2.42 | 2.41 |
 
+*Update (November 2026): the GCC 11 virtual baseline (2.90 ns) is one 0.478 ns placement step ([Part 7]({% post_url 2026-06-15-the-alignment-cliff-code-alignment-and-the-skylake-micro-op-cache %})) above [Part 4]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %})'s 2.39 with the same flags, so virtual's monomorphic GCC 11 to GCC 15 "improvement" is placement, not codegen. Virtual's roughly 1 ns polymorphic premium is the same on both compilers.*
+
 ## Round-Robin
 
 | Mechanism | GCC 11 (ns/call) | GCC 15 (ns/call) |
@@ -119,7 +121,7 @@ Virtual dispatch nearly doubled from its round-robin number (3.05 to 5.58 on GCC
 
 That accounts for less of the jump than it first appears. At one miss in ten, 7-10 ns per miss adds about 0.7-1.0 ns per call, while function pointer went up by 1.75 ns over round-robin. Part of the remainder is the mix itself: round-robin spends a third of its calls in the Heavy plugin, this workload spends 90% there. I didn't collect counters for this workload, so I can't split the rest more precisely than that.
 
-Virtual dispatch pays a consistent premium over function pointer: about 1 ns on both compilers. Under monomorphic dispatch this gap was smaller (0.47 ns on GCC 11) because perfect prediction hid some of the vtable's extra load latency.
+Virtual dispatch pays a consistent premium over function pointer: about 1 ns on both compilers.
 
 Variant on GCC 15 (4.31 ns) beats function pointer (4.63 ns) again, though the gap has narrowed from the round-robin case. Switch dispatch keeps its structural edge, but random arrival order makes the jump table harder to predict than the repeating pattern did.
 
@@ -191,7 +193,7 @@ The clearest finding is what happened to variant: worst-in-class on GCC 11, best
 
 CRTP and function pointer land within 0.02 ns of each other in every measurement, across all three workloads and both compilers. If you don't need composable plugin layers, a raw function pointer gives you the same runtime performance with less code.
 
-Virtual dispatch barely benefits from GCC 15: 2.90 to 2.42 ns in the monomorphic case (alignment and codegen improvements), but 17.61 to 17.57 under random dispatch.
+Virtual dispatch barely benefits from GCC 15: 2.90 to 2.42 ns in the monomorphic case (code placement), but 17.61 to 17.57 under random dispatch.
 
 All mechanisms see a 5-7x slowdown from monomorphic to random, except variant on GCC 15 at 9.5x (1.47 to 13.95). Its monomorphic number was flattered: the compiler [hoisted the switch out of the loop entirely]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %}), and under polymorphic dispatch that optimization has nothing to hoist.
 

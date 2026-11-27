@@ -4,8 +4,8 @@ date: 2026-05-19
 categories: [C++, Performance]
 tags: [dispatch, variant, virtual, assembly, stdlib, libstdc++, libc++, benchmarks]
 description: >-
-  std::variant is stack-allocated with no vtable, so why is std::visit 28%
-  slower than virtual dispatch? We crack open the assembly and the stdlib
+  std::variant is stack-allocated with no vtable, so why does std::visit lose
+  to virtual dispatch on GCC 11? We crack open the assembly and the stdlib
   source to find out.
 redirect_from:
   - /posts/why-std-visit-is-slower-than-a-vtable/
@@ -16,6 +16,8 @@ image:
 ---
 
 If you benchmark dispatching 100M calls through three small strategy objects (a no-op, one that does a write after the call, and one that does a read before and a write after) you'd expect `std::variant + std::visit` to be faster than virtual dispatch. The variant is stack-allocated, there's no heap indirection, no vtable pointer, and the compiler can see the entire closed type set. In a [previous post]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) comparing four dispatch approaches, `std::variant` came out the *slowest*: 3.72 ns/call versus 2.87 ns for virtual dispatch. That's 28% slower.
+
+*Update (November 2026): the 2.87 ns virtual number predates the alignment flags and sits one code-placement step too high ([Part 6]({% post_url 2026-06-10-the-048-ns-ghost-how-code-alignment-broke-our-dispatch-benchmarks %})). Aligned, GCC 11 runs virtual at 2.40 ns and variant at 3.59, so the real gap is about 50%. Variant barely moves, so the lambda-capture explanation stands; virtual's 100M extra cycles over the function pointer in the perf table are [Part 7]({% post_url 2026-06-15-the-alignment-cliff-code-alignment-and-the-skylake-micro-op-cache %})'s one-cycle-per-call penalty.*
 
 The overhead turns out to live in `std::visit`, which pays on every call for features you probably don't need on a hot path. The generated code shows where.
 
@@ -197,8 +199,6 @@ libstdc++ at least has a path to optimization (GCC 12 added a switch for small v
 
 **Update (June 2026):** LLVM has taken a different approach. Instead of adding a switch path to libc++'s headers (which was [tried and reverted twice](https://github.com/llvm/llvm-project/commit/9c09757bca) due to debug build binary size), LLVM now has a mid-level optimizer pass called JumpTableToSwitch that recognizes the function-pointer-table pattern and transforms it to a switch automatically. The pass was [enabled by default](https://github.com/llvm/llvm-project/pull/190674) in April 2026 (after [several revert cycles](https://github.com/llvm/llvm-project/commit/a80d2a719374)) and will ship in a future Clang release. This solves the problem at the optimizer level: libc++ keeps its compact headers and small debug builds, and the optimizer recovers the switch form at `-O2`. Thanks to [Reid Kleckner](https://reidkleckner.dev) for pointing this out.
 
-Michael Park (who [wrote libc++'s variant implementation](https://github.com/llvm/llvm-project/commit/0d3d8de014f1012dd0b2c2c077099cf6face44e5) in 2016) later demonstrated in his standalone [mpark::variant](https://github.com/mpark/variant) library that a switch-based approach is 2-4x faster than the table approach for small variants.
-
 ## The valueless_by_exception Tax
 
 There's one more cost hidden in every `std::visit` call. Before dispatching, `std::visit` checks whether the variant is in a `valueless_by_exception` state:
@@ -253,7 +253,7 @@ Side by side:
 | **Valueless check** | None; vtable pointer is always valid | Elided for trivially copyable types (libstdc++); always present (libc++) |
 | **Storage** | Heap-allocated, pointer indirection | Stack-allocated, cache-local |
 
-`std::visit` has *fewer* dependent dispatch loads than virtual: its discriminant and table base are independent, while virtual's vtable lookup must wait for the vptr load. The 28% comes from the lambda capture indirection. Virtual dispatch passes arguments in registers: 5 instructions in the callee versus 15. With 69% more instructions, branch misses near zero and IPC at 3.44, the extra time is extra work.
+`std::visit` has *fewer* dependent dispatch loads than virtual: its discriminant and table base are independent, while virtual's vtable lookup must wait for the vptr load. The 28% comes from the lambda capture indirection. Virtual dispatch passes arguments in registers: 5 instructions in the callee versus 15.
 
 The last row is the one that makes `std::variant` attractive: no heap allocation, no pointer indirection for the data itself. For access patterns that read the stored value frequently but dispatch infrequently, variant wins. But for dispatch-heavy hot paths where every call goes through `std::visit`, the dispatch mechanism's overhead outweighs the storage advantage.
 
@@ -271,4 +271,4 @@ All of this is GCC 11's libstdc++. GCC 12 added a switch-based fast path that sk
 
 **Previously:** [Lazy Resolution: Resolve Once, Dispatch Forever]({% post_url 2026-05-12-lazy-resolution-resolve-once-dispatch-forever %}). Self-patching function pointers that resolve on first call and dispatch at zero cost forever after.
 
-**Next:** [Your Stdlib Implementation Matters More Than the Dispatch Pattern]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %}). GCC 12 added a switch optimization that inverted the result. Variant went from 28% slower to 50% faster than virtual dispatch. Same source code, same hardware.
+**Next:** [Your Stdlib Implementation Matters More Than the Dispatch Pattern]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %}). GCC 12 added a switch optimization that inverted the result. Variant went from the slowest mechanism to the fastest. Same source code, same hardware.

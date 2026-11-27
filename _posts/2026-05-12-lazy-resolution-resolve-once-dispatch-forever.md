@@ -5,7 +5,7 @@ categories: [C++, Performance]
 tags: [dispatch, lazy-resolution, crtp, function-pointer, assembly, openjdk, benchmarks]
 description: >-
   Self-patching function pointers for zero-cost C++ dispatch after first call.
-  Assembly analysis, 38ns/100M-call benchmarks, thread safety, and how OpenJDK
+  Assembly analysis, a one-time 43-69 ns resolution cost, thread safety, and how OpenJDK
   uses this pattern for GC barrier resolution.
 mermaid: true
 image:
@@ -89,8 +89,6 @@ flowchart LR
 
 **Resolved.** From this point on, the pointer holds the address of the concrete implementation (e.g., `&g1_store`), and the resolver is never called again.
 
-In concrete terms, the global `_store_func` changes from holding the address of `store_init` (say, `0x401234`) to holding the address of `g1_store` (say, `0x401180`). That single pointer write is the entire cost of resolution.
-
 ## What the Compiler Generates
 
 After resolution, the `store()` function compiles down to:
@@ -152,6 +150,8 @@ For context, here's how it stacks up against all four approaches from the [previ
 | `std::variant` + `std::visit` | 3.72 ns | +2.28 ns | Closed type set, stdlib-dependent overhead |
 
 Lazy resolution matches function pointers in steady state, but it also gives you the composition that function pointers lack. (Note: the variant number above reflects GCC 11's function-pointer-table `std::visit`. [Part 4]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %}) shows that GCC 12 added a switch optimization that drops variant to 1.44 ns, making it the fastest mechanism on newer compilers.)
+
+*Update (November 2026): both tables predate the alignment flags. Their values sit on the 0.478 ns placement steps from [Part 7]({% post_url 2026-06-15-the-alignment-cliff-code-alignment-and-the-skylake-micro-op-cache %}), which is why G1 reads 2.87 ns in one table and 2.39 in the other. Aligned, [Part 6]({% post_url 2026-06-10-the-048-ns-ghost-how-code-alignment-broke-our-dispatch-benchmarks %}) measures function pointer, CRTP and monomorphic virtual all at 2.39-2.40 ns, so lazy resolution's edge over a virtual call is composition, not speed.*
 
 ## Thread Safety
 
@@ -220,14 +220,6 @@ ModRefBarrierSet::ModRefBarrierSet(..., const FakeRtti& fake_rtti)
     : BarrierSet(..., fake_rtti.add_tag(BarrierSet::ModRef))
     // tag_set = {G1BarrierSet, CardTableBarrierSet, ModRef}
 ```
-
-The tag set builds up as each constructor delegates to its parent:
-
-| Constructor | Adds tag | Cumulative tag_set |
-|---|---|---|
-| G1BarrierSet | G1BarrierSet | {G1BarrierSet} |
-| CardTableBarrierSet | CardTableBarrierSet | {G1BarrierSet, CardTableBarrierSet} |
-| ModRefBarrierSet | ModRef | {G1BarrierSet, CardTableBarrierSet, ModRef} |
 
 ```mermaid
 ---

@@ -4,8 +4,8 @@ date: 2026-05-25
 categories: [C++, Performance]
 tags: [dispatch, variant, virtual, stdlib, libstdc++, libc++, benchmarks, gcc]
 description: >-
-  std::variant went from 28% slower than virtual dispatch on GCC 11 to 50%
-  faster on GCC 12. Nothing changed but the compiler.
+  std::variant went from the slowest dispatch mechanism on GCC 11 to the
+  fastest on GCC 12. Nothing changed but the compiler.
 image:
   path: /assets/img/og/your-stdlib-implementation-matters-more-than-the-dispatch-pattern.png
   alt: "Your Stdlib Implementation Matters More Than the Dispatch Pattern"

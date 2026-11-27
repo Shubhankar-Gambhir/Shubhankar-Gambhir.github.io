@@ -7,7 +7,7 @@ description: >-
   Part 6 blamed code alignment for a phantom swing in the dispatch benchmarks. Placing a
   single function at every offset in a cache line turns up a step function: 2.392 ns below
   a threshold, 2.870 ns above it. Skylake PMU counters trace the 0.478 ns cliff to a 38-byte
-  function body crossing a 32-byte DSB window boundary, and rule out Part 6's explanation.
+  function body spilling across a 64-byte cache line, and rule out Part 6's explanation.
 image:
   path: /assets/img/og/the-alignment-cliff-code-alignment-and-the-skylake-micro-op-cache.png
   alt: "The Alignment Cliff: Tracing a 0.478 ns Penalty to Skylake's Micro-Op Cache"
@@ -104,26 +104,9 @@ A second sweep at 4-byte intervals narrows the threshold:
 | 56     | 2.8705  |
 | 60     | 2.8702  |
 
-```
-# bars scaled to the ns range: | = 2.39 ns (min), full bar = 2.87 ns (max)
-gcc15_fine
-  off  0   2.39 ns |
-  off  4   2.39 ns |
-  off  8   2.39 ns |
-  off 12   2.39 ns |
-  off 16   2.39 ns |
-  off 20   2.39 ns |
-  off 24   2.39 ns |
-  off 28   2.87 ns | ############################################
-  off 32   2.87 ns | ############################################
-  off 36   2.87 ns | ############################################
-  off 40   2.87 ns | ############################################
-  off 44   2.87 ns | ############################################
-  off 48   2.87 ns | ############################################
-  off 52   2.87 ns | ############################################
-  off 56   2.87 ns | ############################################
-  off 60   2.87 ns | ############################################
-```
+![ns per call against the entry offset of work(): flat at 2.392 ns for offsets 0 through 24, flat at 2.870 ns for offsets 28 through 60](/assets/img/alignment-cliff-sweep-light.svg){: .light w="720" h="360" }
+![ns per call against the entry offset of work(): flat at 2.392 ns for offsets 0 through 24, flat at 2.870 ns for offsets 28 through 60](/assets/img/alignment-cliff-sweep-dark.svg){: .dark w="720" h="360" }
+_The 4-byte pass, GCC 15.2.0. Nothing was measured inside the shaded band._
 
 The function runs at one of two speeds, which already rules out anything that scales with the offset; something crosses a boundary between byte 24 and byte 28.
 
@@ -178,30 +161,21 @@ Verify on [Compiler Explorer](https://godbolt.org) by pasting `benchmarks/sweep_
 
 Clang 22.1.4 emits a near-identical 38-byte body (using `%rcx` as the intermediate register rather than `%rdi`).
 
-Skylake's micro-op cache (DSB) organizes decoded uops into 32-byte aligned windows, each holding up to 6 uops from a contiguous 32-byte instruction region (Intel Optimization Reference Manual, §3.4.2.5). On Skylake, the processor typically delivers uops from a single DSB window per cycle. When a function call is the tight inner loop, the cycle budget per call is dominated by how many DSB window transitions the processor must make.
+*Update (November 2026): an earlier version of this section blamed the number of 32-byte DSB windows the function touches. The slow offsets past 32 don't fit that explanation, so this version is rewritten around the cache line instead.*
 
-For `work()` at entry offset 0 (within a 64-byte cache line, whose start is 64-byte aligned at address A):
+Skylake's micro-op cache (DSB) organizes decoded uops into 32-byte aligned windows, each holding up to 6 uops from a contiguous 32-byte instruction region (Intel Optimization Reference Manual, §3.4.2.5). Counting the windows each placement touches is the obvious first explanation. Lay a few placements out side by side, with A as the 64-byte aligned start of the line:
 
-- **DSB window 0** (A+0 to A+31): contains work() bytes 0-31: `endbr64` through the first 9 bytes of `movabs`
-- **DSB window 1** (A+32 to A+63): contains work() bytes 32-37: the last byte of `movabs`, `imul`, and `retq`
+![work(), 38 bytes, placed at offsets 0, 24, 28, 32 and 60. Offsets 0 and 24 stay inside one 64-byte line and run at 2.39 ns; offsets 28, 32 and 60 cross into the next line and run at 2.87 ns. Window counts are 2, 2, 3, 2, 3.](/assets/img/alignment-cliff-placement-light.svg){: .light w="720" h="304" }
+![work(), 38 bytes, placed at offsets 0, 24, 28, 32 and 60. Offsets 0 and 24 stay inside one 64-byte line and run at 2.39 ns; offsets 28, 32 and 60 cross into the next line and run at 2.87 ns. Window counts are 2, 2, 3, 2, 3.](/assets/img/alignment-cliff-placement-dark.svg){: .dark w="720" h="304" }
+_Thin lines are 32-byte DSB window boundaries; heavy lines are 64-byte cache line boundaries._
 
-Two DSB windows. One transition per call.
+A 38-byte function starting at offset N covers bytes N through N + 37. Both fast placements touch two DSB windows, but so does offset 32, which is slow, while 28 and 60 touch three. Window count doesn't sort the rows into fast and slow. The cache line does: at every fast offset, `endbr64` through `retq` sits inside one 64-byte line, and at every slow offset the function spills into the next one.
 
-For `work()` at entry offset 28:
+The threshold falls out of the arithmetic. The function reaches the next line when N + 37 >= 64, i.e., when N >= 27, and the fine sweep puts the cliff between 24 and 28. Every placement from 27 to 63 crosses exactly one line boundary, which is why the slow side stays flat all the way to offset 60.
 
-- **DSB window 0** (A+0 to A+31): contains the NOP shim (bytes 0-27) and the first 4 bytes of work() (bytes 28-31)
-- **DSB window 1** (A+32 to A+63): contains work() bytes 4-35 (32 bytes)
-- **DSB window 2** (A+64 to A+95): contains work() bytes 36-37: the last byte of `imul` and `retq`
+The counters say where the cycle isn't, more than where it is. The uops still come from the DSB, the switch penalty to the legacy decoder stays near zero, and `icache_16b.ifdata_stall` doesn't move, so both lines are warm in L1i and nothing misses. The same uops simply take one more cycle to deliver when they come from two lines instead of one. The simplest reading is that this path can't deliver uops from two 64-byte lines in the same cycle; these four events are consistent with that, but they can't prove it.
 
-Three DSB windows. Two transitions per call, one more than at offset 0.
-
-The transition from window 1 to window 2 is also a cache line boundary transition: window 1 ends at A+63, window 2 starts at A+64. The processor must issue an L1i fetch request for the second cache line to complete the function. Even with both lines warm in L1i, the pipeline appears unable to overlap the two fetch requests, and that extra cycle is what `uops_not_delivered.core` records.
-
-The threshold at offset 27 falls directly out of the arithmetic: a 38-byte function starting at offset N straddles a 64-byte cache line boundary when N + 37 >= 64, i.e., when N >= 27. Our fine sweep finds the cliff between offsets 24 and 28, consistent with 27 being the exact boundary.
-
-The cliff is also a DSB window boundary: at offset 26, bytes 26-31 fill window 0 and bytes 32-63 fill window 1, with the function ending at byte 63 (the last byte of both window 1 and the cache line). At offset 27, the `retq` lands at byte 64, the start of window 2. Cache line boundary and DSB window boundary coincide because 64 and 32 share the factor 32, and 64 - 38 = 26 is the last offset at which the function fits in one cache line.
-
-These parameters are Skylake-specific. AMD Zen 2+ organizes its uop cache in 64-byte aligned chunks with a different capacity model, so the cliff point will differ. The window-crossing mechanism is shared across modern x86 designs, but each microarchitecture needs its own sweep to find its threshold.
+These parameters are Skylake-specific. AMD Zen 2+ organizes its uop cache in 64-byte aligned chunks with a different capacity model, so the cliff point may differ, and each microarchitecture needs its own sweep to find its threshold.
 
 ## Cross-Compiler Validation
 
