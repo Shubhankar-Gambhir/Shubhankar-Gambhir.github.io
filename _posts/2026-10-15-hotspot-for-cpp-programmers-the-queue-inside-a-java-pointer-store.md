@@ -15,15 +15,15 @@ image:
   hero: false
 ---
 
-A Java pointer store looks like one `mov`. While G1 is marking, it is also a push into a per-thread log, and the push takes a dozen hand-written instructions without a single atomic one among them.
+A Java pointer store looks like one `mov`. While G1 is marking, it is also a push into a per-thread log, and the push takes a dozen hand-written instructions, and not one of them is atomic.
 
-That log is the first producer-consumer queue of this series. To see why the collector needs it, you need one piece of garbage-collector theory: how to find live objects while the program keeps running. [The previous post]({% post_url 2026-10-07-hotspot-for-cpp-programmers-a-million-lines-without-std-mutex %}) covered the rest of the vocabulary used here, HotSpot's threads, its safepoints and its two JIT compilers. Source links point at the [`jdk-27-ga`](https://github.com/openjdk/jdk/tree/jdk-27-ga) tag of OpenJDK.
+That log is the first producer-consumer queue of this series. To see why the collector needs it, you need one piece of garbage-collector theory: how to find live objects while the program keeps running. [The previous post]({% post_url 2026-10-07-hotspot-for-cpp-programmers-a-million-lines-without-std-mutex %}) covered the rest of the vocabulary used here: HotSpot's threads, its safepoints and its two JIT compilers. Source links point at the [`jdk-27-ga`](https://github.com/openjdk/jdk/tree/jdk-27-ga) tag of OpenJDK.
 
 ## Finding Live Objects While the Program Keeps Running
 
 A garbage collector frees memory nobody can reach anymore. To find out what is reachable, it marks: starting from the roots (thread stacks, globals), it follows every pointer and flags every object it reaches. Whatever was not flagged is garbage. This is a plain graph traversal, and on a 30 GB heap it takes far too long to do with the program stopped.
 
-So modern collectors mark concurrently, on their own threads, while the mutators keep running and keep rewriting the very pointers the marker is following. You can already see the bug. Here is the classic version, with three objects A, B and C:
+So modern collectors mark concurrently, on their own threads, while the mutators (the application threads) keep running and keep rewriting the very pointers the marker is following. You can already see the bug. Here is the classic version, with three objects A, B and C:
 
 ```mermaid
 sequenceDiagram
@@ -79,7 +79,7 @@ and this is what [C2]({% post_url 2026-10-07-hotspot-for-cpp-programmers-a-milli
         ; spill, then call G1BarrierSetRuntime::write_ref_field_pre_entry(old, thread)
 ```
 
-There is no `lock` prefix anywhere, and no fence. The log is a plain array owned by one thread, reached through `%r15`: offsets `0x38`, `0x40` and `0x48` are the buffer, index and active fields of the thread's [`SATBMarkQueue`](https://github.com/openjdk/jdk/blob/jdk-27-ga/src/hotspot/share/gc/shared/satbMarkQueue.hpp#L53), declared in that order eight bytes apart. Counting the index *down* to zero is a small trick with a real payoff: "is the buffer full?" becomes a test against zero instead of a compare with a capacity loaded from somewhere. When marking is not running, which is most of the time, the whole barrier is a load, a compare and a branch that almost always goes the same way. G1 flips every thread's active flag on when concurrent marking starts and off when it ends ([`set_active_all_threads`](https://github.com/openjdk/jdk/blob/jdk-27-ga/src/hotspot/share/gc/g1/g1ConcurrentMark.cpp#L941)).
+There is no `lock` prefix anywhere, and no fence. The log is a plain array owned by one thread, reached through `%r15`, which holds the current thread in compiled code: offsets `0x38`, `0x40` and `0x48` are the buffer, index and active fields of the thread's [`SATBMarkQueue`](https://github.com/openjdk/jdk/blob/jdk-27-ga/src/hotspot/share/gc/shared/satbMarkQueue.hpp#L53), declared in that order eight bytes apart. Counting the index *down* to zero is a small trick with a real payoff: "is the buffer full?" becomes a test against zero instead of a compare with a capacity loaded from somewhere. When marking is not running, which is most of the time, the whole barrier is a load, a compare and a branch that almost always goes the same way. G1 flips every thread's active flag on when concurrent marking starts and off when it ends ([`set_active_all_threads`](https://github.com/openjdk/jdk/blob/jdk-27-ga/src/hotspot/share/gc/g1/g1ConcurrentMark.cpp#L941)).
 
 The emitting code is [`generate_pre_barrier_slow_path`](https://github.com/openjdk/jdk/blob/jdk-27-ga/src/hotspot/cpu/x86/gc/g1/g1BarrierSetAssembler_x86.cpp#L173), and it is worth reading for its comments, which annotate each instruction the way I have here. It is also why there is no Compiler Explorer link for this snippet: HotSpot's in-process assembler writes these instructions directly, so there is no C++ to compile. The capture program and the exact JVM flags are in the footer.
 
@@ -113,9 +113,9 @@ The table covers both posts. The [thread cast]({% post_url 2026-10-07-hotspot-fo
 
 ## Where the Series Goes Next
 
-The rest of the series is a set of histories. Each post follows one HotSpot queue through the years it changed, with the review threads, the rejected designs and the bugs left in, and ends with what a C++ developer can take from it.
+The rest of the series is a set of histories. Each post follows one HotSpot history through the years it changed, with the review threads, the rejected designs and the bugs left in, and draws out what a C++ developer can take from it.
 
-[Pick Two]({% post_url 2026-11-12-pick-two-what-your-queue-does-when-the-consumer-falls-behind %}) is the asynchronous logger, which between 2020 and 2025 gave four different answers to what happens to a message when its buffer is full. Two Commits, One Day follows the VM thread's operation queue and the per-thread handshake queue, which one engineer reshaped in two consecutive commits on the same day in 2020: the operation queue shrank to a single slot, and the two handshake slots grew into a queue. A Lock-Free Queue With One User follows G1's barrier buffers to the general-purpose lock-free FIFO HotSpot built for them, which had one user in mainline and was deleted once that user stopped needing a queue. Who Frees the Node? closes the series with ZGC's mark stacks and the memory-reclamation problem every lock-free stack runs into.
+[Pick Two]({% post_url 2026-11-12-pick-two-what-your-queue-does-when-the-consumer-falls-behind %}) is the asynchronous logger, which between 2020 and 2025 gave four different answers to what happens to a message when its buffer is full. Two Commits, One Day follows the per-thread handshake queue and the VM thread's operation queue, which one engineer reshaped in two consecutive commits on the same day in 2020: the two handshake slots grew into a queue, and the operation queue shrank to a single slot. A Lock-Free Queue With One User follows G1's barrier buffers to the general-purpose lock-free FIFO HotSpot built for them, which had one user in mainline and was deleted once that user stopped needing a queue. Who Frees the Node? closes the series with ZGC's mark stacks and the memory-reclamation problem every lock-free stack runs into.
 
 ---
 

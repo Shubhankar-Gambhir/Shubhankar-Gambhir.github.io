@@ -15,19 +15,19 @@ image:
   hero: false
 ---
 
-Every time a Java program overwrites a reference field while the garbage collector is marking, the JVM quietly copies the old pointer into a per-thread log, and it does it without a single atomic instruction.
-
-That log is a queue, the first of about a dozen producer-consumer queues inside HotSpot, the C++ program at the heart of OpenJDK, and later posts in this series take several of them apart. [The next post]({% post_url 2026-10-15-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store %}) reads that log instruction by instruction. This one covers the JVM concepts you need before reading any of them; you won't need any Java, because everything we read is C++.
+HotSpot, the virtual machine at the core of OpenJDK, is roughly a million lines of C++, and it uses neither `std::mutex` nor `std::atomic` nor `std::thread` for anything that matters.
 
 After a few posts benchmarking [my own C++ queues]({% post_url 2026-07-07-a-deep-dive-into-producer-consumer-queues %}), I wanted to see how a real system makes the same trade-offs, and how a large open-source project actually implements them.
+
+Inside HotSpot are about a dozen producer-consumer queues, and this series takes several of them apart. The first is a per-thread log that a Java pointer store writes to while the garbage collector is marking, and [the next post]({% post_url 2026-10-15-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store %}) reads it instruction by instruction. Reading any of them takes some JVM vocabulary first, but no Java: everything we read is C++.
 
 All source links point at the [`jdk-27-ga`](https://github.com/openjdk/jdk/tree/jdk-27-ga) tag of OpenJDK. Where history matters, later posts will link the older tags where the old code lived.
 
 ## HotSpot Is a C++ Program
 
-OpenJDK's virtual machine, HotSpot, lives under [`src/hotspot`](https://github.com/openjdk/jdk/tree/jdk-27-ga/src/hotspot) and is roughly a million lines of C++, with a little assembly per CPU. It contains a bytecode interpreter, two just-in-time compilers, several garbage collectors, a low-overhead event recorder and profiler called Java Flight Recorder (JFR), a logging framework, and a lot of runtime plumbing. When you run `java -jar app.jar`, the `java` launcher loads `libjvm.so` and HotSpot takes it from there.
+HotSpot's source lives under [`src/hotspot`](https://github.com/openjdk/jdk/tree/jdk-27-ga/src/hotspot), with a little assembly per CPU beside the C++. It contains a bytecode interpreter, two just-in-time compilers, several garbage collectors, a low-overhead event recorder and profiler called Java Flight Recorder (JFR), a logging framework, and a lot of runtime plumbing. When you run `java -jar app.jar`, the `java` launcher loads `libjvm.so` and HotSpot takes it from there.
 
-It is an unusual C++ codebase. It does not use the standard library for anything that matters: not `std::mutex`, not `std::atomic`, not `std::thread`. The [HotSpot style guide](https://github.com/openjdk/jdk/blob/jdk-27-ga/doc/hotspot-style.md#c-standard-library) gives the reasons. HotSpot does not use exceptions or the global allocator, which rules out most containers. It has its own threading, which has to cooperate with the VM in ways we will see shortly. And `<atomic>` is [banned outright](https://github.com/openjdk/jdk/blob/jdk-27-ga/doc/hotspot-style.md#atomic) because HotSpot's atomics "must have semantics which are consistent with those provided by the JDK's compilers for Java", including a "conservative" ordering that may be stronger than sequentially consistent. The C++ runtime and the Java code it compiles share one memory model, so the C++ side cannot leave the details to whichever C++ compiler built it. It also generates much of its hottest code at run time, with an in-process assembler, which means some of the code this series cares most about never exists as a C++ function you could put into Compiler Explorer.
+It is an unusual C++ codebase, and the [HotSpot style guide](https://github.com/openjdk/jdk/blob/jdk-27-ga/doc/hotspot-style.md#c-standard-library) gives the reasons it keeps the standard library out. HotSpot does not use exceptions or the global allocator, which rules out most containers. It has its own threading, which has to cooperate with the VM in ways we will see shortly. And `<atomic>` is [banned outright](https://github.com/openjdk/jdk/blob/jdk-27-ga/doc/hotspot-style.md#atomic) because HotSpot's atomics "must have semantics which are consistent with those provided by the JDK's compilers for Java", including a "conservative" ordering that may be stronger than sequentially consistent. The C++ runtime and the Java code it compiles share one memory model, so the C++ side cannot leave the details to whichever C++ compiler built it. It also generates much of its hottest code at run time, with an in-process assembler, which means some of the code this series cares most about never exists as a C++ function you could put into Compiler Explorer.
 
 The source layout you will see linked throughout:
 
@@ -64,11 +64,11 @@ The ones that matter for queues:
 |---|---|---|---|
 | Application threads | `JavaThread` | Run the user's Java code. GC literature calls them mutators, because from the collector's point of view their job is to mutate the object graph. | every post |
 | VMThread | `NonJavaThread` | A single thread that runs "VM operations": anything that needs the whole JVM stopped. | Two Commits, One Day |
-| Compiler threads | `JavaThread` | Pull methods off the compile queue and JIT them. | [Pick Two]({% post_url 2026-11-12-pick-two-what-your-queue-does-when-the-consumer-falls-behind %}); Two Commits, One Day |
+| Compiler threads | `JavaThread` | Pull methods off the compile queue and JIT them. | Two Commits, One Day |
 | GC worker threads | `NonJavaThread` | Do the collector's parallel work; they share it by stealing from each other. | Who Frees the Node? |
 | Concurrent GC threads | `NonJavaThread` | Run collector phases alongside the application, such as concurrent marking. | [the next post]({% post_url 2026-10-15-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store %}); A Lock-Free Queue With One User |
-| Service thread | `JavaThread` | A catch-all housekeeper that drains several event queues. | later posts |
-| JFR recorder, async log writer | mixed | Drain diagnostic data that other threads produce. | [Pick Two]({% post_url 2026-11-12-pick-two-what-your-queue-does-when-the-consumer-falls-behind %}) |
+| Service thread | `JavaThread` | A catch-all housekeeper that drains several event queues. | not covered in this series |
+| JFR recorder, async log writer | mixed | Drain diagnostic data that other threads produce. | [Pick Two]({% post_url 2026-11-12-pick-two-what-your-queue-does-when-the-consumer-falls-behind %}) (the async log writer) |
 
 The `JavaThread` / `NonJavaThread` split decides who has to cooperate when the VM needs to stop the world, and that turns out to constrain how HotSpot's locks and queues are built.
 
