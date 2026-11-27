@@ -185,4 +185,4 @@ Sources: HotSpot code is linked at `jdk-27-ga` (815ff4dc). Versions are the firs
 
 No benchmarks here: every number is quoted from the linked sources. The sketch omits its `#include`s; the linked harness compiles as is.
 
-**Next:** Two Commits, One Day: The Queue HotSpot Added and the Queue It Deleted (coming soon)
+**Previously:** [HotSpot for C++ Programmers: The Queue Inside a Java Pointer Store]({% post_url 2026-10-15-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store %})
