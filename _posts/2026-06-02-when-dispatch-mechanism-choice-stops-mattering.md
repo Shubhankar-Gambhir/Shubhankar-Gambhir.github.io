@@ -208,10 +208,10 @@ flowchart TD
     C -->|Yes| D[Batch, then<br>dispatch per batch]
     C -->|No| E{Need<br>composability?}
     E -->|Yes| F[Decoupled CRTP]
-    E -->|No| G["Function pointer<br>or variant (GCC 15+)"]
+    E -->|No| G["Function pointer<br>or variant (GCC 12+)"]
 ```
 
-If your call site is monomorphic (same target every time), the [Part 1 decision framework]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) still applies and mechanism choice matters. If it's polymorphic and you can batch calls by type, each batch dispatches monomorphically. If you can't, the branch predictor dominates and all four mechanisms degrade roughly together: the gap between fastest and slowest shrinks from 2.5x (monomorphic, GCC 11) to 1.3x (random, GCC 15).
+If your call site is monomorphic (same target every time), the [Part 1 decision framework]({% post_url 2026-05-07-four-ways-to-dispatch-a-runtime-selected-strategy-in-cpp %}) still applies and mechanism choice matters. If it's polymorphic and you can batch calls by type, each batch dispatches monomorphically. If you can't, the branch predictor dominates and all four mechanisms degrade roughly together: the gap between fastest and slowest shrinks from 1.5x (monomorphic, GCC 11) to 1.3x (random, GCC 15).
 
 ### When You Can Restructure
 

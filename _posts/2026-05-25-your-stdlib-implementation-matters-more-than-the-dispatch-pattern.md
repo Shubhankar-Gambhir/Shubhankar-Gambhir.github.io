@@ -12,7 +12,7 @@ image:
   hero: false
 ---
 
-In a [previous post]({% post_url 2026-05-19-why-std-visit-may-be-slower-than-a-vtable %}), I showed that `std::variant + std::visit` was 28% slower than virtual dispatch on GCC 11, and traced the overhead to libstdc++'s implementation: a compile-time-generated function pointer table, a lambda capture round-trip through the stack, and an unconditional valueless check.
+In a [previous post]({% post_url 2026-05-19-why-std-visit-may-be-slower-than-a-vtable %}), I showed that `std::variant + std::visit` was 28% slower than virtual dispatch on GCC 11 (with code alignment controlled, as in every table here, the gap is 1.56x), and traced the overhead to libstdc++'s implementation: a compile-time-generated function pointer table, a lambda capture round-trip through the stack, and an unconditional valueless check.
 
 The analysis held for one version of one standard library. "Variant is slower than virtual" turned out to be a fact about GCC 11's libstdc++.
 
@@ -22,15 +22,15 @@ Then I upgraded the compiler.
 
 Here is the same benchmark source, 100M iterations on an Intel Xeon Gold 6130, built with seven GCC versions:
 
-| Compiler | variant (ns/call) | virtual (ns/call) | Faster approach |
+| Compiler | variant (ns/call) | virtual (ns/call) | Faster approach (speedup) |
 |----------|-------------------|--------------------|--------------------|
-| GCC 9.5 | 3.95 | 2.39 | virtual (65% faster) |
-| GCC 10.4 | 3.59 | 2.39 | virtual (50% faster) |
-| GCC 11.4 | 3.72 | 2.39 | virtual (56% faster) |
-| **GCC 12.4** | **1.44** | **2.39** | **variant (40% faster)** |
-| GCC 13.4 | 1.44 | 2.39 | variant (40% faster) |
-| GCC 14.3 | 1.44 | 2.39 | variant (40% faster) |
-| GCC 15.2 | 1.47 | 2.42 | variant (39% faster) |
+| GCC 9.5 | 3.95 | 2.39 | virtual (1.65x) |
+| GCC 10.4 | 3.59 | 2.39 | virtual (1.50x) |
+| GCC 11.4 | 3.72 | 2.39 | virtual (1.56x) |
+| **GCC 12.4** | **1.44** | **2.39** | **variant (1.66x)** |
+| GCC 13.4 | 1.44 | 2.39 | variant (1.66x) |
+| GCC 14.3 | 1.44 | 2.39 | variant (1.66x) |
+| GCC 15.2 | 1.47 | 2.42 | variant (1.65x) |
 
 All seven versions compiled with the same flags (`-O2 -march=skylake-avx512 -fcf-protection -falign-functions=64 -falign-loops=64`) and measured on the same hardware in the same session. The alignment flags eliminate code placement artifacts that can add up to 0.48 ns of noise to indirect call benchmarks.
 
