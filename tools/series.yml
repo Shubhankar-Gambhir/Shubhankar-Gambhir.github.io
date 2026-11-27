@@ -9,3 +9,7 @@ fno-rtti:
   - 2026-07-21-the-null-slot-what-fno-rtti-actually-removes
   - 2026-08-04-what-dynamic-cast-costs-and-which-runtime-decides
   - 2026-08-19-what-comes-after-fno-rtti-and-how-openjdk-lives-without-rtti
+hotspot:
+  - 2026-10-07-hotspot-for-cpp-programmers-a-million-lines-without-std-mutex
+  - 2026-10-15-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store
+  - 2026-11-12-pick-two-what-your-queue-does-when-the-consumer-falls-behind
