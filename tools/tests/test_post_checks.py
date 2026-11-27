@@ -88,3 +88,20 @@ def test_broken_anchors(tmp_path):
     assert pc.broken_anchors(tmp_path) == []
     (tmp_path / "posts" / "b" / "index.html").write_text("<h2>none</h2>")
     assert len(pc.broken_anchors(tmp_path)) == 1
+
+
+def test_last_post_coming_soon_next(tmp_path):
+    series = {"s": ["A", "B"]}
+    _post(tmp_path, "A", "Title A", nxt=("B", "Title B"))
+    _post(tmp_path, "B", "Title B", prev=("A", "Title A"))
+    with open(tmp_path / "B.md", "a") as f:
+        f.write("**Next:** Future Post (coming soon)\n")
+    assert pc.footer_violations(tmp_path, series) == []
+
+    _post(tmp_path, "B", "Title B", prev=("A", "Title A"), nxt=("A", "Title A"))
+    assert len(pc.footer_violations(tmp_path, series)) == 1
+
+    _post(tmp_path, "B", "Title B", prev=("A", "Title A"))
+    with open(tmp_path / "B.md", "a") as f:
+        f.write("**Next:** Future Post\n")
+    assert len(pc.footer_violations(tmp_path, series)) == 1

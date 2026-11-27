@@ -123,8 +123,9 @@ def footer_violations(posts_dir, series):
             else:
                 out += _check_link(posts_dir, name, "Previously", PREV_RE, text, names[i - 1])
             if i == len(names) - 1:
-                if NEXT_RE.search(text):
-                    out.append(f"{name}: last post of series has a **Next:** line")
+                for m in NEXT_RE.finditer(text):
+                    if "{% post_url" in m.group(1) or "(coming soon)" not in m.group(1):
+                        out.append(f"{name}: last post of series has a **Next:** line")
             else:
                 out += _check_link(posts_dir, name, "Next", NEXT_RE, text, names[i + 1])
     return out
