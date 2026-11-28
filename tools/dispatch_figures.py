@@ -108,9 +108,92 @@ def figure(t):
     return "\n".join(s)
 
 
+# ---------------------------------------------------------------- Part 5: workloads
+
+# "The Full Picture" tables from "When Dispatch Mechanism Choice Stops Mattering", ns/call.
+WORKLOADS = ["mono", "round-robin", "90/10", "random"]
+POLY = {
+    "GCC 11.4.0": {"virtual": [2.90, 3.05, 5.60, 17.61], "fn ptr": [2.43, 2.88, 4.67, 14.11],
+                   "variant": [3.71, 4.65, 7.08, 18.89], "CRTP": [2.42, 2.87, 4.65, 14.11]},
+    "GCC 15.2.0": {"virtual": [2.42, 3.05, 5.58, 17.57], "fn ptr": [2.42, 2.88, 4.63, 14.15],
+                   "variant": [1.47, 2.24, 4.31, 13.95], "CRTP": [2.41, 2.88, 4.63, 14.15]},
+}
+COLS = {"light": ["#257de0", "#f47230", "#00b894", "#f2a600"],
+        "dark": ["#338ced", "#e76624", "#00a888", "#d28e05"]}
+GRIDC = {"light": "#e4e4e4", "dark": "#38383c"}
+DRAW_ORDER = ["CRTP", "virtual", "variant", "fn ptr"]   # fn ptr on top of the CRTP it hides
+SLOT = {"virtual": 0, "fn ptr": 1, "variant": 2, "CRTP": 3}
+
+
+def pmark(k, x, y, col, ring):
+    if k == 0:
+        return f'<circle cx="{x:.1f}" cy="{y:.1f}" r="4.5" fill="{col}" stroke="{ring}" stroke-width="2"/>'
+    if k == 1:
+        return (f'<rect x="{x - 4.5:.1f}" y="{y - 4.5:.1f}" width="9" height="9" fill="{col}" '
+                f'stroke="{ring}" stroke-width="2"/>')
+    if k == 2:
+        return (f'<path d="M{x:.1f},{y - 6.5:.1f} L{x + 6.5:.1f},{y:.1f} L{x:.1f},{y + 6.5:.1f} '
+                f'L{x - 6.5:.1f},{y:.1f} z" fill="{col}" stroke="{ring}" stroke-width="2"/>')
+    return (f'<path d="M{x:.1f},{y - 9:.1f} L{x + 8:.1f},{y + 5:.1f} L{x - 8:.1f},{y + 5:.1f} z" '
+            f'fill="{col}" stroke="{ring}" stroke-width="2"/>')
+
+
+def workloads(mode, t):
+    import math
+    w, h = 720, 380
+    top, ph = 64, 240
+    panels = [(60, 300), (392, 300)]
+    lo, hi = math.log10(1.2), math.log10(25)
+    y = lambda v: top + (hi - math.log10(v)) / (hi - lo) * ph
+    cols = COLS[mode]
+    s = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{w}" '
+         f'height="{h}" role="img" aria-label="Nanoseconds per call on a log scale for four '
+         f'dispatch mechanisms across four workloads, monomorphic, round-robin, 90/10 and '
+         f'random, on GCC 11 and GCC 15. All four climb five to ten times from monomorphic to '
+         f'random. Function pointer and CRTP coincide everywhere. Virtual sits about 1 ns above '
+         f'function pointer at 90/10 and 3.4 ns above at random. Variant is the slowest on GCC 11 '
+         f'and the fastest on GCC 15 at every workload.">',
+         f'<rect width="{w}" height="{h}" fill="{t["surface"]}"/>']
+    s.append(text(16, top + ph / 2, "ns per call (log)", t, size=12, color="text2"))
+    s[-1] = s[-1].replace("<text ", f'<text transform="rotate(-90 16 {top + ph / 2})" ', 1)
+    for (px, pw), (title, data) in zip(panels, POLY.items()):
+        step = pw / len(WORKLOADS)
+        x = lambda i: px + step * (i + 0.5)
+        for v in (2, 5, 10, 20):
+            s.append(f'<line x1="{px}" x2="{px + pw}" y1="{y(v):.1f}" y2="{y(v):.1f}" '
+                     f'stroke="{GRIDC[mode]}" stroke-width="1"/>')
+            if px == panels[0][0]:
+                s.append(text(px - 8, y(v) + 4, str(v), t, size=12, color="text2", anchor="end"))
+        s.append(f'<line x1="{px}" x2="{px + pw}" y1="{top + ph}" y2="{top + ph}" '
+                 f'stroke="{t["text2"]}" stroke-width="1"/>')
+        s.append(text(px + pw / 2, top - 14, title, t, size=13, weight="600", anchor="middle"))
+        for i, wl in enumerate(WORKLOADS):
+            s.append(text(x(i), top + ph + 18, wl, t, size=12, color="text2", anchor="middle"))
+        for name in DRAW_ORDER:
+            k, vals = SLOT[name], data[name]
+            pts = " ".join(f"{x(i):.1f},{y(v):.1f}" for i, v in enumerate(vals))
+            s.append(f'<polyline points="{pts}" fill="none" stroke="{cols[k]}" stroke-width="2" '
+                     f'stroke-linejoin="round" stroke-linecap="round"/>')
+            for i, v in enumerate(vals):
+                s.append(pmark(k, x(i), y(v), cols[k], t["surface"]))
+    # legend, one row
+    lx, ly = 60, h - 22
+    for name in ("virtual", "fn ptr", "variant", "CRTP"):
+        k = SLOT[name]
+        s.append(f'<line x1="{lx}" x2="{lx + 22}" y1="{ly - 4}" y2="{ly - 4}" stroke="{cols[k]}" '
+                 f'stroke-width="2"/>')
+        s.append(pmark(k, lx + 11, ly - 4, cols[k], t["surface"]))
+        label = "CRTP (under fn ptr)" if name == "CRTP" else name
+        s.append(text(lx + 30, ly, label, t, size=12))
+        lx += 44 + 7.2 * len(label)
+    s.append("</svg>")
+    return "\n".join(s)
+
+
 def main():
     for mode, t in THEMES.items():
         (OUT / f"visit-vs-vtable-{mode}.svg").write_text(figure(t) + "\n")
+        (OUT / f"dispatch-workloads-{mode}.svg").write_text(workloads(mode, t) + "\n")
 
 
 if __name__ == "__main__":

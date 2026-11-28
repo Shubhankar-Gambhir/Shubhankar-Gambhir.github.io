@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 380" width="720" height="380" role="img" aria-label="Nanoseconds per call on a log scale for four dispatch mechanisms across four workloads, monomorphic, round-robin, 90/10 and random, on GCC 11 and GCC 15. All four climb five to ten times from monomorphic to random. Function pointer and CRTP coincide everywhere. Virtual sits about 1 ns above function pointer at 90/10 and 3.4 ns above at random. Variant is the slowest on GCC 11 and the fastest on GCC 15 at every workload.">
+<rect width="720" height="380" fill="#ffffff"/>
+<text transform="rotate(-90 16 184.0)" x="16.0" y="184.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="start" fill="#666666">ns per call (log)</text>
+<line x1="60" x2="360" y1="263.6" y2="263.6" stroke="#e4e4e4" stroke-width="1"/>
+<text x="52.0" y="267.6" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="end" fill="#666666">2</text>
+<line x1="60" x2="360" y1="191.2" y2="191.2" stroke="#e4e4e4" stroke-width="1"/>
+<text x="52.0" y="195.2" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="end" fill="#666666">5</text>
+<line x1="60" x2="360" y1="136.4" y2="136.4" stroke="#e4e4e4" stroke-width="1"/>
+<text x="52.0" y="140.4" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="end" fill="#666666">10</text>
+<line x1="60" x2="360" y1="81.6" y2="81.6" stroke="#e4e4e4" stroke-width="1"/>
+<text x="52.0" y="85.6" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="end" fill="#666666">20</text>
+<line x1="60" x2="360" y1="304" y2="304" stroke="#666666" stroke-width="1"/>
+<text x="210.0" y="50.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="13" text-anchor="middle" fill="#191919" font-weight="600">GCC 11.4.0</text>
+<text x="97.5" y="322.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="middle" fill="#666666">mono</text>
+<text x="172.5" y="322.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="middle" fill="#666666">round-robin</text>
+<text x="247.5" y="322.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="middle" fill="#666666">90/10</text>
+<text x="322.5" y="322.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="middle" fill="#666666">random</text>
+<polyline points="97.5,248.6 172.5,235.1 247.5,196.9 322.5,109.2" fill="none" stroke="#f2a600" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M97.5,239.6 L105.5,253.6 L89.5,253.6 z" fill="#f2a600" stroke="#ffffff" stroke-width="2"/>
+<path d="M172.5,226.1 L180.5,240.1 L164.5,240.1 z" fill="#f2a600" stroke="#ffffff" stroke-width="2"/>
+<path d="M247.5,187.9 L255.5,201.9 L239.5,201.9 z" fill="#f2a600" stroke="#ffffff" stroke-width="2"/>
+<path d="M322.5,100.2 L330.5,114.2 L314.5,114.2 z" fill="#f2a600" stroke="#ffffff" stroke-width="2"/>
+<polyline points="97.5,234.3 172.5,230.3 247.5,182.2 322.5,91.7" fill="none" stroke="#257de0" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="97.5" cy="234.3" r="4.5" fill="#257de0" stroke="#ffffff" stroke-width="2"/>
+<circle cx="172.5" cy="230.3" r="4.5" fill="#257de0" stroke="#ffffff" stroke-width="2"/>
+<circle cx="247.5" cy="182.2" r="4.5" fill="#257de0" stroke="#ffffff" stroke-width="2"/>
+<circle cx="322.5" cy="91.7" r="4.5" fill="#257de0" stroke="#ffffff" stroke-width="2"/>
+<polyline points="97.5,214.8 172.5,196.9 247.5,163.7 322.5,86.1" fill="none" stroke="#00b894" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M97.5,208.3 L104.0,214.8 L97.5,221.3 L91.0,214.8 z" fill="#00b894" stroke="#ffffff" stroke-width="2"/>
+<path d="M172.5,190.4 L179.0,196.9 L172.5,203.4 L166.0,196.9 z" fill="#00b894" stroke="#ffffff" stroke-width="2"/>
+<path d="M247.5,157.2 L254.0,163.7 L247.5,170.2 L241.0,163.7 z" fill="#00b894" stroke="#ffffff" stroke-width="2"/>
+<path d="M322.5,79.6 L329.0,86.1 L322.5,92.6 L316.0,86.1 z" fill="#00b894" stroke="#ffffff" stroke-width="2"/>
+<polyline points="97.5,248.2 172.5,234.8 247.5,196.6 322.5,109.2" fill="none" stroke="#f47230" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<rect x="93.0" y="243.7" width="9" height="9" fill="#f47230" stroke="#ffffff" stroke-width="2"/>
+<rect x="168.0" y="230.3" width="9" height="9" fill="#f47230" stroke="#ffffff" stroke-width="2"/>
+<rect x="243.0" y="192.1" width="9" height="9" fill="#f47230" stroke="#ffffff" stroke-width="2"/>
+<rect x="318.0" y="104.7" width="9" height="9" fill="#f47230" stroke="#ffffff" stroke-width="2"/>
+<line x1="392" x2="692" y1="263.6" y2="263.6" stroke="#e4e4e4" stroke-width="1"/>
+<line x1="392" x2="692" y1="191.2" y2="191.2" stroke="#e4e4e4" stroke-width="1"/>
+<line x1="392" x2="692" y1="136.4" y2="136.4" stroke="#e4e4e4" stroke-width="1"/>
+<line x1="392" x2="692" y1="81.6" y2="81.6" stroke="#e4e4e4" stroke-width="1"/>
+<line x1="392" x2="692" y1="304" y2="304" stroke="#666666" stroke-width="1"/>
+<text x="542.0" y="50.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="13" text-anchor="middle" fill="#191919" font-weight="600">GCC 15.2.0</text>
+<text x="429.5" y="322.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="middle" fill="#666666">mono</text>
+<text x="504.5" y="322.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="middle" fill="#666666">round-robin</text>
+<text x="579.5" y="322.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="middle" fill="#666666">90/10</text>
+<text x="654.5" y="322.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="middle" fill="#666666">random</text>
+<polyline points="429.5,248.9 504.5,234.8 579.5,197.3 654.5,109.0" fill="none" stroke="#f2a600" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M429.5,239.9 L437.5,253.9 L421.5,253.9 z" fill="#f2a600" stroke="#ffffff" stroke-width="2"/>
+<path d="M504.5,225.8 L512.5,239.8 L496.5,239.8 z" fill="#f2a600" stroke="#ffffff" stroke-width="2"/>
+<path d="M579.5,188.3 L587.5,202.3 L571.5,202.3 z" fill="#f2a600" stroke="#ffffff" stroke-width="2"/>
+<path d="M654.5,100.0 L662.5,114.0 L646.5,114.0 z" fill="#f2a600" stroke="#ffffff" stroke-width="2"/>
+<polyline points="429.5,248.6 504.5,230.3 579.5,182.5 654.5,91.9" fill="none" stroke="#257de0" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="429.5" cy="248.6" r="4.5" fill="#257de0" stroke="#ffffff" stroke-width="2"/>
+<circle cx="504.5" cy="230.3" r="4.5" fill="#257de0" stroke="#ffffff" stroke-width="2"/>
+<circle cx="579.5" cy="182.5" r="4.5" fill="#257de0" stroke="#ffffff" stroke-width="2"/>
+<circle cx="654.5" cy="91.9" r="4.5" fill="#257de0" stroke="#ffffff" stroke-width="2"/>
+<polyline points="429.5,288.0 504.5,254.7 579.5,202.9 654.5,110.1" fill="none" stroke="#00b894" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M429.5,281.5 L436.0,288.0 L429.5,294.5 L423.0,288.0 z" fill="#00b894" stroke="#ffffff" stroke-width="2"/>
+<path d="M504.5,248.2 L511.0,254.7 L504.5,261.2 L498.0,254.7 z" fill="#00b894" stroke="#ffffff" stroke-width="2"/>
+<path d="M579.5,196.4 L586.0,202.9 L579.5,209.4 L573.0,202.9 z" fill="#00b894" stroke="#ffffff" stroke-width="2"/>
+<path d="M654.5,103.6 L661.0,110.1 L654.5,116.6 L648.0,110.1 z" fill="#00b894" stroke="#ffffff" stroke-width="2"/>
+<polyline points="429.5,248.6 504.5,234.8 579.5,197.3 654.5,109.0" fill="none" stroke="#f47230" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<rect x="425.0" y="244.1" width="9" height="9" fill="#f47230" stroke="#ffffff" stroke-width="2"/>
+<rect x="500.0" y="230.3" width="9" height="9" fill="#f47230" stroke="#ffffff" stroke-width="2"/>
+<rect x="575.0" y="192.8" width="9" height="9" fill="#f47230" stroke="#ffffff" stroke-width="2"/>
+<rect x="650.0" y="104.5" width="9" height="9" fill="#f47230" stroke="#ffffff" stroke-width="2"/>
+<line x1="60" x2="82" y1="354" y2="354" stroke="#257de0" stroke-width="2"/>
+<circle cx="71.0" cy="354.0" r="4.5" fill="#257de0" stroke="#ffffff" stroke-width="2"/>
+<text x="90.0" y="358.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="start" fill="#191919">virtual</text>
+<line x1="154.4" x2="176.4" y1="354" y2="354" stroke="#f47230" stroke-width="2"/>
+<rect x="160.9" y="349.5" width="9" height="9" fill="#f47230" stroke="#ffffff" stroke-width="2"/>
+<text x="184.4" y="358.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="start" fill="#191919">fn ptr</text>
+<line x1="241.60000000000002" x2="263.6" y1="354" y2="354" stroke="#00b894" stroke-width="2"/>
+<path d="M252.6,347.5 L259.1,354.0 L252.6,360.5 L246.1,354.0 z" fill="#00b894" stroke="#ffffff" stroke-width="2"/>
+<text x="271.6" y="358.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="start" fill="#191919">variant</text>
+<line x1="336.0" x2="358.0" y1="354" y2="354" stroke="#f2a600" stroke-width="2"/>
+<path d="M347.0,345.0 L355.0,359.0 L339.0,359.0 z" fill="#f2a600" stroke="#ffffff" stroke-width="2"/>
+<text x="366.0" y="358.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="start" fill="#191919">CRTP (under fn ptr)</text>
+</svg>

@@ -57,14 +57,11 @@ For reference, here are the monomorphic baselines from Parts 1 and 4 (Heavy plug
 
 *Update (November 2026): the GCC 11 virtual baseline (2.90 ns) is one 0.478 ns placement step ([Part 7]({% post_url 2026-06-15-the-alignment-cliff-code-alignment-and-the-skylake-micro-op-cache %})) above [Part 4]({% post_url 2026-05-25-your-stdlib-implementation-matters-more-than-the-dispatch-pattern %})'s 2.39 with the same flags, so virtual's monomorphic GCC 11 to GCC 15 "improvement" is placement, not codegen. Virtual's roughly 1 ns polymorphic premium is the same on both compilers.*
 
-## Round-Robin
+![Nanoseconds per call on a log scale for four dispatch mechanisms across four workloads, monomorphic, round-robin, 90/10 and random, on GCC 11 and GCC 15. All four climb five to ten times from monomorphic to random. Function pointer and CRTP coincide everywhere. Virtual sits about 1 ns above function pointer at 90/10 and 3.4 ns above at random. Variant is the slowest on GCC 11 and the fastest on GCC 15 at every workload.](/assets/img/dispatch-workloads-light.svg){: .light w="720" h="380" }
+![Nanoseconds per call on a log scale for four dispatch mechanisms across four workloads, monomorphic, round-robin, 90/10 and random, on GCC 11 and GCC 15. All four climb five to ten times from monomorphic to random. Function pointer and CRTP coincide everywhere. Virtual sits about 1 ns above function pointer at 90/10 and 3.4 ns above at random. Variant is the slowest on GCC 11 and the fastest on GCC 15 at every workload.](/assets/img/dispatch-workloads-dark.svg){: .dark w="720" h="380" }
+_All four workloads at once; The Full Picture has every value._
 
-| Mechanism | GCC 11 (ns/call) | GCC 15 (ns/call) |
-|-----------|-------------------|-------------------|
-| Virtual dispatch | 3.05 | 3.05 |
-| Function pointer | 2.88 | 2.88 |
-| std::variant + std::visit | 4.65 | 2.24 |
-| Decoupled CRTP | 2.87 | 2.88 |
+## Round-Robin
 
 Round-robin is the gentlest polymorphic pattern: modern branch predictors handle repeating patterns well and can predict each indirect branch correctly most of the time.
 
@@ -108,13 +105,6 @@ The vtable lookup is identical in both cases: load vptr, indirect call through v
 
 ## Weighted 90/10
 
-| Mechanism | GCC 11 (ns/call) | GCC 15 (ns/call) |
-|-----------|-------------------|-------------------|
-| Virtual dispatch | 5.60 | 5.58 |
-| Function pointer | 4.67 | 4.63 |
-| std::variant + std::visit | 7.08 | 4.31 |
-| Decoupled CRTP | 4.65 | 4.63 |
-
 The 90/10 distribution is random, seeded deterministically, so the branch predictor can't learn a repeating pattern. But it *can* learn the dominant target and take its chances.
 
 Virtual dispatch nearly doubled from its round-robin number (3.05 to 5.58 on GCC 15), and function pointer and CRTP jumped from 2.88 to 4.63. A predictor that bets on the dominant type is right 90% of the time; each of the other 10% costs a pipeline flush of roughly 15-20 cycles on Skylake ([Agner Fog's microarchitecture guide](https://www.agner.org/optimize/microarchitecture.pdf), Skylake chapter), or 7-10 ns at 2.1 GHz.
@@ -128,13 +118,6 @@ Variant on GCC 15 (4.31 ns) beats function pointer (4.63 ns) again, though the g
 Variant on GCC 11 (7.08 ns) is worst in class by a wide margin. If you're on GCC 11 and your workload is polymorphic, variant is the wrong choice.
 
 ## Uniform Random
-
-| Mechanism | GCC 11 (ns/call) | GCC 15 (ns/call) |
-|-----------|-------------------|-------------------|
-| Virtual dispatch | 17.61 | 17.57 |
-| Function pointer | 14.11 | 14.15 |
-| std::variant + std::visit | 18.89 | 13.95 |
-| Decoupled CRTP | 14.11 | 14.15 |
 
 Every call is a three-way coin flip. There's no pattern to learn and no dominant target to bet on, so no predictor can do better than chance: the indirect call should miss about two times in three.
 
