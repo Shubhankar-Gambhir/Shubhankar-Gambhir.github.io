@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 330" width="720" height="330" role="img" aria-label="The vtable for Base is 40 bytes with or without RTTI. With -frtti, slot +0x08 points to the typeinfo object _ZTI4Base; with -fno-rtti the slot stays and holds null, and no typeinfo is emitted.">
+<rect width="720" height="330" fill="#1b1b1e"/>
+<defs>
+<marker id="ah-line" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#7a7a7a"/></marker>
+<marker id="ah-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#338ced"/></marker>
+</defs>
+<text x="16" y="26" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" text-anchor="start" fill="#efefef" font-weight="600">-frtti</text>
+<text x="16" y="64" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="11" text-anchor="start" fill="#9c9c9c">Base object</text>
+<rect x="16" y="72" width="56" height="26" rx="3" fill="#26262a" stroke="#7a7a7a"/>
+<text x="44" y="89" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="12" text-anchor="middle" fill="#efefef">vptr</text>
+<text x="92" y="64" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="11" text-anchor="start" fill="#9c9c9c">vtable for Base, 40 bytes</text>
+<rect x="92" y="72" width="214" height="26" fill="#26262a" stroke="#7a7a7a"/>
+<text x="100" y="89" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="start" fill="#9c9c9c">+0x00</text>
+<text x="146" y="89" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="start" fill="#efefef">offset-to-top = 0</text>
+<rect x="92" y="98" width="214" height="26" fill="#1d3350" stroke="#7a7a7a"/>
+<text x="100" y="115" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="start" fill="#9c9c9c">+0x08</text>
+<text x="146" y="115" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="start" fill="#efefef" font-weight="600">&amp;_ZTI4Base</text>
+<rect x="92" y="124" width="214" height="26" fill="#26262a" stroke="#7a7a7a"/>
+<text x="100" y="141" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="start" fill="#9c9c9c">+0x10</text>
+<text x="146" y="141" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="start" fill="#efefef">&amp;Base::~Base() [D1]</text>
+<rect x="92" y="150" width="214" height="26" fill="#26262a" stroke="#7a7a7a"/>
+<text x="100" y="167" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="start" fill="#9c9c9c">+0x18</text>
+<text x="146" y="167" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="start" fill="#efefef">&amp;Base::~Base() [D0]</text>
+<rect x="92" y="176" width="214" height="26" fill="#26262a" stroke="#7a7a7a"/>
+<text x="100" y="193" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="start" fill="#9c9c9c">+0x20</text>
+<text x="146" y="193" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="start" fill="#efefef">&amp;Base::f()</text>
+<path d="M72,85.0 H82 V137.0 H90" fill="none" stroke="#7a7a7a" stroke-width="1.5" marker-end="url(#ah-line)"/>
+<path d="M306,111.0 H324 V220 H132 V240" fill="none" stroke="#338ced" stroke-width="1.5" marker-end="url(#ah-accent)"/>
+<text x="16" y="259" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="start" fill="#9c9c9c">_ZTI4Base</text>
+<rect x="92" y="242" width="244" height="26" fill="#1d3350" stroke="#338ced"/>
+<text x="100" y="259" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="start" fill="#efefef">vptr -> __class_type_info vtable</text>
+<rect x="92" y="268" width="244" height="26" fill="#1d3350" stroke="#338ced"/>
+<text x="100" y="285" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="start" fill="#efefef">__name -> _ZTS4Base "4Base"</text>
+<line x1="360" x2="360" y1="12" y2="318" stroke="#5a5a5e" stroke-width="1"/>
+<text x="376" y="26" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="14" text-anchor="start" fill="#efefef" font-weight="600">-fno-rtti</text>
+<text x="376" y="64" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="11" text-anchor="start" fill="#9c9c9c">Base object</text>
+<rect x="376" y="72" width="56" height="26" rx="3" fill="#26262a" stroke="#7a7a7a"/>
+<text x="404" y="89" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="12" text-anchor="middle" fill="#efefef">vptr</text>
+<text x="452" y="64" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="11" text-anchor="start" fill="#9c9c9c">vtable for Base, 40 bytes</text>
+<rect x="452" y="72" width="214" height="26" fill="#26262a" stroke="#7a7a7a"/>
+<text x="460" y="89" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="start" fill="#9c9c9c">+0x00</text>
+<text x="506" y="89" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="start" fill="#efefef">offset-to-top = 0</text>
+<rect x="452" y="98" width="214" height="26" fill="#1d3350" stroke="#7a7a7a"/>
+<text x="460" y="115" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="start" fill="#9c9c9c">+0x08</text>
+<text x="506" y="115" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="start" fill="#efefef" font-weight="600">0 (null)</text>
+<rect x="452" y="124" width="214" height="26" fill="#26262a" stroke="#7a7a7a"/>
+<text x="460" y="141" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="start" fill="#9c9c9c">+0x10</text>
+<text x="506" y="141" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="start" fill="#efefef">&amp;Base::~Base() [D1]</text>
+<rect x="452" y="150" width="214" height="26" fill="#26262a" stroke="#7a7a7a"/>
+<text x="460" y="167" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="start" fill="#9c9c9c">+0x18</text>
+<text x="506" y="167" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="start" fill="#efefef">&amp;Base::~Base() [D0]</text>
+<rect x="452" y="176" width="214" height="26" fill="#26262a" stroke="#7a7a7a"/>
+<text x="460" y="193" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="start" fill="#9c9c9c">+0x20</text>
+<text x="506" y="193" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="start" fill="#efefef">&amp;Base::f()</text>
+<path d="M432,85.0 H442 V137.0 H450" fill="none" stroke="#7a7a7a" stroke-width="1.5" marker-end="url(#ah-line)"/>
+<rect x="452" y="242" width="214" height="52" rx="3" fill="none" stroke="#5a5a5e" stroke-dasharray="4 3"/>
+<text x="559.0" y="264" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="11" text-anchor="middle" fill="#9c9c9c">no _ZTI4Base, no _ZTS4Base</text>
+<text x="559.0" y="280" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="11" text-anchor="middle" fill="#9c9c9c">(not emitted)</text>
+</svg>

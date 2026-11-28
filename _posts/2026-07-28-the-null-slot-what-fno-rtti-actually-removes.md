@@ -50,14 +50,9 @@ poly_nortti.o  .data.rel.ro.local._ZTV4Base   size 0x28   3 relocations
 
 Forty bytes either way. The missing relocation is the typeinfo slot:
 
-```
-WITH RTTI                                  WITHOUT RTTI
-+0x00   (offset-to-top)                    +0x00   (offset-to-top)
-+0x08   -> _ZTI4Base                       +0x08   no relocation, stays NULL
-+0x10   -> _ZN4BaseD1Ev   <- vptr points here
-+0x18   -> _ZN4BaseD0Ev
-+0x20   -> _ZN4Base1fEv
-```
+![The vtable for Base is 40 bytes in both builds and the object's vptr points at slot +0x10. With -frtti, slot +0x08 points to the typeinfo object for Base, which points to the runtime's class type info vtable and to the name string. With -fno-rtti, slot +0x08 is still there and holds null, and neither the typeinfo object nor the name string is emitted.](/assets/img/null-slot-vtable-light.svg){: .light w="720" h="330" }
+![The vtable for Base is 40 bytes in both builds and the object's vptr points at slot +0x10. With -frtti, slot +0x08 points to the typeinfo object for Base, which points to the runtime's class type info vtable and to the name string. With -fno-rtti, slot +0x08 is still there and holds null, and neither the typeinfo object nor the name string is emitted.](/assets/img/null-slot-vtable-dark.svg){: .dark w="720" h="330" }
+_Same layout, same offsets. Only the slot's contents and the typeinfo graph behind it change._
 
 You can read that slot yourself, and the way you do it is the way the compiler does. A polymorphic object's first eight bytes are its vptr, and the vptr points at the first virtual function slot (`+0x10` in that layout), not at the start of the vtable. The typeinfo pointer therefore lives one slot *before* where the vptr points:
 

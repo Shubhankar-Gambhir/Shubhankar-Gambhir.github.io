@@ -82,7 +82,7 @@ A `Square` ends up with the Polygon, Rectangle and Square bits set; a `Circle` h
 ; via_dynamic_cast: dynamic_cast<Rectangle*>(s)
         testq   %rdi, %rdi          ; null in...
         je      .L6                 ; ...skip the runtime entirely
-        xorl    %ecx, %ecx          ; hint = 0: no statically known offset
+        xorl    %ecx, %ecx          ; src2dst hint = 0: Shape is Rectangle's public base at offset 0
         movl    $typeinfo for Rectangle, %edx   ; &type_info for the target type
         movl    $typeinfo for Shape, %esi       ; &type_info for the source type
         jmp     __dynamic_cast      ; tail-call into the C++ runtime, out of line
