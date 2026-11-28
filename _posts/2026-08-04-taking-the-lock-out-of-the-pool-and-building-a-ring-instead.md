@@ -67,10 +67,12 @@ If the allocation is the problem, stop allocating. A bounded ring buffer holds i
 The naive version keeps a head and a tail counter and has a hole: a producer claims a slot, then stalls before writing the value, and a consumer that trusts the tail counter reads whatever garbage was in the slot. Vyukov's fix is to give every cell a sequence number, so the cell itself is the synchronization point:
 
 ```
-seq == pos       -> cell is free; the producer holding ticket pos may write it
-seq == pos + 1   -> cell is full; the consumer holding ticket pos may read it
-seq <  pos       -> producers have lapped the consumers: FULL
-seq <  pos + 1   -> consumers have caught the producers: EMPTY
+producer holding ticket pos:
+  seq == pos       -> cell is free: claim the ticket and write it
+  seq <  pos       -> last lap's value is still unread: FULL
+consumer holding ticket pos:
+  seq == pos + 1   -> cell is full: claim the ticket and read it
+  seq <  pos + 1   -> nothing published here yet: EMPTY
 ```
 
 ```cpp
@@ -96,9 +98,45 @@ bool push(const T& v) {
 }
 ```
 
-The shared counter only hands out tickets; correctness lives in the cells. A consumer waiting on `seq == pos + 1` cannot be fooled, because only the producer that owns that ticket can publish it. And a stalled producer blocks exactly one cell rather than the queue, which is the property the head/tail version lacks.
+The shared counter only hands out tickets; correctness lives in the cells. A consumer waiting on `seq == pos + 1` cannot be fooled, because only the producer that owns that ticket can publish it.
 
 The signed `diff` is doing quiet work. Both `pos` and `seq` are unsigned counters that will eventually wrap around zero, but their difference stays small and correct across the wrap, so the four `seq` cases keep working forever.
+
+`pop` is the mirror image, with one extra step at the end:
+
+```cpp
+bool pop(T& out) {
+    Cell* c;
+    size_t pos = _deq.load(std::memory_order_relaxed);
+    for (;;) {
+        c = &_buf[pos & MASK];
+        size_t seq = c->seq.load(std::memory_order_acquire);
+        intptr_t diff = static_cast<intptr_t>(seq) - static_cast<intptr_t>(pos + 1);
+        if (diff == 0) {
+            if (_deq.compare_exchange_weak(pos, pos + 1, std::memory_order_relaxed))
+                break;
+        } else if (diff < 0) {
+            return false;                                  // empty
+        } else {
+            pos = _deq.load(std::memory_order_relaxed);
+        }
+    }
+    out = std::move(c->value);
+    // Hand the cell to the producer one full lap ahead.
+    c->seq.store(pos + Capacity, std::memory_order_release);
+    return true;
+}
+```
+
+That last store is what makes it a ring. The consumer that empties a cell sets its sequence number to `pos + Capacity`, which is exactly the ticket the producer one lap ahead will arrive holding.
+
+A stalled producer is where the cell-level design shows its limit. The garbage read is gone: a consumer that reaches a claimed but unwritten cell finds `seq == pos`, reports EMPTY, and tries again later. But consumers take tickets in order, so every one of them stops at that cell, even when the cells behind it are full:
+
+![An eight-cell ring. The dequeue ticket is 10 and points at cell 2, which a stalled producer claimed but never wrote, so it still holds seq 10. Cells 3 to 5 are full with seq 12, 13 and 14. The consumer at ticket 10 sees seq 10 instead of 11 and returns empty.](/assets/img/vyukov-ring-stall-light.svg){: .light w="720" h="236" }
+![An eight-cell ring. The dequeue ticket is 10 and points at cell 2, which a stalled producer claimed but never wrote, so it still holds seq 10. Cells 3 to 5 are full with seq 12, 13 and 14. The consumer at ticket 10 sees seq 10 instead of 11 and returns empty.](/assets/img/vyukov-ring-stall-dark.svg){: .dark w="720" h="236" }
+_Capacity 8. The producer holding ticket 10 claimed cell 2 and was preempted before its release store._
+
+Other producers keep filling the cells after it until the ring laps around to the stuck one, and then they stop too. One preempted thread can stall the whole queue, which makes the ring blocking in the formal sense, for all that it never takes a lock.
 
 How fast that is in practice, and where it still loses, is in [The Ring That Doesn't Allocate: Benchmarking a Bounded MPMC Queue]({% post_url 2026-08-25-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %}).
 

@@ -8,6 +8,7 @@ description: >-
   items pushed through it. Here is the ABA bug, a reproducer that measures which thread
   mixes trigger it on three machines, and the tagged-pointer fix that borrows the top
   sixteen bits of every pointer for a version counter.
+mermaid: true
 image:
   path: /assets/img/og/lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring.png
   alt: "Lock-Free Is Not Free: ABA and Tagged Pointers"
@@ -16,7 +17,7 @@ image:
 
 The [previous post]({% post_url 2026-07-07-a-deep-dive-into-producer-consumer-queues %}) ended with one suspect still standing. A node pool guarded by a mutex lost to plain `new`/`delete`. Sharding that pool sixteen ways recovered some of the loss and still lost. The open question was whether the lock was the only problem, or whether pooling is simply a dead end for this workload. The way to settle it is to take the lock away.
 
-So I did, twice. First by replacing the free list's mutex with a lock-free Treiber stack, which is the move everyone reaches for. Then by deleting the allocation question entirely with a bounded ring buffer that touches no allocator at all in steady state, which has [a post of its own]({% post_url 2026-08-25-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %}).
+So I did, twice. First by replacing the free list's mutex with a lock-free Treiber stack, which is the move everyone reaches for. Then by deleting the allocation question entirely with a bounded ring buffer that touches no allocator at all in steady state, whose [design]({% post_url 2026-08-04-taking-the-lock-out-of-the-pool-and-building-a-ring-instead %}) and [benchmarks]({% post_url 2026-08-25-the-ring-that-doesnt-allocate-benchmarking-a-bounded-mpmc-queue %}) come later.
 
 The first attempt lost 83 percent of the items pushed through it, and my test suite told me it was fine. That is this post.
 
@@ -71,7 +72,24 @@ Every one of those forty runs failed, all in the same place:
 
 Not a subtle off-by-one. In the second line the queue delivered 8,815 of 800,000 items and lost the rest. The first run had passed by luck, and one green run was all it took for me to believe the thing worked.
 
-This is the ABA problem, and the reason it is worth measuring rather than reciting is that the textbook description makes it sound like a rare interleaving. Here is the sequence. Thread A reads the head of the free list, sees node N1, and reads `N1->next`, which is N2. Before A's compare-exchange runs, thread B pops N1 off the stack and starts using it. Some consumer later returns N1 to the free list. The head is N1 again, but the stack underneath it is now completely different. A's compare-exchange compares the head against N1, finds a match, and swings the head to N2, a node that is currently live inside the queue. N2 now exists in two places at once, and from there the structure unravels.
+This is the ABA problem, and the reason it is worth measuring rather than reciting is that the textbook description makes it sound like a rare interleaving. Here is the sequence. Thread A reads the head of the free list, sees node N1, and reads `N1->next`, which is N2. Before A's compare-exchange runs, thread B pops N1 off the stack, then pops N2 for its next item, and both go into the queue carrying values. A consumer later returns N1 to the free list. The head is N1 again, but N2 is no longer underneath it. A's compare-exchange compares the head against N1, finds a match, and swings the head to N2, a node that is currently live inside the queue. N2 now exists in two places at once, and from there the structure unravels.
+
+```mermaid
+sequenceDiagram
+    participant A as Producer A
+    participant F as Free list
+    participant B as Producer B
+    participant C as Consumer
+    Note over F: head: N1, N2, N3
+    A->>F: read head = N1, N1.next = N2
+    Note over A: preempted before its CAS
+    B->>F: pop N1 (head: N2, N3)
+    B->>F: pop N2 (head: N3)
+    Note over B: N1 and N2 now carry items in the queue
+    C->>F: free N1 (head: N1, N3)
+    A->>F: CAS(head, N1 to N2) succeeds
+    Note over F: head: N2, which is still in the queue
+```
 
 A bare pointer compare-exchange cannot distinguish "nothing changed" from "everything changed and changed back."
 
