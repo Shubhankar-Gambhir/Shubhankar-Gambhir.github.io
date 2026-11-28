@@ -88,9 +88,154 @@ def figure(t):
     return "\n".join(s)
 
 
+# ---------------------------------------------------------------- post 4: flatness
+
+# Xeon table from "The Ring That Doesn't Allocate", ns per item, median of 5.
+MIXES = ["1×1", "2×2", "4×4", "8×8", "16×16", "1×8", "1×15", "8×1", "15×1"]
+GROUPS = [("uncontended", 0, 0), ("balanced", 1, 4), ("fan-out", 5, 6), ("fan-in", 7, 8)]
+XEON = {
+    "Deque + 1 mutex": [379, 611, 596, 593, 576, 2141, 3762, 353, 368],
+    "Two locks":       [993, 743, 1104, 1227, 1203, 886, 810, 1009, 994],
+    "Ring (1024)":     [90, 424, 472, 505, 598, 433, 460, 429, 450],
+}
+SERIES = {"light": ["#257de0", "#f47230", "#00b894"], "dark": ["#338ced", "#e76624", "#00a888"]}
+GRID = {"light": "#e4e4e4", "dark": "#38383c"}
+
+
+def marker(shape, x, y, col, ring):
+    if shape == 0:
+        return f'<circle cx="{x:.1f}" cy="{y:.1f}" r="5" fill="{col}" stroke="{ring}" stroke-width="2"/>'
+    if shape == 1:
+        return (f'<rect x="{x - 5:.1f}" y="{y - 5:.1f}" width="10" height="10" fill="{col}" '
+                f'stroke="{ring}" stroke-width="2"/>')
+    if shape == 2:
+        return (f'<path d="M{x:.1f},{y - 7:.1f} L{x + 7:.1f},{y:.1f} L{x:.1f},{y + 7:.1f} '
+                f'L{x - 7:.1f},{y:.1f} z" fill="{col}" stroke="{ring}" stroke-width="2"/>')
+    return (f'<path d="M{x:.1f},{y - 7:.1f} L{x + 6.5:.1f},{y + 5:.1f} L{x - 6.5:.1f},{y + 5:.1f} z" '
+            f'fill="{col}" stroke="{ring}" stroke-width="2"/>')
+
+
+def flatness(mode, t):
+    import math
+    w, h = 720, 380
+    l, r, top, bot = 64, 24, 64, 76
+    pw, ph = w - l - r, h - top - bot
+    lo, hi = math.log10(60), math.log10(5000)
+    step = pw / len(MIXES)
+    x = lambda i: l + step * (i + 0.5)
+    y = lambda v: top + (hi - math.log10(v)) / (hi - lo) * ph
+    cols = SERIES[mode]
+    s = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{w}" '
+         f'height="{h}" role="img" aria-label="Nanoseconds per item on the Xeon across nine '
+         f'thread mixes, log scale. The ring stays between 424 and 598 ns across the eight '
+         f'contended mixes; the deque behind one mutex ranges from 353 to 3762 ns; the '
+         f'two-lock queue stays between 743 and 1227 ns.">',
+         f'<rect width="{w}" height="{h}" fill="{t["surface"]}"/>']
+    for v in (100, 250, 500, 1000, 2500):
+        s.append(f'<line x1="{l}" x2="{l + pw}" y1="{y(v):.1f}" y2="{y(v):.1f}" '
+                 f'stroke="{GRID[mode]}" stroke-width="1"/>')
+        s.append(text(l - 8, y(v) + 4, f"{v:,}", t, size=12, color="text2", anchor="end"))
+    s.append(text(16, top + ph / 2, "ns per item (log)", t, size=12, color="text2"))
+    s[-1] = s[-1].replace("<text ", f'<text transform="rotate(-90 16 {top + ph / 2})" ', 1)
+    # the ring's band across the contended mixes
+    ring = XEON["Ring (1024)"][1:]
+    s.append(f'<rect x="{x(1) - step / 2:.1f}" y="{y(max(ring)):.1f}" width="{step * 8:.1f}" '
+             f'height="{y(min(ring)) - y(max(ring)):.1f}" fill="{cols[2]}" opacity="0.14"/>')
+    s.append(text(x(1) - step / 2 + 6, y(min(ring)) + 15, "ring, contended: 424 to 598 ns (1.4x)",
+                  t, size=11, anchor="start"))
+    # group dividers and labels
+    for name, a, b in GROUPS:
+        if a:
+            gx = x(a) - step / 2
+            s.append(f'<line x1="{gx:.1f}" x2="{gx:.1f}" y1="{top}" y2="{top + ph + 40}" '
+                     f'stroke="{GRID[mode]}" stroke-width="1"/>')
+        s.append(text((x(a) + x(b)) / 2, top + ph + 38, name, t, size=12, color="text2"))
+    for i, m in enumerate(MIXES):
+        s.append(text(x(i), top + ph + 18, m, t, size=12))
+    s.append(f'<line x1="{l}" x2="{l + pw}" y1="{top + ph}" y2="{top + ph}" '
+             f'stroke="{t["text2"]}" stroke-width="1"/>')
+    for k, (name, vals) in enumerate(XEON.items()):
+        for i, v in enumerate(vals):
+            s.append(marker(k, x(i), y(v), cols[k], t["surface"]))
+    # legend
+    lx = l
+    for k, name in enumerate(XEON):
+        s.append(marker(k, lx + 6, 30, cols[k], t["surface"]))
+        s.append(text(lx + 18, 34, name, t, size=12, anchor="start"))
+        lx += 30 + 7.2 * len(name)
+    s.append(text(l + pw, 34, "Xeon, producers × consumers", t, size=12, color="text2", anchor="end"))
+    s.append("</svg>")
+    return "\n".join(s)
+
+
+# ---------------------------------------------------------------- post 5: payload sweep
+
+# "Where the Copy Happens" table, Xeon, 4P x 4C, ns per item. Up to 512 B from the main
+# sweep, 1 KB and up from own-process runs with glibc trimming off (the post explains why).
+SIZES = [8, 64, 256, 512, 1024, 2048, 4096]
+PAYLOAD = {  # colour slot follows the queue across posts: deque 0, two-lock 1, ring 2
+    "MutexQueue":           (0, [530, 1053, 2040, 2896, 3181, 3599, 4698]),
+    "TwoLockQueue":         (1, [1200, 1218, 1221, 1317, 1311, 1572, 2059]),
+    "Ring":                 (2, [344, 478, 476, 443, 389, 434, 488]),
+    "TwoLockQueueDeferred": (3, [1166, 1199, 1160, 1111, 1172, 1229, 1333]),
+}
+SERIES4 = {"light": SERIES["light"] + ["#f2a600"], "dark": SERIES["dark"] + ["#d28e05"]}
+
+
+def payload(mode, t):
+    import math
+    w, h = 720, 380
+    l, r, top, bot = 64, 214, 56, 56
+    pw, ph = w - l - r, h - top - bot
+    x = lambda n: l + (math.log2(n) - 3) / 9 * pw
+    y = lambda v: top + (1 - v / 5000) * ph
+    cols = SERIES4[mode]
+    s = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{w}" '
+         f'height="{h}" role="img" aria-label="Nanoseconds per item against payload size from '
+         f'8 bytes to 4 KB, Xeon, four producers and four consumers. MutexQueue climbs from 530 '
+         f'to 4698 ns, TwoLockQueue from 1200 to 2059, TwoLockQueueDeferred stays between 1111 '
+         f'and 1333, and the ring stays between 344 and 488.">',
+         f'<rect width="{w}" height="{h}" fill="{t["surface"]}"/>']
+    for v in range(0, 5001, 1000):
+        s.append(f'<line x1="{l}" x2="{l + pw}" y1="{y(v):.1f}" y2="{y(v):.1f}" '
+                 f'stroke="{GRID[mode]}" stroke-width="1"/>')
+        s.append(text(l - 8, y(v) + 4, f"{v:,}", t, size=12, color="text2", anchor="end"))
+    for n in SIZES:
+        lab = f"{n // 1024} KB" if n >= 1024 else f"{n}"
+        s.append(text(x(n), top + ph + 18, lab, t, size=12, color="text2"))
+    s.append(text(l + pw / 2, h - 10, "payload size (bytes, log scale)", t, size=12, color="text2"))
+    s.append(text(16, top + ph / 2, "ns per item", t, size=12, color="text2"))
+    s[-1] = s[-1].replace("<text ", f'<text transform="rotate(-90 16 {top + ph / 2})" ', 1)
+    # where the data source changes
+    bx = (x(512) + x(1024)) / 2
+    s.append(f'<line x1="{bx:.1f}" x2="{bx:.1f}" y1="{top - 6}" y2="{top + ph}" '
+             f'stroke="{t["text2"]}" stroke-width="1"/>')
+    s.append(text(bx - 6, top - 10, "main sweep", t, size=11, color="text2", anchor="end"))
+    s.append(text(bx + 6, top - 10, "own process, trimming off", t, size=11, color="text2",
+                  anchor="start"))
+    # series, then end labels spaced so they never collide
+    ends = []
+    for name, (k, vals) in PAYLOAD.items():
+        pts = " ".join(f"{x(n):.1f},{y(v):.1f}" for n, v in zip(SIZES, vals))
+        s.append(f'<polyline points="{pts}" fill="none" stroke="{cols[k]}" stroke-width="2" '
+                 f'stroke-linejoin="round" stroke-linecap="round"/>')
+        for n, v in zip(SIZES, vals):
+            s.append(marker(k, x(n), y(v), cols[k], t["surface"]))
+        ends.append([y(vals[-1]), name, vals[-1], k])
+    ends.sort()
+    for i in range(1, len(ends)):
+        ends[i][0] = max(ends[i][0], ends[i - 1][0] + 16)
+    for ly, name, v, k in ends:
+        s.append(text(l + pw + 12, ly + 4, f"{name} {v:,}", t, size=12, anchor="start"))
+    s.append("</svg>")
+    return "\n".join(s)
+
+
 def main():
     for mode, t in THEMES.items():
         (OUT / f"vyukov-ring-stall-{mode}.svg").write_text(figure(t) + "\n")
+        (OUT / f"ring-flatness-{mode}.svg").write_text(flatness(mode, t) + "\n")
+        (OUT / f"payload-sweep-{mode}.svg").write_text(payload(mode, t) + "\n")
 
 
 if __name__ == "__main__":

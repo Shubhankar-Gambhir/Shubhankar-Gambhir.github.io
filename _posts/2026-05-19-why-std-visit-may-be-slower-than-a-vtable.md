@@ -69,6 +69,9 @@ Before the call itself:
 
 3. **An indexed indirect call** (`call *(%r14,%rax,8)`) uses the discriminant to index into a function pointer table at `%r14`. This is `_S_vtable`, a compile-time generated array of function pointers, one per alternative.
 
+![Two call paths compiled by GCC 11.4. Virtual dispatch reloads the object pointer, loads the vptr, calls through vtable slot 2, and the callee receives its arguments in registers and runs 5 instructions. std::visit first stores two locals into a lambda capture struct on the stack, loads the variant index byte, calls through the library's function pointer table, and the callee reads both captures back from the stack and runs 15 instructions.](/assets/img/visit-vs-vtable-light.svg){: .light w="720" h="400" }
+![Two call paths compiled by GCC 11.4. Virtual dispatch reloads the object pointer, loads the vptr, calls through vtable slot 2, and the callee receives its arguments in registers and runs 5 instructions. std::visit first stores two locals into a lambda capture struct on the stack, loads the variant index byte, calls through the library's function pointer table, and the callee reads both captures back from the stack and runs 15 instructions.](/assets/img/visit-vs-vtable-dark.svg){: .dark w="720" h="400" }
+
 ## Inside the Stdlib: How std::visit Dispatches
 
 The assembly above is a consequence of specific implementation choices in libstdc++. If you're mainly interested in the performance implications, you can [skip ahead to the valueless_by_exception section](#the-valueless_by_exception-tax).

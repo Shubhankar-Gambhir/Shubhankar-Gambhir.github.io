@@ -40,6 +40,10 @@ The jump from 90 to 424 nanoseconds at 2P x 2C is the real cost of multi-produce
 
 The property I did not expect is the flatness. Across the eight contended mixes the ring spans 424 to 598 nanoseconds, a spread of 1.4x, against 353 to 3762 for the deque-backed queue, a spread of more than ten. The two-lock queue is respectably flat too at 1.65x, so the ring is not alone in this, but it is flat at roughly half the absolute cost. For a component sitting in a system whose traffic shape you do not control, that predictability is arguably worth more than any single number in the table.
 
+![Nanoseconds per item on the Xeon across nine thread mixes, log scale. The ring stays between 424 and 598 ns across the eight contended mixes; the deque behind one mutex ranges from 353 to 3762 ns; the two-lock queue stays between 743 and 1227 ns.](/assets/img/ring-flatness-light.svg){: .light w="720" h="380" }
+![Nanoseconds per item on the Xeon across nine thread mixes, log scale. The ring stays between 424 and 598 ns across the eight contended mixes; the deque behind one mutex ranges from 353 to 3762 ns; the two-lock queue stays between 743 and 1227 ns.](/assets/img/ring-flatness-dark.svg){: .dark w="720" h="380" }
+_The Xeon table above, on a log scale. The band spans the ring's eight contended mixes._
+
 ARM keeps the shape and moves the extremes:
 
 | Mix (ARM) | Deque + 1 mutex | Two locks | Lock-free pool | Ring (1024) | Ring (65536) |

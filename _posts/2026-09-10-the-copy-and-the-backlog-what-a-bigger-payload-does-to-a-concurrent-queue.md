@@ -134,6 +134,10 @@ Four consumers, four producers, on the Xeon, with the allocator held still: payl
 
 Nanoseconds per item, Xeon, 4P x 4C.
 
+![Nanoseconds per item against payload size from 8 bytes to 4 KB, Xeon, four producers and four consumers. MutexQueue climbs from 530 to 4698 ns, TwoLockQueue from 1200 to 2059, TwoLockQueueDeferred stays between 1111 and 1333, and the ring stays between 344 and 488.](/assets/img/payload-sweep-light.svg){: .light w="720" h="380" }
+![Nanoseconds per item against payload size from 8 bytes to 4 KB, Xeon, four producers and four consumers. MutexQueue climbs from 530 to 4698 ns, TwoLockQueue from 1200 to 2059, TwoLockQueueDeferred stays between 1111 and 1333, and the ring stays between 344 and 488.](/assets/img/payload-sweep-dark.svg){: .dark w="720" h="380" }
+_The same table. The vertical rule marks where the data source changes._
+
 The deferred variant stays flat at 1.1 to 1.3 microseconds while `TwoLockQueue` climbs, and the gap opens with N, reaching 1.54x at 4 KB. At sixteen consumers it is 1.41x at 4 KB. The dip at 1 KB is the allocator, not the copy: `TwoLockQueue`'s node is exactly 1,032 bytes, the largest request glibc's per-thread cache (tcache) will hold, and the deferred node's extra reference count makes it 1,040. With tcache disabled for both, the 1 KB gap is 1.28x at four and at eight consumers, in line with its neighbors. `MutexQueue`, which does both copies inside its one lock, gets worse from the very first size step: going from 8 to 64 bytes roughly doubles its cost, because every extra byte lengthens the only critical section in the queue.
 
 Two controls say this is about the copy and not about the deferred variant being generally quicker. With one consumer there is nobody else waiting on the head lock, and the two variants come out even through 2 KB (1.04x at 1 KB, 0.97x at 2 KB). At 4 KB the deferred variant is actually slower with one consumer, 1,449 ns against 1,015. I profiled it: both spend over half their cycles in the kernel's futex path, with the fifteen producers fighting over the tail lock, and the deferred variant takes about 20 percent more context switches. I haven't found the cause.

@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 400" width="720" height="400" role="img" aria-label="Two call paths compiled by GCC 11.4. Virtual dispatch reloads the object pointer, loads the vptr, calls through vtable slot 2, and the callee receives its arguments in registers and runs 5 instructions. std::visit first stores two locals into a lambda capture struct on the stack, loads the variant index byte, calls through the library table, and the callee reads both captures back from the stack and runs 15 instructions.">
+<rect width="720" height="400" fill="#ffffff"/>
+<defs>
+<marker id="ah-line" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8a8a8a"/></marker>
+<marker id="ah-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#f47230"/></marker>
+</defs>
+<text x="20.0" y="34.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="14" text-anchor="start" fill="#191919" font-weight="600">virtual dispatch</text>
+<rect x="20" y="66" width="200" height="46" rx="5" fill="#f4f4f4" stroke="#8a8a8a" stroke-width="1.2"/>
+<text x="30.0" y="85.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="start" fill="#191919">load BarrierSet* from stack</text>
+<text x="30.0" y="102.0" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="10.5" text-anchor="start" fill="#666666">movq 8(%rsp), %rdi</text>
+<line x1="120.0" y1="112" x2="120.0" y2="131" stroke="#8a8a8a" stroke-width="1.5" marker-end="url(#ah-line)"/>
+<rect x="20" y="134" width="200" height="46" rx="5" fill="#f4f4f4" stroke="#8a8a8a" stroke-width="1.2"/>
+<text x="30.0" y="153.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="start" fill="#191919">load vptr from the object</text>
+<text x="30.0" y="170.0" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="10.5" text-anchor="start" fill="#666666">movq (%rdi), %rax</text>
+<line x1="120.0" y1="180" x2="120.0" y2="199" stroke="#8a8a8a" stroke-width="1.5" marker-end="url(#ah-line)"/>
+<rect x="20" y="202" width="200" height="46" rx="5" fill="#f4f4f4" stroke="#8a8a8a" stroke-width="1.2"/>
+<text x="30.0" y="221.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="start" fill="#191919">indirect call through vtable[2]</text>
+<text x="30.0" y="238.0" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="10.5" text-anchor="start" fill="#666666">call *16(%rax)</text>
+<line x1="120.0" y1="248" x2="120.0" y2="267" stroke="#8a8a8a" stroke-width="1.5" marker-end="url(#ah-line)"/>
+<rect x="20" y="270" width="200" height="46" rx="5" fill="#f4f4f4" stroke="#8a8a8a" stroke-width="1.2"/>
+<text x="30.0" y="289.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="start" fill="#191919" font-weight="600">G1BS::store</text>
+<text x="30.0" y="306.0" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="10.5" text-anchor="start" fill="#666666">args in registers: 5 instructions</text>
+<text x="244.0" y="132.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="11" text-anchor="start" fill="#666666">vtable for G1BS</text>
+<rect x="244" y="140" width="96" height="22" fill="#ececec" stroke="#8a8a8a" stroke-width="1"/>
+<text x="252.0" y="155.0" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="10.5" text-anchor="start" fill="#191919">+0</text>
+<rect x="244" y="162" width="96" height="22" fill="#ececec" stroke="#8a8a8a" stroke-width="1"/>
+<text x="252.0" y="177.0" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="10.5" text-anchor="start" fill="#191919">+8</text>
+<rect x="244" y="184" width="96" height="22" fill="#ececec" stroke="#8a8a8a" stroke-width="1"/>
+<text x="252.0" y="199.0" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="10.5" text-anchor="start" fill="#191919">+16 store</text>
+<line x1="220" y1="225.0" x2="241" y2="195" stroke="#8a8a8a" stroke-width="1.2" marker-end="url(#ah-line)"/>
+<line x1="360" x2="360" y1="16" y2="384" stroke="#ececec" stroke-width="1"/>
+<text x="380.0" y="34.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="14" text-anchor="start" fill="#191919" font-weight="600">std::visit (libstdc++ 11.4)</text>
+<rect x="380" y="66" width="200" height="46" rx="5" fill="#fde9de" stroke="#f47230" stroke-width="2"/>
+<text x="390.0" y="85.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="start" fill="#191919">spill 2 locals to the capture</text>
+<text x="390.0" y="102.0" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="10.5" text-anchor="start" fill="#666666">movq %rbp, 16(%rsp) ...</text>
+<line x1="480.0" y1="112" x2="480.0" y2="131" stroke="#8a8a8a" stroke-width="1.5" marker-end="url(#ah-line)"/>
+<rect x="380" y="134" width="200" height="46" rx="5" fill="#f4f4f4" stroke="#8a8a8a" stroke-width="1.2"/>
+<text x="390.0" y="153.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="start" fill="#191919">load the variant's index byte</text>
+<text x="390.0" y="170.0" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="10.5" text-anchor="start" fill="#666666">movzbl 7(%rsp), %eax</text>
+<line x1="480.0" y1="180" x2="480.0" y2="199" stroke="#8a8a8a" stroke-width="1.5" marker-end="url(#ah-line)"/>
+<rect x="380" y="202" width="200" height="46" rx="5" fill="#f4f4f4" stroke="#8a8a8a" stroke-width="1.2"/>
+<text x="390.0" y="221.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="start" fill="#191919">indexed call into _S_vtable</text>
+<text x="390.0" y="238.0" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="10.5" text-anchor="start" fill="#666666">call *(%r14,%rax,8)</text>
+<line x1="480.0" y1="248" x2="480.0" y2="267" stroke="#8a8a8a" stroke-width="1.5" marker-end="url(#ah-line)"/>
+<rect x="380" y="270" width="200" height="46" rx="5" fill="#fde9de" stroke="#f47230" stroke-width="2"/>
+<text x="390.0" y="289.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="start" fill="#191919" font-weight="600">__visit_invoke&lt;2&gt;</text>
+<text x="390.0" y="306.0" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="10.5" text-anchor="start" fill="#666666">reload 2 captures: 15 instructions</text>
+<text x="604.0" y="104.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="11" text-anchor="start" fill="#666666"></text>
+<rect x="604" y="112" width="100" height="24" fill="#ececec" stroke="#f47230" stroke-width="1.5"/>
+<text x="612.0" y="128.0" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="10.5" text-anchor="start" fill="#191919">16(%rsp)</text>
+<rect x="604" y="136" width="100" height="24" fill="#ececec" stroke="#f47230" stroke-width="1.5"/>
+<text x="612.0" y="152.0" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="10.5" text-anchor="start" fill="#191919">24(%rsp)</text>
+<text x="604.0" y="176.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="11" text-anchor="start" fill="#666666">capture, on stack</text>
+<path d="M580,89.0 H660 V109" fill="none" stroke="#f47230" stroke-width="1.8" marker-end="url(#ah-warn)"/>
+<text x="596.0" y="82.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="11" text-anchor="start" fill="#666666">2 stores</text>
+<path d="M704,136 H714 V293.0 H583" fill="none" stroke="#f47230" stroke-width="1.8" marker-end="url(#ah-warn)"/>
+<text x="704.0" y="286.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="11" text-anchor="end" fill="#666666">2 loads</text>
+<text x="604.0" y="212.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="11" text-anchor="start" fill="#666666">_S_vtable</text>
+<rect x="604" y="220" width="100" height="18" fill="#ececec" stroke="#8a8a8a" stroke-width="1"/>
+<text x="612.0" y="233.0" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="10.5" text-anchor="start" fill="#191919">[0] Epsilon</text>
+<rect x="604" y="238" width="100" height="18" fill="#ececec" stroke="#8a8a8a" stroke-width="1"/>
+<text x="612.0" y="251.0" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="10.5" text-anchor="start" fill="#191919">[1] Serial</text>
+<rect x="604" y="256" width="100" height="18" fill="#ececec" stroke="#8a8a8a" stroke-width="1"/>
+<text x="612.0" y="269.0" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="10.5" text-anchor="start" fill="#191919">[2] G1</text>
+<line x1="580" y1="243.0" x2="601" y2="265" stroke="#8a8a8a" stroke-width="1.2" marker-end="url(#ah-line)"/>
+</svg>
