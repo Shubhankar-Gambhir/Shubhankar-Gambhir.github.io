@@ -76,7 +76,7 @@ The `JavaThread` / `NonJavaThread` split decides who has to cooperate when the V
 
 Some operations need every application thread frozen at a known point: certain GC phases, deoptimizing compiled code, redefining a class. A C++ program would usually reach for a lock that everyone takes. HotSpot cannot afford that on every operation in the hot path, so it does the reverse: application threads *poll*, cheaply and often, and the VM flips a switch when it needs them to stop.
 
-A point in the code where a thread is allowed to stop is a safepoint. Stopping every Java thread at one is what people mean by a stop-the-world pause. The poll itself is tiny. Here is the one that C2, HotSpot's optimizing just-in-time compiler (more on it [under tiered compilation](#tiered-compilation)), emitted at the end of a method in the listing that [the next post]({% post_url 2026-10-28-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store %}) dissects:
+A point in the code where a thread is allowed to stop is a safepoint. Stopping every Java thread at one is what people mean by a stop-the-world pause. The poll itself is tiny. Here is the one that C2, HotSpot's optimizing just-in-time compiler (more on it [under tiered compilation](#tiered-compilation)), emitted at the end of the same compiled method whose barrier [the next post]({% post_url 2026-10-28-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store %}) dissects (that post's listing keeps only the barrier):
 
 ```nasm
         cmp     0x28(%r15), %rsp    ; compare the stack pointer with this thread's polling word

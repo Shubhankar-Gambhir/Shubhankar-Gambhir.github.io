@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 276" width="720" height="276" role="img" aria-label="Four frames. The marker has scanned A; B is found but not scanned and points to C. A Java thread copies B.field into A.field, then nulls B.field. The marker scans B and finds nothing, so C is never marked although A still points to it.">
+<rect width="720" height="276" fill="#1b1b1e"/>
+<defs>
+<marker id="ah-line" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#7a7a7a"/></marker>
+<marker id="ah-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#338ced"/></marker>
+<marker id="ah-warn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#e76624"/></marker>
+</defs>
+<line x1="124.8" y1="86.6" x2="100.6" y2="130.7" stroke="#7a7a7a" stroke-width="1.5" marker-end="url(#ah-line)"/>
+<circle cx="46" cy="70" r="19" fill="#d8d8d8" stroke="#d8d8d8" stroke-width="1.5"/>
+<text x="46.0" y="75.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="14" text-anchor="middle" fill="#1b1b1e" font-weight="700">A</text>
+<circle cx="134" cy="70" r="19" fill="#6a6a6e" stroke="#6a6a6e" stroke-width="1.5"/>
+<text x="134.0" y="75.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="14" text-anchor="middle" fill="#efefef" font-weight="700">B</text>
+<circle cx="90" cy="150" r="19" fill="#1b1b1e" stroke="#7a7a7a" stroke-width="1.5"/>
+<text x="90.0" y="155.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="14" text-anchor="middle" fill="#efefef" font-weight="700">C</text>
+<text x="90.0" y="206.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="middle" fill="#efefef">1. Marker has</text>
+<text x="90.0" y="222.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="middle" fill="#efefef">scanned A</text>
+<line x1="180" x2="180" y1="24" y2="216" stroke="#6a6a6e" stroke-width="1"/>
+<line x1="304.8" y1="86.6" x2="280.6" y2="130.7" stroke="#7a7a7a" stroke-width="1.5" marker-end="url(#ah-line)"/>
+<line x1="235.2" y1="86.6" x2="259.4" y2="130.7" stroke="#338ced" stroke-width="2" marker-end="url(#ah-accent)"/>
+<circle cx="226" cy="70" r="19" fill="#d8d8d8" stroke="#d8d8d8" stroke-width="1.5"/>
+<text x="226.0" y="75.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="14" text-anchor="middle" fill="#1b1b1e" font-weight="700">A</text>
+<circle cx="314" cy="70" r="19" fill="#6a6a6e" stroke="#6a6a6e" stroke-width="1.5"/>
+<text x="314.0" y="75.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="14" text-anchor="middle" fill="#efefef" font-weight="700">B</text>
+<circle cx="270" cy="150" r="19" fill="#1b1b1e" stroke="#7a7a7a" stroke-width="1.5"/>
+<text x="270.0" y="155.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="14" text-anchor="middle" fill="#efefef" font-weight="700">C</text>
+<text x="270.0" y="206.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="middle" fill="#efefef">2. Java thread:</text>
+<text x="270.0" y="222.0" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="12" text-anchor="middle" fill="#efefef">A.field = B.field</text>
+<line x1="360" x2="360" y1="24" y2="216" stroke="#6a6a6e" stroke-width="1"/>
+<line x1="415.2" y1="86.6" x2="439.4" y2="130.7" stroke="#7a7a7a" stroke-width="1.5" marker-end="url(#ah-line)"/>
+<circle cx="406" cy="70" r="19" fill="#d8d8d8" stroke="#d8d8d8" stroke-width="1.5"/>
+<text x="406.0" y="75.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="14" text-anchor="middle" fill="#1b1b1e" font-weight="700">A</text>
+<circle cx="494" cy="70" r="19" fill="#6a6a6e" stroke="#6a6a6e" stroke-width="1.5"/>
+<text x="494.0" y="75.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="14" text-anchor="middle" fill="#efefef" font-weight="700">B</text>
+<circle cx="450" cy="150" r="19" fill="#1b1b1e" stroke="#7a7a7a" stroke-width="1.5"/>
+<text x="450.0" y="155.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="14" text-anchor="middle" fill="#efefef" font-weight="700">C</text>
+<text x="450.0" y="206.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="middle" fill="#efefef">3. Java thread:</text>
+<text x="450.0" y="222.0" font-family="'SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace" font-size="12" text-anchor="middle" fill="#efefef">B.field = null</text>
+<line x1="540" x2="540" y1="24" y2="216" stroke="#6a6a6e" stroke-width="1"/>
+<line x1="595.2" y1="86.6" x2="619.4" y2="130.7" stroke="#7a7a7a" stroke-width="1.5" marker-end="url(#ah-line)"/>
+<circle cx="586" cy="70" r="19" fill="#d8d8d8" stroke="#d8d8d8" stroke-width="1.5"/>
+<text x="586.0" y="75.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="14" text-anchor="middle" fill="#1b1b1e" font-weight="700">A</text>
+<circle cx="674" cy="70" r="19" fill="#d8d8d8" stroke="#d8d8d8" stroke-width="1.5"/>
+<text x="674.0" y="75.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="14" text-anchor="middle" fill="#1b1b1e" font-weight="700">B</text>
+<circle cx="630" cy="150" r="19" fill="#1b1b1e" stroke="#e76624" stroke-width="2.5"/>
+<text x="630.0" y="155.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="14" text-anchor="middle" fill="#efefef" font-weight="700">C</text>
+<text x="630.0" y="206.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="middle" fill="#efefef">4. Marker scans B,</text>
+<text x="630.0" y="222.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="middle" fill="#efefef">finds nothing</text>
+<text x="630.0" y="182.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="11" text-anchor="middle" fill="#9c9c9c">C never marked</text>
+<circle cx="150" cy="250" r="7" fill="#d8d8d8" stroke="#d8d8d8" stroke-width="1.5"/>
+<text x="163.0" y="254.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="start" fill="#efefef">scanned</text>
+<circle cx="229" cy="250" r="7" fill="#6a6a6e" stroke="#6a6a6e" stroke-width="1.5"/>
+<text x="242.0" y="254.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="start" fill="#efefef">found, not yet scanned</text>
+<circle cx="413" cy="250" r="7" fill="#1b1b1e" stroke="#7a7a7a" stroke-width="1.5"/>
+<text x="426.0" y="254.0" font-family="-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif" font-size="12" text-anchor="start" fill="#efefef">not found</text>
+</svg>

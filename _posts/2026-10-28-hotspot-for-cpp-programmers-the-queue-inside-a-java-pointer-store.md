@@ -8,7 +8,6 @@ description: >-
   per-thread log, in a dozen instructions of hand-written barrier code and without a
   single atomic. Concurrent marking, the race it creates, the SATB barrier that closes
   it as C2 compiles it on JDK 27, and the buffer handoff behind the log.
-mermaid: true
 image:
   path: /assets/img/og/hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store.png
   alt: "HotSpot for C++ Programmers: The Queue Inside a Java Pointer Store"
@@ -25,16 +24,9 @@ A garbage collector frees memory nobody can reach anymore. To find out what is r
 
 So modern collectors mark concurrently, on their own threads, while the mutators (the application threads) keep running and keep rewriting the very pointers the marker is following. You can already see the bug. Here is the classic version, with three objects A, B and C:
 
-```mermaid
-sequenceDiagram
-    participant M as GC marker thread
-    participant J as Java thread (mutator)
-    Note over M: A scanned, B not yet
-    J->>J: A.field = B.field
-    J->>J: B.field = null
-    M->>M: scans B, finds nothing
-    Note over M,J: C freed while still reachable
-```
+![Four frames. The marker has scanned A; B is found but not yet scanned and points to C. A Java thread copies B's field into A's field, then sets B's field to null. The marker scans B and finds nothing, so C is never marked although A still points to it.](/assets/img/satb-race-light.svg){: .light w="720" h="276" }
+![Four frames. The marker has scanned A; B is found but not yet scanned and points to C. A Java thread copies B's field into A's field, then sets B's field to null. The marker scans B and finds nothing, so C is never marked although A still points to it.](/assets/img/satb-race-dark.svg){: .dark w="720" h="276" }
+_Both stores land between the marker's visits to A and B._
 
 B started out pointing to C. The marker finished A before A pointed to C, and reaches B after B stopped pointing to C. C is reachable the whole time and never seen. The collector frees it, and A is left holding a dangling pointer. In C++ terms it is a use-after-free, produced by a reader traversing a structure while a writer rearranges it, the same family of bug as iterator invalidation or the [ABA problem in a lock-free stack]({% post_url 2026-07-16-lock-free-is-not-free-aba-tagged-pointers-and-a-bounded-ring %}).
 
@@ -79,13 +71,17 @@ and this is what [C2]({% post_url 2026-10-13-hotspot-for-cpp-programmers-a-milli
         ; spill, then call G1BarrierSetRuntime::write_ref_field_pre_entry(old, thread)
 ```
 
-There is no `lock` prefix anywhere, and no fence. The log is a plain array owned by one thread, reached through `%r15`, which holds the current thread in compiled code: offsets `0x38`, `0x40` and `0x48` are the buffer, index and active fields of the thread's [`SATBMarkQueue`](https://github.com/openjdk/jdk/blob/jdk-27-ga/src/hotspot/share/gc/shared/satbMarkQueue.hpp#L53), declared in that order eight bytes apart. Counting the index *down* to zero is a small trick with a real payoff: "is the buffer full?" becomes a test against zero instead of a compare with a capacity loaded from somewhere. When marking is not running, which is most of the time, the whole barrier is a load, a compare and a branch that almost always goes the same way. G1 flips every thread's active flag on when concurrent marking starts and off when it ends ([`set_active_all_threads`](https://github.com/openjdk/jdk/blob/jdk-27-ga/src/hotspot/share/gc/g1/g1ConcurrentMark.cpp#L941)).
+There is no `lock` prefix anywhere, and no fence. The log is a plain array owned by one thread, reached through `%r15`, which holds the current thread in compiled code: offsets `0x38`, `0x40` and `0x48` are the buffer, index and active fields of the thread's [`SATBMarkQueue`](https://github.com/openjdk/jdk/blob/jdk-27-ga/src/hotspot/share/gc/shared/satbMarkQueue.hpp#L53), declared in that order eight bytes apart. Counting the index *down* to zero is a small trick with a real payoff: "is the buffer full?" becomes a test against zero instead of a compare with a capacity loaded from somewhere. When marking is not running, which is most of the time, the whole barrier is a load, a compare and a branch that almost always goes the same way. G1 flips every thread's active flag on when concurrent marking starts and off when it ends ([`set_active_all_threads`](https://github.com/openjdk/jdk/blob/jdk-27-ga/src/hotspot/share/gc/g1/g1ConcurrentMark.cpp#L941)). If you are wondering how a plain load in the barrier sees that flip without a fence: it doesn't need one, because the flip only happens at a safepoint, with every Java thread stopped, and the function [asserts as much](https://github.com/openjdk/jdk/blob/jdk-27-ga/src/hotspot/share/gc/shared/satbMarkQueue.cpp#L181).
 
 The emitting code is [`generate_pre_barrier_slow_path`](https://github.com/openjdk/jdk/blob/jdk-27-ga/src/hotspot/cpu/x86/gc/g1/g1BarrierSetAssembler_x86.cpp#L173), and it is worth reading for its comments, which annotate each instruction the way I have here. It is also why there is no Compiler Explorer link for this snippet: HotSpot's in-process assembler writes these instructions directly, so there is no C++ to compile. The capture program and the exact JVM flags are in the footer.
 
 Synchronization only appears when the buffer fills, and with the default [`G1SATBBufferSize`](https://github.com/openjdk/jdk/blob/jdk-27-ga/src/hotspot/share/gc/g1/g1_globals.hpp#L157) of 1024 entries, that is at most once every thousand logged pointers. Even then the runtime does not hand the buffer over straight away. The mutator first filters its own buffer, dropping entries the marker no longer needs, and only publishes it if more than 60 percent survive ([`G1SATBBufferEnqueueingThresholdPercent`](https://github.com/openjdk/jdk/blob/jdk-27-ga/src/hotspot/share/gc/g1/g1_globals.hpp#L165), checked in [`handle_zero_index`](https://github.com/openjdk/jdk/blob/jdk-27-ga/src/hotspot/share/gc/shared/satbMarkQueue.cpp#L231)). Otherwise it keeps writing into the space it just freed. When it does publish, it takes a fresh buffer and pushes the full one onto a list shared with the GC's marking threads. Buffers that never fill are not lost either: when marking finishes, G1 [collects every thread's partial buffer](https://github.com/openjdk/jdk/blob/jdk-27-ga/src/hotspot/share/gc/g1/g1ConcurrentMark.cpp#L1758) during a short stop-the-world pause. Either way, the GC only ever reads a buffer after its owner has let go of it, so no buffer has a reader and a writer at the same time. The comment in [`satbMarkQueue.cpp`](https://github.com/openjdk/jdk/blob/jdk-27-ga/src/hotspot/share/gc/shared/satbMarkQueue.cpp#L258) describes the whole lifecycle in one paragraph:
 
 > Per-thread queues obtain buffers from the qset's buffer allocator, fill them, and push them onto the qset's list. The GC concurrently pops buffers from the qset, processes them, and returns them to the buffer allocator for re-use. Both the allocator and the qset use lock-free stacks.
+
+![Each Java thread writes old pointer values into its own buffer with no atomics. When the buffer is full the thread filters it and keeps writing if 60 percent or fewer entries survive; otherwise it pushes the buffer onto a shared lock-free list with one compare-and-swap and takes a fresh buffer from the allocator. GC marking threads pop buffers from the list, process them and return them to the allocator. Partly filled buffers are collected in the pause that ends marking.](/assets/img/satb-buffers-light.svg){: .light w="720" h="360" }
+![Each Java thread writes old pointer values into its own buffer with no atomics. When the buffer is full the thread filters it and keeps writing if 60 percent or fewer entries survive; otherwise it pushes the buffer onto a shared lock-free list with one compare-and-swap and takes a fresh buffer from the allocator. GC marking threads pop buffers from the list, process them and return them to the allocator. Partly filled buffers are collected in the pause that ends marking.](/assets/img/satb-buffers-dark.svg){: .dark w="720" h="360" }
+_Only the handoffs between threads synchronize, once per buffer._
 
 Most of this series is already in that paragraph. Each thread's buffer gets away with no synchronization because only one thread ever writes it, and the handoff pays for synchronization once per buffer rather than once per pointer. The list that buffers are handed to has many producers and several consumers, and it is a *stack* rather than a queue, since marking does not care what order it sees things in. Then there is the memory-reclamation problem every lock-free stack runs into, which the same comment goes on to solve with something called [`GlobalCounter`]({% post_url 2026-10-13-hotspot-for-cpp-programmers-a-million-lines-without-std-mutex %}#hotspots-concurrency-toolkit). The last two posts of this series, A Lock-Free Queue With One User and Who Frees the Node?, take those apart.
 
