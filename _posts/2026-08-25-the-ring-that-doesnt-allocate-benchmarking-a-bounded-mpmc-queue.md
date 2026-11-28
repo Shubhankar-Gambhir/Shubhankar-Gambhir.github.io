@@ -34,7 +34,7 @@ Same harness, same nine mixes, Xeon first:
 | 8P x 1C   | **353**  | 1009 | 1370 | 429 | 425 |
 | 15P x 1C  | **368**  | 994  | 1360 | 450 | 430 |
 
-Uncontended, the ring is 90 nanoseconds per item, four times faster than the deque-backed mutex queue and eleven times faster than the two-lock linked queue. Nothing else in the lab is close. There is no allocation, no lock, and the whole working set at capacity 1024 is sixteen kilobytes that stays resident in L2.
+Uncontended, the ring is 90 nanoseconds per item, four times faster than the deque-backed mutex queue and eleven times faster than the two-lock linked queue. Nothing else in the lab is close. There is no allocation, no lock, and the whole working set at capacity 1024 is sixteen kilobytes, small enough to fit in either core's 32 KB L1 data cache.
 
 The jump from 90 to 424 nanoseconds at 2P x 2C is the real cost of multi-producer support arriving all at once: the moment two threads share `_enq`, every ticket claim is a contended compare-exchange on one cache line, and on a two-socket Xeon that line is crossing sockets.
 
@@ -58,7 +58,7 @@ ARM keeps the shape and moves the extremes:
 | 8P x 1C   | **248**  | 394 | 615 | 364 | 379 |
 | 15P x 1C  | **245**  | 448 | 628 | 539 | 500 |
 
-Thirty-two nanoseconds per item uncontended, six times faster than the deque and nearly three times the best number the Xeon could produce. A single-producer single-consumer ring on a single-NUMA-node machine is close to the floor for moving data between two threads: one cache line handed from a core to its neighbor, no kernel, no allocator, no atomic that anyone else wants.
+Thirty-two nanoseconds per item uncontended, six times faster than the deque and nearly three times the best number the Xeon could produce. With one producer and one consumer on a single-NUMA-node machine, the ring gets close to the floor for moving data between two threads: one cache line handed from a core to its neighbor, no kernel, no allocator, and only uncontended atomics. A dedicated single-producer, single-consumer ring would skip even those compare-exchanges.
 
 Fan-in is where the ring genuinely loses, and ARM makes it obvious. The deque under one mutex takes 245 nanoseconds at 15P x 1C against the ring's 539, a gap of 2.2x where the Xeon's was only 1.2x. The deque's fan-in strength is the one result that has survived every machine in this series so far: when a lone consumer is the bottleneck, contiguous storage behind one lock is an excellent design, and no amount of lock-freedom on the producer side helps a consumer that is already saturated.
 

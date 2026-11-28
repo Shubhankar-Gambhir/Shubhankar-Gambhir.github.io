@@ -63,10 +63,10 @@ The ones that matter for queues:
 | Thread | Kind | What it does | Shows up in |
 |---|---|---|---|
 | Application threads | `JavaThread` | Run the user's Java code. GC literature calls them mutators, because from the collector's point of view their job is to mutate the object graph. | every post |
-| VMThread | `NonJavaThread` | A single thread that runs "VM operations": anything that needs the whole JVM stopped. | Two Commits, One Day |
-| Compiler threads | `JavaThread` | Pull methods off the compile queue and JIT them. | Two Commits, One Day |
-| GC worker threads | `NonJavaThread` | Do the collector's parallel work; they share it by stealing from each other. | Who Frees the Node? |
-| Concurrent GC threads | `NonJavaThread` | Run collector phases alongside the application, such as concurrent marking. | [the next post]({% post_url 2026-10-28-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store %}); A Lock-Free Queue With One User |
+| VMThread | `NonJavaThread` | A single thread that runs "VM operations": anything that needs the whole JVM stopped. | Two Commits, One Day (upcoming) |
+| Compiler threads | `JavaThread` | Pull methods off the compile queue and JIT them. | Two Commits, One Day (upcoming) |
+| GC worker threads | `NonJavaThread` | Do the collector's parallel work; they share it by stealing from each other. | Who Frees the Node? (upcoming) |
+| Concurrent GC threads | `NonJavaThread` | Run collector phases alongside the application, such as concurrent marking. | [the next post]({% post_url 2026-10-28-hotspot-for-cpp-programmers-the-queue-inside-a-java-pointer-store %}); A Lock-Free Queue With One User (upcoming) |
 | Service thread | `JavaThread` | A catch-all housekeeper that drains several event queues. | not covered in this series |
 | JFR recorder, async log writer | mixed | Drain diagnostic data that other threads produce. | [Pick Two]({% post_url 2026-11-12-pick-two-what-your-queue-does-when-the-consumer-falls-behind %}) (the async log writer) |
 
